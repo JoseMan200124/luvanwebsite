@@ -51,6 +51,14 @@ import api from '../utils/axiosConfig';
 import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F } from '../components/filters/filterFields';
+
+const PROTOCOL_TYPE_OPTIONS = [
+    { value: 'protocolo', label: 'Protocolos' },
+    { value: 'reglamento', label: 'Reglamentos' },
+];
 
 // Styled components
 const PageContainer = styled.div`
@@ -105,8 +113,16 @@ const CorporateProtocolsPage = () => {
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [limit] = useState(10);
-    const [search, setSearch] = useState('');
-    const [typeFilter, setTypeFilter] = useState('');
+
+    // Filtros: solo consultan al aplicar (ver useFilters)
+    const pageFilters = useFilters({
+        fields: [
+            F.search('search', { placeholder: 'Título o descripción' }),
+            F.select('type', { label: 'Tipo', options: PROTOCOL_TYPE_OPTIONS }),
+        ],
+        onApplied: () => setPage(1),
+    });
+    const { search, type: typeFilter } = pageFilters.applied;
 
     // Estados para crear/editar protocolo
     const [openDialog, setOpenDialog] = useState(false);
@@ -355,25 +371,6 @@ const CorporateProtocolsPage = () => {
     };
 
     // ---------------------------
-    // Funciones para filtros
-    // ---------------------------
-    const handleSearchChange = (event) => {
-        setSearch(event.target.value);
-        setPage(1);
-    };
-
-    const handleTypeFilterChange = (event) => {
-        setTypeFilter(event.target.value);
-        setPage(1);
-    };
-
-    const clearFilters = () => {
-        setSearch('');
-        setTypeFilter('');
-        setPage(1);
-    };
-
-    // ---------------------------
     // Navegación
     // ---------------------------
     const handleBackToDashboard = () => {
@@ -565,45 +562,7 @@ const CorporateProtocolsPage = () => {
                 </PermissionGuard>
 
                 {/* Filtros */}
-                <Card style={{ marginBottom: '20px' }}>
-                    <CardContent>
-                        <Grid container spacing={2} alignItems="center">
-                            <Grid item xs={12} sm={6} md={4}>
-                                <TextField
-                                    label="Buscar"
-                                    value={search}
-                                    onChange={handleSearchChange}
-                                    fullWidth
-                                    size="small"
-                                    placeholder="Título o descripción..."
-                                />
-                            </Grid>
-                            <Grid item xs={12} sm={6} md={3}>
-                                <FormControl fullWidth size="small">
-                                    <InputLabel>Tipo</InputLabel>
-                                    <Select
-                                        value={typeFilter}
-                                        onChange={handleTypeFilterChange}
-                                        label="Tipo"
-                                    >
-                                        <MenuItem value="">Todos</MenuItem>
-                                        <MenuItem value="protocolo">Protocolos</MenuItem>
-                                        <MenuItem value="reglamento">Reglamentos</MenuItem>
-                                    </Select>
-                                </FormControl>
-                            </Grid>
-                            <Grid item xs={12} sm={6} md={3}>
-                                <Button
-                                    variant="outlined"
-                                    onClick={clearFilters}
-                                    fullWidth
-                                >
-                                    Limpiar Filtros
-                                </Button>
-                            </Grid>
-                        </Grid>
-                    </CardContent>
-                </Card>
+                <FilterBar {...pageFilters.barProps} loading={loading} />
 
                 {/* Lista de protocolos */}
                 {loading ? (

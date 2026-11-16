@@ -6,22 +6,20 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box,
     Typography,
-    Paper,
     Grid,
     Card,
     CardContent,
-    TextField,
-    Button,
     CircularProgress,
     Alert
 } from '@mui/material';
 import useRegisterPageRefresh from '../../hooks/useRegisterPageRefresh';
-import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../CicloEscolarFilter';
+import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../../utils/cicloEscolarFilterParams';
+import FilterBar from '../filters/FilterBar';
+import useFilters from '../../hooks/useFilters';
+import { F } from '../filters/filterFields';
 import { getRequestStatistics, REQUEST_TYPE_META } from '../../services/requestService';
 
 const PRIORITY_LABELS_ES = { urgent: 'Urgente', high: 'Alta', medium: 'Media', low: 'Baja' };
-
-const initialDates = { startDate: '', endDate: '' };
 
 const CountCard = ({ label, value }) => (
     <Card sx={{ height: '100%' }}>
@@ -37,20 +35,22 @@ const RequestsStatisticsTab = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     // Resumen global de Luvan: arranca en "Todos los ciclos", no en el ciclo seleccionado del menú.
-    const [cicloEscolar, setCicloEscolar] = useState(ALL_CYCLES_VALUE);
-    const [draftDates, setDraftDates] = useState(initialDates);
-    const [dates, setDates] = useState(initialDates);
+    const pageFilters = useFilters({
+        urlPrefix: 'req_',
+        fields: [F.cycle({ initial: ALL_CYCLES_VALUE }), F.dateRange('dates')],
+    });
+    const { cycle: cicloEscolar, dates } = pageFilters.applied;
 
     const fetchStatistics = useCallback(async () => {
         setLoading(true);
         setError('');
         try {
             const params = { ...getCicloEscolarFilterParams(cicloEscolar) };
-            if (dates.startDate) {
-                params.startDate = dates.startDate;
+            if (dates.from) {
+                params.startDate = dates.from;
             }
-            if (dates.endDate) {
-                params.endDate = dates.endDate;
+            if (dates.to) {
+                params.endDate = dates.to;
             }
             setStatistics(await getRequestStatistics(params));
         } catch (err) {
@@ -60,7 +60,7 @@ const RequestsStatisticsTab = () => {
         } finally {
             setLoading(false);
         }
-    }, [cicloEscolar, dates.startDate, dates.endDate]);
+    }, [cicloEscolar, dates.from, dates.to]);
 
     useEffect(() => { fetchStatistics(); }, [fetchStatistics]);
 
@@ -72,25 +72,7 @@ const RequestsStatisticsTab = () => {
 
     return (
         <>
-            <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
-                <Grid container spacing={2} alignItems="center">
-                    <Grid item xs="auto">
-                        <CicloEscolarFilter value={cicloEscolar} onChange={setCicloEscolar} sx={{ width: 190 }} />
-                    </Grid>
-                    <Grid item xs="auto">
-                        <TextField sx={{ width: 150 }} size="small" type="date" label="Fecha Inicio" value={draftDates.startDate}
-                            onChange={(e) => setDraftDates((prev) => ({ ...prev, startDate: e.target.value }))} InputLabelProps={{ shrink: true }} />
-                    </Grid>
-                    <Grid item xs="auto">
-                        <TextField sx={{ width: 150 }} size="small" type="date" label="Fecha Fin" value={draftDates.endDate}
-                            onChange={(e) => setDraftDates((prev) => ({ ...prev, endDate: e.target.value }))} InputLabelProps={{ shrink: true }} />
-                    </Grid>
-                    <Grid item xs="auto" sx={{ display: 'flex', gap: 1 }}>
-                        <Button size="small" variant="outlined" onClick={() => { setDraftDates(initialDates); setDates(initialDates); }}>Limpiar filtros</Button>
-                        <Button size="small" variant="contained" onClick={() => setDates(draftDates)}>Buscar</Button>
-                    </Grid>
-                </Grid>
-            </Paper>
+            <FilterBar {...pageFilters.barProps} loading={loading} />
 
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 

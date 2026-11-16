@@ -8,13 +8,8 @@ import {
     Snackbar,
     Alert,
     Box,
-    Checkbox,
-    FormControl,
-    InputLabel,
     Select,
     MenuItem,
-    ListSubheader,
-    ListItemText,
     ToggleButton,
     ToggleButtonGroup,
     TextField,
@@ -34,6 +29,9 @@ import {
 import { InfoOutlined, Search, ChevronLeft, ChevronRight, Download, KeyboardArrowRight, KeyboardArrowDown } from '@mui/icons-material';
 import api from '../../utils/axiosConfig';
 import useRegisterPageRefresh from '../../hooks/useRegisterPageRefresh';
+import FilterBar from '../filters/FilterBar';
+import useFilters from '../../hooks/useFilters';
+import { F } from '../filters/filterFields';
 import { getCurrentDateSync } from '../../hooks/useCurrentDate';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -253,9 +251,6 @@ const getMetricTooltip = (key) => {
 
 const IncomeStatisticsTab = () => {
     const [schools, setSchools] = useState([]);
-    const [selectedSchoolIds, setSelectedSchoolIds] = useState([]);
-    const [fromMonth, setFromMonth] = useState(() => getCurrentDateSync().clone().subtract(5, 'month').format('YYYY-MM'));
-    const [toMonth, setToMonth] = useState(() => getCurrentDateSync().format('YYYY-MM'));
     const [metricsBasis, setMetricsBasis] = useState('caja'); // 'caja' | 'devengado'
     const [sortBy, setSortBy] = useState('schoolName');
     const [sortDir, setSortDir] = useState('asc');
@@ -312,13 +307,13 @@ const IncomeStatisticsTab = () => {
         }
     }, []);
 
-    const fetchAll = useCallback(async () => {
+    // Recibe los filtros aplicados. Sin colegios elegidos = todos los colegios.
+    const fetchAll = useCallback(async (values) => {
         setLoading(true);
         setError(null);
         try {
-            const isAll = selectedSchoolIds.length === 0 || selectedSchoolIds.includes('__ALL__');
-            const schoolIdsParam = isAll ? 'all' : selectedSchoolIds.join(',');
-            const statsRes = await api.get('/financial-statistics', { params: { schoolIds: schoolIdsParam, from: fromMonth, to: toMonth, groupBy: 'school' } });
+            const schoolIdsParam = values.schools.length === 0 ? 'all' : values.schools.join(',');
+            const statsRes = await api.get('/financial-statistics', { params: { schoolIds: schoolIdsParam, from: values.months.from, to: values.months.to, groupBy: 'school' } });
             setResult(statsRes.data || null);
             setPage(0);
             setExpandedSchoolId(null);
@@ -330,7 +325,7 @@ const IncomeStatisticsTab = () => {
         } finally {
             setLoading(false);
         }
-    }, [selectedSchoolIds, fromMonth, toMonth]);
+    }, []);
 
     const toggleExpand = useCallback(async (schoolId) => {
         if (expandedSchoolId === schoolId) {
@@ -356,17 +351,6 @@ const IncomeStatisticsTab = () => {
         fetchSchools();
     }, [fetchSchools]);
 
-    useEffect(() => {
-        // Carga inicial con los filtros por defecto.
-        fetchAll();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    // Register page-level refresh handler for global refresh control
-    useRegisterPageRefresh(async () => {
-        await fetchAll();
-    }, [fetchAll]);
-
     // Group schools by ciclo escolar for the dropdown
     const schoolGroups = React.useMemo(() => {
         const map = {};
@@ -383,15 +367,36 @@ const IncomeStatisticsTab = () => {
             .map(([, group]) => group);
     }, [schools]);
 
-    const handleSchoolSelectChange = (event) => {
-        const value = event.target.value;
-        // If 'Todos' was selected, clear other selections
-        if (value.includes('__ALL__')) {
-            setSelectedSchoolIds(['__ALL__']);
-        } else {
-            setSelectedSchoolIds(value);
-        }
-    };
+    const pageFilters = useFilters({
+        urlPrefix: 'inc_',
+        fields: [
+            F.multiSelect('schools', {
+                label: 'Colegio',
+                width: 'lg',
+                allLabel: 'Todos los colegios',
+                options: schoolGroups.flatMap((group) => group.schools
+                    .map((school) => ({ value: String(school.id), label: school.name, group: group.label }))),
+            }),
+            F.monthRange('months', {
+                initial: () => ({
+                    from: getCurrentDateSync().clone().subtract(5, 'month').format('YYYY-MM'),
+                    to: getCurrentDateSync().format('YYYY-MM'),
+                }),
+            }),
+        ],
+    });
+    const incomeApplied = pageFilters.applied;
+    const selectedSchoolIds = incomeApplied.schools;
+
+    // Carga inicial y cada vez que se aplican o limpian los filtros
+    useEffect(() => {
+        fetchAll(incomeApplied);
+    }, [fetchAll, incomeApplied]);
+
+    // Register page-level refresh handler for global refresh control
+    useRegisterPageRefresh(async () => {
+        await fetchAll(incomeApplied);
+    }, [fetchAll, incomeApplied]);
 
     let rangeLabel = '';
     if (result) {
@@ -428,7 +433,7 @@ const IncomeStatisticsTab = () => {
         pdf.setFont(undefined, 'normal');
         pdf.setFontSize(9);
         pdf.setTextColor(107, 114, 128);
-        const scope = (selectedSchoolIds.length === 0 || selectedSchoolIds.includes('__ALL__'))
+        const scope = selectedSchoolIds.length === 0
             ? 'Todos los colegios'
             : `${selectedSchoolIds.length} colegio${selectedSchoolIds.length === 1 ? '' : 's'} seleccionado${selectedSchoolIds.length === 1 ? '' : 's'}`;
         pdf.text(`${rangeLabel}  ·  Base ${basisLabel}  ·  ${scope}  ·  ${totalRows} colegio${totalRows === 1 ? '' : 's'}`, marginX, 22);
@@ -670,77 +675,7 @@ const IncomeStatisticsTab = () => {
 
     return (
         <>
-            {/* Acciones */}
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-                <Button
-                    variant="outlined"
-                    startIcon={<Download />}
-                    onClick={generatePDF}
-                    disabled={loading || !result}
-                    sx={{ borderRadius: 1, fontWeight: 600 }}
-                >
-                    Exportar PDF
-                </Button>
-            </Box>
-
-            {/* Filtros */}
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'flex-end', mb: 3 }}>
-                <FormControl size="small" sx={{ width: 280 }}>
-                    <InputLabel id="school-select-label">Colegio</InputLabel>
-                    <Select
-                        labelId="school-select-label"
-                        multiple
-                        value={selectedSchoolIds}
-                        label="Colegio"
-                        onChange={handleSchoolSelectChange}
-                        sx={{ bgcolor: '#fff', borderRadius: 1 }}
-                        renderValue={(selected) => {
-                            if (selected.includes('__ALL__') || selected.length === 0) {
-                                return 'Todos los colegios';
-                            }
-                            return selected.map(id => {
-                                const s = schools.find(sch => String(sch.id) === id);
-                                return s ? s.name : id;
-                            }).join(', ');
-                        }}
-                    >
-                        <MenuItem value="__ALL__">
-                            <Checkbox checked={selectedSchoolIds.includes('__ALL__')} size="small" />
-                            <ListItemText primary="Todos los colegios" />
-                        </MenuItem>
-                        {schoolGroups.map((group) => [
-                            <ListSubheader key={group.label} sx={{ fontWeight: 700, color: '#1976d2', lineHeight: '32px' }}>
-                                {group.label}
-                            </ListSubheader>,
-                            ...group.schools.map((school) => (
-                                <MenuItem key={school.id} value={String(school.id)} sx={{ pl: 4 }}>
-                                    <Checkbox checked={selectedSchoolIds.includes(String(school.id))} size="small" />
-                                    <ListItemText primary={school.name} />
-                                </MenuItem>
-                            ))
-                        ])}
-                    </Select>
-                </FormControl>
-
-                <TextField
-                    size="small"
-                    type="month"
-                    label="Desde"
-                    value={fromMonth}
-                    onChange={(e) => setFromMonth(e.target.value)}
-                    slotProps={{ inputLabel: { shrink: true } }}
-                    sx={{ width: 150, bgcolor: '#fff', borderRadius: 1 }}
-                />
-                <TextField
-                    size="small"
-                    type="month"
-                    label="Hasta"
-                    value={toMonth}
-                    onChange={(e) => setToMonth(e.target.value)}
-                    slotProps={{ inputLabel: { shrink: true } }}
-                    sx={{ width: 150, bgcolor: '#fff', borderRadius: 1 }}
-                />
-
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Typography variant="caption" color="text.secondary">Base</Typography>
                     <Tooltip title={
@@ -762,11 +697,19 @@ const IncomeStatisticsTab = () => {
                         <ToggleButton value="devengado">Devengado</ToggleButton>
                     </ToggleButtonGroup>
                 </Box>
-
-                <Button variant="contained" color="primary" onClick={fetchAll} disabled={loading} sx={{ borderRadius: 1, fontWeight: 600, height: 40 }}>
-                    {loading ? 'Aplicando…' : 'Aplicar filtros'}
+                <Button
+                    variant="outlined"
+                    startIcon={<Download />}
+                    onClick={generatePDF}
+                    disabled={loading || !result}
+                    sx={{ borderRadius: 1, fontWeight: 600 }}
+                >
+                    Exportar PDF
                 </Button>
             </Box>
+
+            {/* Filtros */}
+            <FilterBar {...pageFilters.barProps} loading={loading} />
 
             {loading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '16rem' }}>

@@ -13,9 +13,8 @@ import {
   DialogTitle,
   Grid,
   IconButton,
-  ListSubheader,
-  MenuItem,
   Paper,
+  Snackbar,
   Table,
   TableBody,
   TableCell,
@@ -32,19 +31,23 @@ import {
   Close as CloseIcon,
   GetApp as DownloadIcon,
   ExpandMore as ExpandMoreIcon,
+  Replay as ReplayIcon,
   Visibility as VisibilityIcon,
 } from '@mui/icons-material';
 import TableSortLabel from '@mui/material/TableSortLabel';
-import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
-import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import moment from 'moment-timezone';
 import parse from 'html-react-parser';
 import tw from 'twin.macro';
 
 import api from '../utils/axiosConfig';
-import CicloEscolarFilter, { ALL_CYCLES_VALUE } from '../components/CicloEscolarFilter';
-import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
-import { getSelectedCicloEscolarId, setSelectedCicloEscolarId } from '../utils/schoolContext';
+import PermissionGuard from '../components/PermissionGuard';
+import ScheduledOriginChip from '../components/ScheduledOriginChip';
+import { OUTCOME_REASON_LABEL } from '../utils/outcomeReasons';
+import { getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
+import { getClientSchoolId } from '../utils/clientValue';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F } from '../components/filters/filterFields';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -55,6 +58,53 @@ const safeStr = (v) => (v == null ? '' : String(v)).trim();
 const ALL_CLIENTS_VALUE = 'all';
 
 const MAX_VISIBLE_SCHOOL_NAMES = 2;
+
+// Resultado de la entrega por correo. Sin dato (null): circulares anteriores o enviadas sin correo.
+const EMAIL_STATUS_CHIP = {
+  sent: { label: 'Enviado', color: 'success' },
+  partial: { label: 'Parcial', color: 'warning' },
+  sending: { label: 'Reenviando', color: 'info' },
+};
+
+const emailDeliveryText = (item) => {
+  const sent = Number(item?.emailSentCount) || 0;
+  const failed = Number(item?.emailFailedCount) || 0;
+  if (failed <= 0) {
+    return '';
+  }
+  return sent > 0
+    ? `Correo enviado a ${sent} y falló a ${failed} destinatarios`
+    : `El correo no se pudo enviar a ninguno de los ${failed} destinatarios`;
+};
+
+// Mientras un reenvío corre en segundo plano ('sending') se refresca solo. Un 'sending' que
+// aún permite reenviar quedó huérfano (reinicio del servidor): no se espera por él.
+const isResendInProgress = (item) => item?.emailStatus === 'sending' && !item?.canResend;
+
+const renderEmailStatus = (item) => {
+  const chip = EMAIL_STATUS_CHIP[item?.emailStatus];
+  if (!chip) {
+    return '—';
+  }
+  const text = emailDeliveryText(item);
+  return (
+    <Tooltip title={text}>
+      <Box component="span" sx={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+        <Chip size="small" color={chip.color} label={chip.label} sx={{ fontWeight: 700 }} />
+        {text && (
+          <Typography variant="caption" color="text.secondary">
+            {Number(item.emailSentCount) || 0} enviados · {Number(item.emailFailedCount) || 0} fallidos
+          </Typography>
+        )}
+        {OUTCOME_REASON_LABEL[item.emailOutcomeReason] && (
+          <Typography variant="caption" color="text.secondary">
+            {OUTCOME_REASON_LABEL[item.emailOutcomeReason]}
+          </Typography>
+        )}
+      </Box>
+    </Tooltip>
+  );
+};
 
 // Celda "Audiencia": el backend resuelve `audience` desde el targeting de la
 // circular (todos / uno o varios colegios / familias concretas).
@@ -156,12 +206,19 @@ const CircularHistoryPage = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
 
-  const [q, setQ] = useState('');
   const [schools, setSchools] = useState([]);
-  const [selectedSchool, setSelectedSchool] = useState(ALL_CLIENTS_VALUE);
-  const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(() => getSelectedCicloEscolarId() || ALL_CYCLES_VALUE);
-  const [startDate, setStartDate] = useState(null);
-  const [endDate, setEndDate] = useState(null);
+
+  const pageFilters = useFilters({
+    fields: [
+      F.cycle(),
+      F.client({ schools, corporations: [] }),
+      F.search('q', { placeholder: 'Asunto o contenido' }),
+      F.dateRange('dates'),
+    ],
+    onApplied: () => setPage(0),
+  });
+  const { cycle: selectedCicloEscolar, client: selectedClient, q, dates } = pageFilters.applied;
+  const draftCycle = pageFilters.draft.cycle;
   const [sortBy, setSortBy] = useState('sentAt');
   const [sortDirection, setSortDirection] = useState('desc');
 
@@ -171,59 +228,9 @@ const CircularHistoryPage = () => {
   const [detail, setDetail] = useState(null);
   const [recipientSearch, setRecipientSearch] = useState('');
   const [recipientsOpen, setRecipientsOpen] = useState(false);
-
-  const availableSchools = useMemo(() => {
-    if (selectedCicloEscolar === ALL_CYCLES_VALUE) {
-        return schools;
-    }
-
-    return schools.filter((school) => String(school?.cicloEscolarId ?? school?.cicloEscolar?.id ?? '') === String(selectedCicloEscolar));
-  }, [schools, selectedCicloEscolar]);
-
-  const groupedSchools = useMemo(() => {
-    const groups = new Map();
-
-    availableSchools.forEach((school) => {
-      const cycle = school?.cicloEscolar || {};
-      const cycleId = String(school?.cicloEscolarId ?? cycle?.id ?? selectedCicloEscolar ?? '').trim();
-      const cycleLabel = getCicloEscolarOptionLabel(cycle) || (cycleId ? `Ciclo ${cycleId}` : 'Ciclo escolar');
-      const groupKey = cycleId || cycleLabel;
-
-      if (!groups.has(groupKey)) {
-        groups.set(groupKey, {
-          cycleId,
-          cycleLabel,
-          schools: [],
-        });
-      }
-
-      groups.get(groupKey).schools.push(school);
-    });
-
-    return Array.from(groups.values()).sort((a, b) => a.cycleLabel.localeCompare(b.cycleLabel, 'es')).map((group) => ({
-      ...group,
-      schools: [...group.schools].sort((a, b) => safeStr(a?.name).localeCompare(safeStr(b?.name), 'es', { sensitivity: 'base' })),
-    }));
-  }, [availableSchools, selectedCicloEscolar]);
-
-  const effectiveSelectedSchool = useMemo(() => {
-    if (selectedSchool === ALL_CLIENTS_VALUE) {
-        return ALL_CLIENTS_VALUE;
-    }
-    const exists = availableSchools.some((school) => String(school?.id) === String(selectedSchool));
-    return exists ? String(selectedSchool) : ALL_CLIENTS_VALUE;
-  }, [availableSchools, selectedSchool]);
-
-  useEffect(() => {
-    if (selectedSchool === ALL_CLIENTS_VALUE) {
-        return;
-    }
-    if (effectiveSelectedSchool === selectedSchool) {
-        return;
-    }
-
-    setSelectedSchool(ALL_CLIENTS_VALUE);
-  }, [effectiveSelectedSchool, selectedSchool]);
+  const [toResend, setToResend] = useState(null);
+  const [resending, setResending] = useState(false);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   const listParams = useMemo(() => {
     const params = {
@@ -231,9 +238,11 @@ const CircularHistoryPage = () => {
       pageSize: rowsPerPage,
       // Evita que axiosConfig inyecte el contexto automáticamente.
       // 'all' significa: sin filtro por cliente.
-      schoolId: effectiveSelectedSchool || ALL_CLIENTS_VALUE,
+      schoolId: getClientSchoolId(selectedClient) || ALL_CLIENTS_VALUE,
       sortBy,
       sortDirection: String(sortDirection || 'desc').toUpperCase(),
+      // "Todos los ciclos" envía allCycles: así el interceptor no inyecta el ciclo de la pestaña.
+      ...getCicloEscolarFilterParams(selectedCicloEscolar),
     };
 
     const query = safeStr(q);
@@ -241,25 +250,21 @@ const CircularHistoryPage = () => {
         params.q = query;
     }
 
-    if (selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE) {
-      params.cicloEscolarId = selectedCicloEscolar;
+    if (dates.from) {
+        params.startDate = moment(dates.from).startOf('day').toDate().toISOString();
     }
-
-    if (startDate) {
-        params.startDate = moment(startDate).startOf('day').toDate().toISOString();
-    }
-    if (endDate) {
-        params.endDate = moment(endDate).endOf('day').toDate().toISOString();
+    if (dates.to) {
+        params.endDate = moment(dates.to).endOf('day').toDate().toISOString();
     }
 
     return params;
-  }, [page, rowsPerPage, q, effectiveSelectedSchool, selectedCicloEscolar, startDate, endDate, sortBy, sortDirection]);
+  }, [page, rowsPerPage, q, selectedClient, selectedCicloEscolar, dates, sortBy, sortDirection]);
 
+  // Los colegios del selector siguen al ciclo que se está eligiendo
   const fetchSchools = useCallback(async () => {
     try {
       const res = await api.get('/schools', {
-        params: { includeArchived: true, allCycles: true },
-        skipSchoolCycleContext: true,
+        params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true },
       });
       const list = res?.data?.schools;
       setSchools(Array.isArray(list) ? list : []);
@@ -267,10 +272,13 @@ const CircularHistoryPage = () => {
       console.warn('[CircularHistory] schools fetch error', e);
       setSchools([]);
     }
-  }, []);
+  }, [draftCycle]);
 
-  const fetchRows = useCallback(async () => {
-    setLoading(true);
+  // `silent`: recarga en segundo plano (sondeo de un reenvío) sin reemplazar la tabla por el spinner.
+  const fetchRows = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) {
+      setLoading(true);
+    }
     setError('');
 
     try {
@@ -296,12 +304,6 @@ const CircularHistoryPage = () => {
   useEffect(() => {
     fetchSchools();
   }, [fetchSchools]);
-
-  const handleCycleChange = (value) => {
-    setSelectedCicloEscolar(value);
-    setSelectedCicloEscolarId(value || ALL_CYCLES_VALUE);
-    setPage(0);
-  };
 
   const handleRequestSort = (property) => {
     const isAsc = sortBy === property && sortDirection === 'asc';
@@ -332,6 +334,49 @@ const CircularHistoryPage = () => {
       })
       .filter((group) => group.users.length > 0);
   }, [detail?.recipientGroups, recipientSearch]);
+
+  const refreshDetail = useCallback(async (uuid) => {
+    try {
+      const res = await api.get(`/circulars/admin/${uuid}`);
+      // Si el diálogo se cerró mientras llegaba la respuesta, no se vuelve a poblar el detalle.
+      setDetail((prev) => (prev?.uuid === uuid ? res?.data || null : prev));
+    } catch (e) {
+      console.warn('[CircularHistory] detail refresh error', e);
+    }
+  }, []);
+
+  const confirmResend = async () => {
+    setResending(true);
+    try {
+      const { uuid } = toResend;
+      const res = await api.post(`/circulars/admin/${uuid}/resend-failed`);
+      setSnackbar({ open: true, severity: 'success', message: res?.data?.message || 'Reenviando el correo a los destinatarios fallidos.' });
+      setToResend(null);
+      fetchRows();
+      if (detail?.uuid === uuid) {
+        refreshDetail(uuid);
+      }
+    } catch (e) {
+      setSnackbar({ open: true, severity: 'error', message: e?.response?.data?.message || 'No se pudo reenviar a los destinatarios fallidos.' });
+    } finally {
+      setResending(false);
+    }
+  };
+
+  // Un reenvío corre en segundo plano: mientras haya uno en curso se refresca la lista y el detalle.
+  const resendInProgress = rows.some(isResendInProgress) || isResendInProgress(detail);
+  useEffect(() => {
+    if (!resendInProgress) {
+      return undefined;
+    }
+    const timer = setTimeout(() => {
+      fetchRows({ silent: true });
+      if (detail?.uuid) {
+        refreshDetail(detail.uuid);
+      }
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [resendInProgress, rows, detail, fetchRows, refreshDetail]);
 
   const openDetail = async (uuid) => {
     const id = safeStr(uuid);
@@ -456,110 +501,13 @@ const CircularHistoryPage = () => {
             
           </Box>
 
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12} md={4}>
-              <TextField
-                fullWidth
-                size="small"
-                label="Buscar"
-                value={q}
-                onChange={(e) => {
-                  setQ(e.target.value);
-                  setPage(0);
-                }}
-                placeholder="Asunto o contenido"
-              />
-            </Grid>
-
-            <Grid item xs={12} md={2}>
-              <LocalizationProvider dateAdapter={AdapterMoment}>
-                <DatePicker
-                  label="Desde"
-                  value={startDate}
-                  onChange={(v) => {
-                    setStartDate(v);
-                    setPage(0);
-                  }}
-                  slotProps={{ textField: { size: 'small', fullWidth: true } }}
-                />
-              </LocalizationProvider>
-            </Grid>
-
-            <Grid item xs={12} md={2}>
-              <LocalizationProvider dateAdapter={AdapterMoment}>
-                <DatePicker
-                  label="Hasta"
-                  value={endDate}
-                  onChange={(v) => {
-                    setEndDate(v);
-                    setPage(0);
-                  }}
-                  slotProps={{ textField: { size: 'small', fullWidth: true } }}
-                />
-              </LocalizationProvider>
-            </Grid>
-
-            <Grid item xs={12} md={2}>
-              <TextField
-                select
-                fullWidth
-                size="small"
-                label="Cliente"
-                value={effectiveSelectedSchool || ALL_CLIENTS_VALUE}
-                onChange={(e) => {
-                  const nextValue = String(e.target.value || ALL_CLIENTS_VALUE);
-                  setSelectedSchool(nextValue);
-                  setPage(0);
-                }}
-                MenuProps={{
-                  anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
-                  transformOrigin: { vertical: 'top', horizontal: 'left' },
-                  PaperProps: {
-                    sx: {
-                      maxHeight: 250,
-                      overflow: 'auto',
-                    },
-                  },
-                }}
-              >
-                <MenuItem value={ALL_CLIENTS_VALUE}>Todos</MenuItem>
-                {groupedSchools.map((group) => [
-                  <ListSubheader
-                    key={`header-${group.cycleId || group.cycleLabel}`}
-                    disableSticky
-                    sx={{
-                      lineHeight: 1.6,
-                      color: '#1976d2',
-                      fontWeight: 800,
-                      bgcolor: 'background.paper',
-                    }}
-                  >
-                    {group.cycleLabel}
-                  </ListSubheader>,
-                  ...group.schools.map((s) => (
-                    <MenuItem key={s.id} value={String(s.id)} sx={{ pl: 3 }}>
-                      {safeStr(s.name) || `Colegio ${s.id}`}
-                    </MenuItem>
-                  )),
-                ])}
-              </TextField>
-            </Grid>
-
-            <Grid item xs={12} md={2}>
-              <CicloEscolarFilter
-                value={selectedCicloEscolar}
-                onChange={handleCycleChange}
-                fullWidth
-                size="small"
-              />
-            </Grid>
-          </Grid>
-
           {error && (
             <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
           )}
         </CardContent>
       </Card>
+
+      <FilterBar {...pageFilters.barProps} loading={loading} />
 
       <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
         <TableContainer>
@@ -585,6 +533,7 @@ const CircularHistoryPage = () => {
                   </TableSortLabel>
                 </TableCell>
                 <TableCell sx={{ fontWeight: 800 }}>Audiencia</TableCell>
+                <TableCell sx={{ fontWeight: 800 }}>Correo</TableCell>
                 <TableCell sx={{ fontWeight: 800 }} align="center">Archivo adjunto</TableCell>
                 <TableCell sx={{ fontWeight: 800 }} align="right">Acciones</TableCell>
               </TableRow>
@@ -593,7 +542,7 @@ const CircularHistoryPage = () => {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={5}>
+                  <TableCell colSpan={6}>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4 }}>
                       <CircularProgress size={28} />
                     </Box>
@@ -601,7 +550,7 @@ const CircularHistoryPage = () => {
                 </TableRow>
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5}>
+                  <TableCell colSpan={6}>
                     <Box sx={{ textAlign: 'center', py: 4 }}>
                       <Typography variant="body2" color="text.secondary">No hay circulares para mostrar.</Typography>
                     </Box>
@@ -612,13 +561,32 @@ const CircularHistoryPage = () => {
                   <TableRow key={r.uuid} hover>
                     <TableCell>{formatDateTime(r.sentAt) || '—'}</TableCell>
                     <TableCell sx={{ maxWidth: 520 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
-                        {safeStr(r.subject) || 'Circular'}
-                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
+                          {safeStr(r.subject) || 'Circular'}
+                        </Typography>
+                        {r.isScheduled && <ScheduledOriginChip />}
+                      </Box>
                     </TableCell>
                     <TableCell>{renderAudience(r)}</TableCell>
+                    <TableCell>{renderEmailStatus(r)}</TableCell>
                     <TableCell align="center">{r.hasAttachment ? 'Sí' : 'No'}</TableCell>
-                    <TableCell align="right">
+                    <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                      {r.canResend && (
+                        <PermissionGuard permission="mail-enviar-circular">
+                          <Tooltip title="Reenviar el correo solo a quienes no lo recibieron">
+                            <IconButton
+                              onClick={() => setToResend(r)}
+                              size="small"
+                              color="warning"
+                              sx={{ mr: 1 }}
+                              aria-label="Reenviar a fallidos"
+                            >
+                              <ReplayIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </PermissionGuard>
+                      )}
                       <Tooltip title="Ver detalle">
                         <span>
                           <IconButton
@@ -664,9 +632,12 @@ const CircularHistoryPage = () => {
       <Dialog open={detailOpen} onClose={closeDetail} fullWidth maxWidth="md">
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box sx={{ pr: 2, minWidth: 0 }}>
-            <Typography variant="h6" sx={{ fontWeight: 800 }} noWrap>
-              {safeStr(detail?.subject) || 'Circular'}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+              <Typography variant="h6" sx={{ fontWeight: 800 }} noWrap>
+                {safeStr(detail?.subject) || 'Circular'}
+              </Typography>
+              {detail?.isScheduled && <ScheduledOriginChip />}
+            </Box>
             <Typography variant="body2" color="text.secondary">
               Enviada: {formatDateTime(detail?.sentAt) || '—'}
             </Typography>
@@ -685,6 +656,23 @@ const CircularHistoryPage = () => {
             <Alert severity="error">{detailError}</Alert>
           ) : (
             <>
+              {EMAIL_STATUS_CHIP[detail?.emailStatus] && detail.emailStatus !== 'sent' && (
+                <Alert
+                  severity={detail.emailStatus === 'sending' ? 'info' : 'warning'}
+                  sx={{ mb: 2 }}
+                  action={detail.canResend ? (
+                    <PermissionGuard permission="mail-enviar-circular">
+                      <Button color="inherit" size="small" startIcon={<ReplayIcon />} onClick={() => setToResend(detail)}>
+                        Reenviar a fallidos
+                      </Button>
+                    </PermissionGuard>
+                  ) : undefined}
+                >
+                  {detail.emailStatus === 'sending'
+                    ? 'Reenviando el correo a los destinatarios que no lo recibieron…'
+                    : `${emailDeliveryText(detail) || 'El correo no se pudo entregar a algunos destinatarios'}. La circular sí está publicada en el sistema.`}
+                </Alert>
+              )}
               <Box sx={{ mb: 2 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 1 }}>
                   <Typography variant="subtitle2" sx={{ color: '#1976d2', fontWeight: 800 }}>
@@ -866,6 +854,33 @@ const CircularHistoryPage = () => {
           <Button onClick={closeDetail}>Cerrar</Button>
         </DialogActions>
       </Dialog>
+
+      <Dialog open={!!toResend} onClose={() => !resending && setToResend(null)}>
+        <DialogTitle>Reenviar a fallidos</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            Se enviará el correo únicamente a los {toResend?.emailPendingCount ?? toResend?.emailFailedCount ?? 0} destinatarios que no lo recibieron.
+            La circular y la notificación ya están publicadas en el sistema y no se duplican.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setToResend(null)} disabled={resending}>Volver</Button>
+          <Button variant="contained" onClick={confirmResend} disabled={resending}>
+            {resending ? 'Reenviando…' : 'Reenviar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 };

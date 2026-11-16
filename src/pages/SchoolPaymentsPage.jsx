@@ -61,7 +61,9 @@ import tw from 'twin.macro';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
-import PaymentFilters from '../components/PaymentFilters';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F, SERVICE_STATUS_OPTIONS } from '../components/filters/filterFields';
 import PaymentTable from '../components/PaymentTable';
 import ManagePaymentsModal from '../components/ManagePaymentsModal';
 import ManagePeriodsModal from '../components/modals/ManagePeriodsModal';
@@ -126,6 +128,29 @@ const ENROLLMENT_STATUS_LABEL = {
     PAGADO: { label: 'Pagado', color: 'success' },
 };
 
+// Opciones de los filtros de la tabla (el valor vacío de cada select es "Todos")
+const PAYMENT_STATUS_OPTIONS = [
+    { value: 'PAGADO', label: 'Pagado' },
+    { value: 'ADELANTADO', label: 'Adelantado' },
+    { value: 'PENDIENTE', label: 'Pendiente' },
+    { value: 'MORA', label: 'En mora' },
+    { value: 'PARCIAL', label: 'Pago parcial' },
+];
+// Reemplaza al filtro "Estado de pago" cuando la vista de inscripción está encendida
+const ENROLLMENT_FILTER_OPTIONS = [
+    { value: 'PAGADO', label: 'Pagado' },
+    { value: 'PENDIENTE', label: 'Pendiente' },
+    { value: 'PARCIAL', label: 'Parcial' },
+    { value: 'SIN_CARGO', label: 'Sin cargo de inscripción' },
+];
+const PAYMENT_SERVICE_OPTIONS = [...SERVICE_STATUS_OPTIONS, { value: 'ELIMINADO', label: 'Eliminado' }];
+const YES_NO_AUTO_DEBIT_OPTIONS = [
+    { value: 'yes', label: 'Sí' },
+    { value: 'no', label: 'No' },
+];
+// Con "Estado del servicio = Inactivo" los switches de inactivas y eliminadas no aplican
+const isServiceInactiveDraft = (values) => values.serviceStatus === 'INACTIVE';
+
 const SchoolPaymentsPage = () => {
     const { hasPermission, hasAnyPermission } = usePermissions();
     const puedeRecalcular = hasPermission('pagos-recalcular');
@@ -153,26 +178,56 @@ const SchoolPaymentsPage = () => {
     // Sorting (moved to parent so sorting applies to full filtered set before pagination)
     const [orderBy, setOrderBy] = useState('familyLastName');
     const [order, setOrder] = useState('asc');
-    const [search, setSearch] = useState('');
-    const [statusFilter, setStatusFilter] = useState('');
-    const [autoDebitFilter, setAutoDebitFilter] = useState('');
-    const [serviceStatusFilter, setServiceStatusFilter] = useState('');
-    const [showInactive, setShowInactive] = useState(false);
-    const [showDeleted, setShowDeleted] = useState(false);
     const [countersView, setCountersView] = useState('payment'); // 'payment' o 'service'
-    useEffect(() => {
-        if (statusFilter) {
-            setShowDeleted(false);
-        }
-    }, [statusFilter]);
-    useEffect(() => {
-        if (serviceStatusFilter === 'INACTIVE') {
-            setShowInactive(false);
-        }
-    }, [serviceStatusFilter]);
-    // client-side pagination state (we fetch all data once and paginate locally)
-    const [page, setPage] = useState(0); // UI page (0-based)
+    const [page, setPage] = useState(0); 
     const [rowsPerPage, setRowsPerPage] = useState(25);
+
+    // Cargos de inscripción del ciclo indexados por userId ({ status, amountDue }). Vacío si el colegio
+    // no cobra inscripción o el usuario no tiene el permiso para verlos.
+    const [enrollmentByUser, setEnrollmentByUser] = useState({});
+    const hasEnrollmentCharges = Object.keys(enrollmentByUser).length > 0;
+    // Toggle "Vista de inscripción": cambia las columnas de la tabla a las del cargo de inscripción
+    const [enrollmentViewOn, setEnrollmentViewOn] = useState(false);
+    const enrollmentView = enrollmentViewOn && hasEnrollmentCharges;
+
+    // Filtros (se aplican en el navegador sobre todas las familias del colegio)
+    const pageFilters = useFilters({
+        fields: [
+            F.search('search', { label: 'Buscar apellido', width: 'md' }),
+            enrollmentView
+                ? F.select('enrollment', { label: 'Pago de Inscripción', options: ENROLLMENT_FILTER_OPTIONS })
+                : F.select('status', { label: 'Estado de pago', options: PAYMENT_STATUS_OPTIONS }),
+            F.serviceStatus({ options: PAYMENT_SERVICE_OPTIONS }),
+            F.select('autoDebit', { label: 'Débito automático', options: YES_NO_AUTO_DEBIT_OPTIONS }),
+            F.switch('showInactive', { label: 'Mostrar inactivas', disabled: isServiceInactiveDraft }),
+            F.switch('showDeleted', { label: 'Mostrar eliminadas', disabled: isServiceInactiveDraft }),
+        ],
+        onApplied: () => setPage(0),
+    });
+    const {
+        search,
+        status: statusFilter,
+        enrollment: enrollmentFilter,
+        autoDebit: autoDebitFilter,
+        serviceStatus: serviceStatusFilter,
+        showInactive,
+        showDeleted,
+    } = pageFilters.applied;
+
+
+    const { setValue: setFilterValue } = pageFilters;
+    const draftStatus = pageFilters.draft.status;
+    const draftServiceStatus = pageFilters.draft.serviceStatus;
+    useEffect(() => {
+        if (draftStatus) {
+            setFilterValue('showDeleted', false);
+        }
+    }, [draftStatus, setFilterValue]);
+    useEffect(() => {
+        if (draftServiceStatus === 'INACTIVE') {
+            setFilterValue('showInactive', false);
+        }
+    }, [draftServiceStatus, setFilterValue]);
     // Total families authoritative (includes active + inactive). Fetched independently
     // so it doesn't change when table filters/switches are toggled.
     const [totalFamiliesCount, setTotalFamiliesCount] = useState(null);
@@ -254,7 +309,8 @@ const SchoolPaymentsPage = () => {
                 });
             }
             // load all payments once (client-side pagination/filtering)
-            await fetchAllPayments(statusFilter, search);
+            await fetchAllPayments();
+            await fetchEnrollmentCharges();
             // fetch analysis after payments loaded
             await fetchPaymentsAnalysis(schoolId);
             setLoading(false);
@@ -352,6 +408,36 @@ const SchoolPaymentsPage = () => {
         }
     };
 
+    // Cargos de inscripción del colegio en el ciclo, para filtrar/mostrar quién no ha pagado.
+    // Falla en silencio (sin permiso o sin cargos): la pantalla funciona igual sin el filtro.
+    const fetchEnrollmentCharges = async () => {
+        if (!schoolId || !hasPermission('pagos-v2-ver-inscripcion')) {
+            setEnrollmentByUser({});
+            return;
+        }
+        try {
+            const res = await api.get(`/enrollment-payments/schools/${schoolId}`, {
+                params: currentCicloEscolarId ? { cicloEscolarId: currentCicloEscolarId } : {}
+            });
+            const map = {};
+            // El listado viene del más reciente al más antiguo: se conserva el primero de cada usuario
+            (res.data?.enrollmentPayments || []).forEach((charge) => {
+                if (!map[charge.userId]) {
+                    map[charge.userId] = {
+                        status: charge.status,
+                        netAmount: charge.netAmount,
+                        amountPaid: charge.amountPaid,
+                        amountDue: charge.amountDue
+                    };
+                }
+            });
+            setEnrollmentByUser(map);
+        } catch (err) {
+            console.debug('fetchEnrollmentCharges: sin cargos de inscripción disponibles', err);
+            setEnrollmentByUser({});
+        }
+    };
+
     const fetchAllSchools = useCallback(async () => {
         try {
             const res = await api.get('/schools', { params: { ...(currentCicloEscolarId ? { cicloEscolarId: currentCicloEscolarId } : {}), includeArchived: true } });
@@ -366,33 +452,15 @@ const SchoolPaymentsPage = () => {
 
     // Fetch all payments for the school in one request and store locally.
     // Tries a single large request first and falls back to iterative paging if backend enforces pagination.
-    const fetchAllPayments = async (status = '', q = '') => {
+    // Trae SIEMPRE todas las familias del colegio: estado, búsqueda y débito automático se filtran en el
+    // navegador. Así, recargar después de una acción con un filtro aplicado no deja la lista reducida
+    // a ese subconjunto al limpiar los filtros.
+    const fetchAllPayments = async () => {
         if (!schoolId) {
             return;
         }
         try {
-            const st = status ? String(status).toUpperCase().trim() : '';
-            const qq = q ? String(q).trim() : '';
             const params = buildPaymentParams({ page: 1, limit: 10000 });
-
-            // MORA y PENDIENTE son valores de finalStatus → filtrar en el servidor.
-            // PAGADO (== CONFIRMADO) e INACTIVO (= serviceStatus INACTIVE)
-            // se manejan solo en cliente cuando corresponde.
-            const SERVER_FINAL_STATUS = new Set(['MORA', 'PENDIENTE', 'PARCIAL', 'CONFIRMADO', 'ADELANTADO', 'ELIMINADO']);
-            if (st && SERVER_FINAL_STATUS.has(st)) {
-                params.finalStatus = st;
-            }
-            // PAGADO e INACTIVO: no enviar filtro al servidor, el cliente filtra
-            if (qq) {
-                params.search = qq;
-            }
-            // include auto-debit filter if set: 'yes'|'no'
-            if (autoDebitFilter === 'yes') {
-                params.autoDebit = true;
-            }
-            if (autoDebitFilter === 'no') {
-                params.autoDebit = false;
-            }
             const res = await api.get('/payments', { params });
             let arr = res.data.payments || res.data.rows || [];
             let total = typeof res.data.totalCount === 'number'
@@ -405,8 +473,7 @@ const SchoolPaymentsPage = () => {
                 const pages = Math.ceil(Number(total) / per);
                 const all = [];
                 for (let p = 0; p < pages; p++) {
-                    const serverFilter = st && SERVER_FINAL_STATUS.has(st) ? { finalStatus: st } : {};
-                    const r = await api.get('/payments', { params: buildPaymentParams({ page: p + 1, limit: per, ...serverFilter, ...(qq ? { search: qq } : {}) }) });
+                    const r = await api.get('/payments', { params: buildPaymentParams({ page: p + 1, limit: per }) });
                     const part = r.data.payments || r.data.rows || [];
                     if (Array.isArray(part) && part.length > 0) {
                         all.push(...part);
@@ -591,12 +658,6 @@ const SchoolPaymentsPage = () => {
 
     // Extraordinary payments are handled by the shared ExtraordinaryPaymentSection component
 
-    // When using server-side filtering/pagination, request server for filtered pages.
-    // `filtered` will mirror `payments` (the current page returned by server).
-    // Reset to first page only when filter inputs change (not when data refreshes).
-    useEffect(() => {
-        setPage(0);
-    }, [search, statusFilter, autoDebitFilter, showDeleted, showInactive, serviceStatusFilter]);
 
     useEffect(() => {
         // Apply client-side filtering of the already-fetched dataset
@@ -681,6 +742,13 @@ const SchoolPaymentsPage = () => {
                         return false;
                     }
                 }
+                // Filtrado por pago de inscripción (solo con la vista de inscripción encendida)
+                if (enrollmentFilter) {
+                    const enrollmentStatus = enrollmentByUser[p.User?.id || p.userId]?.status || 'SIN_CARGO';
+                    if (enrollmentStatus !== enrollmentFilter) {
+                        return false;
+                    }
+                }
                 // Filtrado por estado del servicio
                 if (serviceStatusFilter) {
                     const paymentServiceStatusRaw = p.serviceStatus || p.User?.FamilyDetail?.serviceStatus || '';
@@ -708,7 +776,7 @@ const SchoolPaymentsPage = () => {
             console.error('filtering error', e);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [search, statusFilter, paymentsAll, autoDebitFilter, showDeleted, showInactive, serviceStatusFilter, rowsPerPage]);
+    }, [search, statusFilter, paymentsAll, autoDebitFilter, showDeleted, showInactive, serviceStatusFilter, rowsPerPage, enrollmentFilter, enrollmentByUser]);
 
     const handleBack = () => {
         if (!currentCicloEscolarId) {
@@ -763,6 +831,12 @@ const SchoolPaymentsPage = () => {
             if (key === 'serviceStatus') {
                 return (p.serviceStatus || p.User?.FamilyDetail?.serviceStatus || '').toString().toLowerCase();
             }
+            if (key === 'enrollmentStatus') {
+                return enrollmentByUser[p.User?.id || p.userId]?.status || '';
+            }
+            if (key === 'enrollmentDue') {
+                return Number(enrollmentByUser[p.User?.id || p.userId]?.amountDue || 0);
+            }
         } catch (e) {
             console.log('[SchoolPaymentsPage getValueKey]',e);
             return '';
@@ -798,7 +872,8 @@ const SchoolPaymentsPage = () => {
             return 0;
         };
         return stableSort(filtered.slice(), comparator);
-    }, [filtered, order, orderBy]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filtered, order, orderBy, enrollmentByUser]);
 
     // Keep pagination count tied to the current filtered dataset (toggles included)
     const paginationCount = Array.isArray(sortedFiltered) ? sortedFiltered.length : 0;
@@ -1201,8 +1276,10 @@ const SchoolPaymentsPage = () => {
         if (!openRegister || !userIdFromQuery || !schoolId) {
             return;
         }
-        // avoid handling the same query repeatedly (some navigation flows re-emit location.search)
-        const key = `openRegister:${location.search}`;
+        // avoid handling the same query repeatedly (some navigation flows re-emit location.search).
+        // La clave usa solo estos parámetros: los filtros también viven en la URL y, si cambiaran la clave,
+        // aplicar un filtro volvería a abrir el diálogo.
+        const key = `openRegister:${qs.get('openRegister')}|${userIdFromQuery}|${receiptIdFromQuery}`;
         if (processedOpenRegisterRef.current.has(key)) {
             return;
         }
@@ -1320,7 +1397,7 @@ const SchoolPaymentsPage = () => {
             invalidatePaymentHistCache(registerPaymentTarget);
             
             // refresh full dataset after mutation
-            fetchAllPayments(statusFilter, search);
+            fetchAllPayments();
         } catch (err) {
             console.error(err);
             const errorMsg = err?.response?.data?.error || 'Error registrando pago';
@@ -1634,6 +1711,7 @@ const SchoolPaymentsPage = () => {
                 ACTIVE: 'ACTIVO',
                 PAUSED: 'PAUSADO',
                 SUSPENDED: 'SUSPENDIDO',
+                PENDING_START: 'PENDIENTE DE INICIO',
                 INACTIVE: 'INACTIVO',
                 DELETED: 'ELIMINADO'
             }[rawServiceStatus] || (rawServiceStatus || '-');
@@ -2487,7 +2565,7 @@ const SchoolPaymentsPage = () => {
             handleCloseNotes();
             // Invalidate cache for this user so modal will fetch fresh histories
             invalidatePaymentHistCacheForUser(notesTarget?.User?.id || notesTarget?.userId);
-            fetchAllPayments(statusFilter, search);
+            fetchAllPayments();
         } catch (err) {
             console.error('Error actualizando notas', err);
             setSnackbar({ open: true, message: 'Error actualizando notas', severity: 'error' });
@@ -2603,7 +2681,7 @@ const SchoolPaymentsPage = () => {
                     // close manage modal if open
                     setOpenManageModal(false);
                     // refresh dataset and analysis
-                    await fetchAllPayments(statusFilter, search);
+                    await fetchAllPayments();
                     await fetchPaymentsAnalysis(schoolId);
                 } catch (e) {
                     console.error('Error revirtiendo pago', e);
@@ -2648,7 +2726,7 @@ const SchoolPaymentsPage = () => {
             // Invalidate payment history cache for affected user and refresh payments
             // Invalidate cache for this payment/user so modal will fetch fresh histories
             invalidatePaymentHistCache(payment || manageTarget);
-            fetchAllPayments(statusFilter, search);
+            fetchAllPayments();
         } catch (err) {
             console.error('[handleManageAction] Error with action:', actionName);
             console.error('[handleManageAction] Error details:', err);
@@ -2666,7 +2744,7 @@ const SchoolPaymentsPage = () => {
             setSnackbar({ open: true, message: `Factura ${newVal ? 'marcada como enviada' : 'desmarcada'}`, severity: 'success' });
             // Invalidate cache for this user so modal will fetch fresh histories
             invalidatePaymentHistCacheForUser(row?.userId || row?.User?.id || manageTarget?.User?.id || manageTarget?.userId);
-            fetchAllPayments(statusFilter, search);
+            fetchAllPayments();
         } catch (err) {
             console.error('handleToggleInvoiceSent', err);
             setSnackbar({ open: true, message: 'Error actualizando envío de factura', severity: 'error' });
@@ -2875,6 +2953,7 @@ const SchoolPaymentsPage = () => {
                     'ACTIVE': 'ACTIVO',
                     'PAUSED': 'PAUSADO',
                     'SUSPENDED': 'SUSPENDIDO',
+                    'PENDING_START': 'PENDIENTE DE INICIO',
                     'INACTIVE': 'INACTIVO'
                 }[serviceStatus] || serviceStatus || 'NO ESPECIFICADO';
                 
@@ -3041,6 +3120,7 @@ const SchoolPaymentsPage = () => {
                     ACTIVE: 'ACTIVO',
                     PAUSED: 'PAUSADO',
                     SUSPENDED: 'SUSPENDIDO',
+                    PENDING_START: 'PENDIENTE DE INICIO',
                     INACTIVE: 'INACTIVO'
                 }[st] || (st ? st : 'NO ESPECIFICADO');
             };
@@ -3498,6 +3578,11 @@ const SchoolPaymentsPage = () => {
                                     label={`Ciclo Escolar ${currentCycleLabel || ''}`}
                                     sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
                                 />
+                                {school?.cycleStatus === 'ARCHIVED' && (
+                                    <Tooltip title="Este ciclo ya no está en operaciones. Los estados de servicio son los que tenía cada familia al cerrar el ciclo.">
+                                        <Chip size="small" color="default" label="Ciclo cerrado" sx={{ backgroundColor: 'rgba(255,255,255,0.85)' }} />
+                                    </Tooltip>
+                                )}
                                 <Chip
                                     size="small"
                                     icon={<People />}
@@ -4009,7 +4094,7 @@ const SchoolPaymentsPage = () => {
                                         setSnackbar({ open: true, message: 'Pago extraordinario registrado', severity: 'success' });
                                         // refresh analysis and payments
                                         fetchPaymentsAnalysis(schoolId);
-                                        fetchAllPayments(statusFilter, search);
+                                        fetchAllPayments();
                                     }} />
                                 </Box>
                             </Collapse>
@@ -4058,35 +4143,13 @@ const SchoolPaymentsPage = () => {
 
                 <Grid item xs={12}>
                     <Paper sx={{ p: 2 }}>
-                        <Box
-                            sx={{
-                                display: 'flex',
-                                gap: 2,
-                                mb: 2,
-                                alignItems: { xs: 'stretch', sm: 'center' },
-                                flexDirection: { xs: 'column', sm: 'row' },
-                                pr: { xs: 0, sm: 6 },
-                            }}
-                        >
-                            <PaymentFilters 
-                                search={search} 
-                                onSearchChange={setSearch} 
-                                status={statusFilter} 
-                                onStatusChange={setStatusFilter} 
-                                autoDebit={autoDebitFilter} 
-                                onAutoDebitChange={setAutoDebitFilter} 
-                                showInactive={showInactive}
-                                onShowInactiveChange={setShowInactive}
-                                showDeleted={showDeleted} 
-                                onShowDeletedChange={setShowDeleted}
-                                serviceStatus={serviceStatusFilter}
-                                onServiceStatusChange={setServiceStatusFilter}
-                            />
+                        {/* Acciones */}
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 1, mb: 1.5, pr: { xs: 0, sm: 6 } }}>
                             <Button
                                 startIcon={<DownloadIcon />}
                                 size="small"
                                 onClick={handleOpenDownloadMenu}
-                                sx={{ textTransform: 'none', ml: { sm: 'auto' }, alignSelf: { xs: 'flex-start', sm: 'center' } }}
+                                sx={{ textTransform: 'none' }}
                             >
                                 Descargar
                             </Button>
@@ -4121,9 +4184,38 @@ const SchoolPaymentsPage = () => {
                             */}
                         </Box>
 
+                        {/* Filtros */}
+                        <FilterBar {...pageFilters.barProps} loading={loading} />
+
+                        {hasEnrollmentCharges && (
+                            <FormControlLabel
+                                sx={{ mb: 1 }}
+                                control={(
+                                    <Switch
+                                        checked={enrollmentView}
+                                        onChange={(e) => {
+                                            setEnrollmentViewOn(e.target.checked);
+                                            // Cada vista tiene su propio filtro de pago: limpiar ambos para no dejar uno aplicado y oculto
+                                            pageFilters.applyValues({ status: '', enrollment: '' });
+                                            // El orden actual puede no existir en la otra vista: volver al orden por apellido
+                                            setOrderBy('familyLastName');
+                                            setOrder('asc');
+                                        }}
+                                    />
+                                )}
+                                label="Vista de pagos de inscripción"
+                            />
+                        )}
+
                         <PaymentTable
                             payments={pageSlice}
-                            onRegisterClick={hasPermission('pagos-pagar-tarifa') ? handleOpenRegister : undefined}
+                            enrollmentView={enrollmentView}
+                            enrollmentByUser={hasEnrollmentCharges ? enrollmentByUser : null}
+                            onRegisterClick={enrollmentView
+                                ? (hasPermission('pagos-v2-pagar-inscripcion')
+                                    ? (payment) => { handleOpenRegister(payment); setPaymentTab(2); }
+                                    : undefined)
+                                : (hasPermission('pagos-pagar-tarifa') ? handleOpenRegister : undefined)}
                             onManageClick={hasPermission('pagos-ver-detalle') ? handleManagePayments : undefined}
                             onManagePeriodsClick={hasPermission('pagos-ver-detalle') ? handleManagePeriods : undefined}
                             onNotesClick={hasPermission('pagos-ver-detalle') ? handleOpenNotes : undefined}
@@ -4147,7 +4239,7 @@ const SchoolPaymentsPage = () => {
                             payment={periodsTarget}
                             onChanged={() => {
                                 // Períodos impactan balances/estados, refrescar dataset y análisis
-                                fetchAllPayments(statusFilter, search);
+                                fetchAllPayments();
                                 fetchPaymentsAnalysis(schoolId);
                             }}
                         />
@@ -4159,7 +4251,7 @@ const SchoolPaymentsPage = () => {
                             schoolSchedules={school?.schedules}
                             onCreated={(message) => {
                                 // refrescar datos tras creación
-                                fetchAllPayments(statusFilter, search);
+                                fetchAllPayments();
                                 fetchPaymentsAnalysis(schoolId);
                                 if (message) {
                                     setSnackbar({ open: true, message, severity: 'success' });
@@ -4174,7 +4266,7 @@ const SchoolPaymentsPage = () => {
                             cicloEscolarId={currentCicloEscolarId}
                             buildPaymentParams={buildPaymentParams}
                             onApplied={(message) => {
-                                fetchAllPayments(statusFilter, search);
+                                fetchAllPayments();
                                 fetchMetrics(selectedPeriod);
                                 if (message) {
                                     setSnackbar({ open: true, message, severity: 'success' });
@@ -4236,6 +4328,7 @@ const SchoolPaymentsPage = () => {
                                             <MenuItem value="ACTIVE">ACTIVO</MenuItem>
                                             <MenuItem value="PAUSED">PAUSADO</MenuItem>
                                             <MenuItem value="SUSPENDED">SUSPENDIDO</MenuItem>
+                                            <MenuItem value="PENDING_START">PENDIENTE DE INICIO</MenuItem>
                                             <MenuItem value="INACTIVE">INACTIVO</MenuItem>
                                         </Select>
                                     </FormControl>
@@ -4357,6 +4450,7 @@ const SchoolPaymentsPage = () => {
                                             <MenuItem value="ACTIVE">ACTIVO</MenuItem>
                                             <MenuItem value="PAUSED">PAUSADO</MenuItem>
                                             <MenuItem value="SUSPENDED">SUSPENDIDO</MenuItem>
+                                            <MenuItem value="PENDING_START">PENDIENTE DE INICIO</MenuItem>
                                             <MenuItem value="INACTIVE">INACTIVO</MenuItem>
                                         </Select>
                                     </FormControl>
@@ -5464,7 +5558,7 @@ const SchoolPaymentsPage = () => {
                                             setDiscountPenaltyAmount('');
                                             setExonerateAmount('');
                                             setPaymentTab(0);
-                                            await fetchAllPayments(statusFilter, search);
+                                            await fetchAllPayments();
                                         } catch (err) {
                                             console.error('Error procesando mora:', err);
                                             const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Error al procesar el pago de mora';
@@ -5527,7 +5621,8 @@ const SchoolPaymentsPage = () => {
                                                 setSnackbar({ open: true, message: 'Pago de inscripción registrado.', severity: 'success' });
                                                 setOpenRegisterDialog(false);
                                                 setPaymentTab(0);
-                                                await fetchAllPayments(statusFilter, search);
+                                                await fetchAllPayments();
+                                                await fetchEnrollmentCharges();
                                             } catch (err) {
                                                 setSnackbar({
                                                     open: true,
@@ -5613,7 +5708,7 @@ const SchoolPaymentsPage = () => {
                                                 setOpenAutoDebitDialog(false);
                                                 setAutoDebitPayload(null);
                                                 // Actualizar vista
-                                                await fetchAllPayments(statusFilter, search);
+                                                await fetchAllPayments();
                                             } catch (err) {
                                                 console.error(err);
                                                 setSnackbar({ open: true, message: 'Error activando débito automático', severity: 'error' });
@@ -5654,7 +5749,7 @@ const SchoolPaymentsPage = () => {
                                                 setOpenAutoDebitDialog(false);
                                                 setAutoDebitPayload(null);
                                                 // Actualizar vista
-                                                await fetchAllPayments(statusFilter, search);
+                                                await fetchAllPayments();
                                             } catch (err) {
                                                 console.error(err);
                                                 setSnackbar({ open: true, message: 'Error activando débito automático', severity: 'error' });
@@ -5874,7 +5969,7 @@ const SchoolPaymentsPage = () => {
                                         setPayPenaltyDate(moment().format('YYYY-MM-DD'));
                                         setPayPenaltyUseCredit(false);
                                         // Refrescar datos
-                                        await fetchAllPayments(statusFilter, search);
+                                        await fetchAllPayments();
                                         // Actualizar el registerPaymentTarget con los datos frescos
                                         const updated = await api.get(`/payments/${registerPaymentTarget.id}`);
                                         if (updated.data) {
@@ -5987,7 +6082,7 @@ const SchoolPaymentsPage = () => {
                                         setDiscountPenaltyType('DISCOUNT');
                                         setDiscountPenaltyNotes('');
                                         // Refrescar datos
-                                        await fetchAllPayments(statusFilter, search);
+                                        await fetchAllPayments();
                                         // Actualizar el registerPaymentTarget con los datos frescos
                                         const updated = await api.get(`/payments/${registerPaymentTarget.id}`);
                                         if (updated.data) {

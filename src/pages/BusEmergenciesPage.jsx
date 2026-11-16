@@ -17,10 +17,6 @@ import {
     Grid,
     Card,
     CardContent,
-    Select,
-    MenuItem,
-    FormControl,
-    InputLabel,
     Chip,
     IconButton,
     Tooltip,
@@ -30,8 +26,6 @@ import {
     DialogActions,
     Button,
 } from '@mui/material';
-import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
-import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import { 
     Visibility as VisibilityIcon,
     Delete as DeleteIcon,
@@ -44,9 +38,12 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import tw from 'twin.macro';
 import { getAllBusEmergencies, getBusEmergencyById, deleteBusEmergency } from '../services/busEmergencyService';
 import api from '../utils/axiosConfig';
-import ClientSelector, { getClientSchoolId, getClientCorporationId } from '../components/ClientSelector';
-import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
+import { getClientSchoolId, getClientCorporationId } from '../utils/clientValue';
+import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
 import PermissionGuard from '../components/PermissionGuard';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F, toPlateOptions, toRouteOptions } from '../components/filters/filterFields';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -64,14 +61,23 @@ const BusEmergenciesPage = () => {
     const [corporations, setCorporations] = useState([]);
     const [buses, setBuses] = useState([]);
     const [schoolRoutes, setSchoolRoutes] = useState([]);
-    const [selectedClient, setSelectedClient] = useState(null);
+
+    const pageFilters = useFilters({
+        fields: [
+            F.cycle(),
+            F.client({ schools, corporations }),
+            F.plate({ options: toPlateOptions(buses) }),
+            F.route({ options: toRouteOptions(schoolRoutes) }),
+            F.dateRange('dates'),
+        ],
+        onApplied: () => setPage(0),
+    });
+    const { cycle: selectedCicloEscolar, client: selectedClient, plate: selectedPlate, route: selectedRoute, dates } = pageFilters.applied;
     const selectedSchool = getClientSchoolId(selectedClient);
     const selectedCorporation = getClientCorporationId(selectedClient);
-    const [selectedPlate, setSelectedPlate] = useState('');
-    const [selectedRoute, setSelectedRoute] = useState('');
-    const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
-    const [startDate, setStartDate] = useState(null);
-    const [endDate, setEndDate] = useState(null);
+    const draftCycle = pageFilters.draft.cycle;
+    const draftSchoolId = getClientSchoolId(pageFilters.draft.client);
+    const draftCorporationId = getClientCorporationId(pageFilters.draft.client);
 
     // Ordenamiento
     const [orderBy, setOrderBy] = useState('fecha');
@@ -98,31 +104,31 @@ const BusEmergenciesPage = () => {
     useEffect(() => {
         fetchSchools();
         fetchCorporations();
-    }, [selectedCicloEscolar]);
+    }, [draftCycle]);
 
     useEffect(() => {
-        if (selectedSchool) {
-            fetchBusesBySchool(selectedSchool);
-            fetchRouteNumbersBySchool(selectedSchool);
-        } else if (selectedCorporation) {
-            fetchBusesByCorporation(selectedCorporation);
-            fetchRouteNumbersByCorporation(selectedCorporation);
+        if (draftSchoolId) {
+            fetchBusesBySchool(draftSchoolId);
+            fetchRouteNumbersBySchool(draftSchoolId);
+        } else if (draftCorporationId) {
+            fetchBusesByCorporation(draftCorporationId);
+            fetchRouteNumbersByCorporation(draftCorporationId);
         } else {
             setBuses([]);
             setSchoolRoutes([]);
         }
-    }, [selectedSchool, selectedCorporation]);
+    }, [draftSchoolId, draftCorporationId]);
 
     useEffect(() => {
         fetchEmergencies();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, rowsPerPage, selectedSchool, selectedCorporation, selectedPlate, selectedRoute, selectedCicloEscolar, startDate, endDate, orderBy, order]);
+    }, [page, rowsPerPage, selectedSchool, selectedCorporation, selectedPlate, selectedRoute, selectedCicloEscolar, dates, orderBy, order]);
 
     const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
 
     const fetchSchools = async () => {
         try {
-            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(selectedCicloEscolar), includeArchived: true } });
+            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true } });
             const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
             setSchools(schoolsData);
         } catch (error) {
@@ -133,7 +139,7 @@ const BusEmergenciesPage = () => {
 
     const fetchCorporations = async () => {
         try {
-            const response = await api.get('/corporations', { params: getCicloEscolarFilterParams(selectedCicloEscolar) });
+            const response = await api.get('/corporations', { params: getCicloEscolarFilterParams(draftCycle) });
             const corporationsData = Array.isArray(response.data) ? response.data : (response.data?.corporations || []);
             setCorporations(corporationsData);
         } catch (error) {
@@ -207,11 +213,11 @@ const BusEmergenciesPage = () => {
             if (selectedRoute) {
                 filters.routeNumber = selectedRoute;
             }
-            if (startDate) {
-                filters.startDate = startDate.format('YYYY-MM-DD');
+            if (dates.from) {
+                filters.startDate = dates.from;
             }
-            if (endDate) {
-                filters.endDate = endDate.format('YYYY-MM-DD');
+            if (dates.to) {
+                filters.endDate = dates.to;
             }
             filters.orderBy = orderBy;
             filters.order = order;
@@ -331,7 +337,6 @@ const BusEmergenciesPage = () => {
     };
 
     return (
-        <LocalizationProvider dateAdapter={AdapterMoment}>
             <Container>
                 <Box mb={3}>
                     <Typography variant="h4" gutterBottom>
@@ -390,106 +395,14 @@ const BusEmergenciesPage = () => {
                     </Grid>
                 </Grid>
 
-                {isSpecificCicloEscolarSelected && (
-                    <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
-                        Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.
-                    </Typography>
-                )}
-
                 {/* Filtros */}
-                <Paper sx={{ p: 3, mb: 3 }}>
-                    <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} sm={6} md={2}>
-                            <CicloEscolarFilter size="medium"
-                                value={selectedCicloEscolar}
-                                onChange={(value) => {
-                                    setSelectedCicloEscolar(value);
-                                    setSelectedClient(null);
-                                    setSelectedPlate('');
-                                    setSelectedRoute('');
-                                    setPage(0);
-                                }}
-                            />
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={2.5}>
-                            <ClientSelector
-                                size="medium"
-                                schools={schools}
-                                corporations={corporations}
-                                value={selectedClient}
-                                onChange={(client) => {
-                                    setSelectedClient(client);
-                                    setSelectedPlate('');
-                                    setSelectedRoute('');
-                                    setPage(0);
-                                }}
-                            />
-                        </Grid>
-
-                        <Grid item xs={12} sm={6} md={1.3}>
-                            <FormControl fullWidth>
-                                <InputLabel>Placa</InputLabel>
-                                <Select
-                                    value={selectedPlate}
-                                    onChange={(e) => setSelectedPlate(e.target.value)}
-                                    label="Placa"
-                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
-                                    disabled={!selectedSchool && !selectedCorporation}
-                                >
-                                    <MenuItem value="">Todas</MenuItem>
-                                    {[...new Set(buses.map(b => b.plate))].map((plate) => (
-                                        <MenuItem key={plate} value={plate}>
-                                            {plate}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={1}>
-                            <FormControl fullWidth>
-                                <InputLabel>Ruta</InputLabel>
-                                <Select
-                                    value={selectedRoute}
-                                    onChange={(e) => setSelectedRoute(e.target.value)}
-                                    label="Ruta"
-                                    MenuProps={{ PaperProps: { style: { maxHeight: 48 * 4.5 } } }}
-                                    disabled={!selectedSchool && !selectedCorporation}
-                                >
-                                    <MenuItem value="">Todas</MenuItem>
-                                    {(schoolRoutes && schoolRoutes.length > 0 ? [...schoolRoutes] : []).sort((a, b) => {
-                                        const na = Number(a);
-                                        const nb = Number(b);
-                                        if (!Number.isNaN(na) && !Number.isNaN(nb)) {
-                                            return na - nb;
-                                        }
-                                        return String(a).localeCompare(String(b));
-                                    }).map((route) => (
-                                        <MenuItem key={route} value={route}>
-                                            {route}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={1.5}>
-                            <DatePicker
-                                label="Fecha Inicio"
-                                value={startDate}
-                                onChange={(newValue) => setStartDate(newValue)}
-                                slotProps={{ textField: { fullWidth: true } }}
-                            />
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={1.5}>
-                            <DatePicker
-                                label="Fecha Fin"
-                                value={endDate}
-                                onChange={(newValue) => setEndDate(newValue)}
-                                slotProps={{ textField: { fullWidth: true } }}
-                            />
-                        </Grid>
-                        {/* Botón/icono de refresco local eliminado; se usa el boton global*/}
-                    </Grid>
-                </Paper>
+                <FilterBar
+                    {...pageFilters.barProps}
+                    loading={loading}
+                    caption={isSpecificCicloEscolarSelected
+                        ? 'Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.'
+                        : undefined}
+                />
 
                 {/* Tabla */}
                 <Paper>
@@ -794,7 +707,6 @@ const BusEmergenciesPage = () => {
                     </DialogActions>
                 </Dialog>
             </Container>
-        </LocalizationProvider>
     );
 };
 

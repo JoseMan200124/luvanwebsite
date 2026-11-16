@@ -1,6 +1,6 @@
 // src/pages/RouteHistoryPage.jsx
 
-import React, { useState, useEffect, useContext, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     Box,
     Typography,
@@ -8,8 +8,6 @@ import {
     Paper,
     Grid,
     TextField,
-    Autocomplete,
-    InputAdornment,
     Button,
     FormControlLabel,
     Checkbox,
@@ -22,7 +20,6 @@ import {
     IconButton,
     Pagination,
     Alert,
-    Popover,
     Table,
     TableHead,
     TableBody,
@@ -45,34 +42,20 @@ import {
     InfoOutlined,
     PictureAsPdf,
     School as SchoolIcon,
-    Search as SearchIcon,
-    Clear as ClearIcon,
     KeyboardArrowLeft,
     KeyboardArrowRight
 } from '@mui/icons-material';
 // RouteIcon removed; using a simple numeral adornment for route number filter
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
-import { useSearchParams } from 'react-router-dom';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F, toRouteOptions } from '../components/filters/filterFields';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, Cell, LabelList, CartesianGrid } from 'recharts';
-import { renderClientGroup } from '../components/ClientSelector';
-import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
-import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
+import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
 
 const RouteHistoryPage = () => {
-    const { auth } = useContext(AuthContext);
-    const [searchParams] = useSearchParams();
-
-    const statsMonthsShortEs = useMemo(
-        () => ['ene.', 'feb.', 'mar.', 'abr.', 'may.', 'jun.', 'jul.', 'ago.', 'sep.', 'oct.', 'nov.', 'dic.'],
-        []
-    );
-
-    const initialRouteNumber = searchParams.get('routeNumber') || '';
-    const initialClientId = searchParams.get('clientId') || null;
-
     const [loading, setLoading] = useState(false);
     const [routes, setRoutes] = useState([]);
     const [error, setError] = useState(null);
@@ -81,76 +64,74 @@ const RouteHistoryPage = () => {
     const [total, setTotal] = useState(0);
     const [clientBreakdown, setClientBreakdown] = useState({ colegios: 0, corporativos: 0 });
 
-    // filtros
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
-    const [pilotoFilter, setPilotoFilter] = useState('');
-    const [busFilter, setBusFilter] = useState('');
-    const [onlyFailures, setOnlyFailures] = useState(false);
-    const [statusFilter, setStatusFilter] = useState('');
-    const [startHour, setStartHour] = useState('');
-    const [endHour, setEndHour] = useState('');
-    const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
-    const [clients, setClients] = useState([]);
-    const [selectedClient, setSelectedClient] = useState(null);
-    const [clientTouched, setClientTouched] = useState(false);
-    const [availablePilots, setAvailablePilots] = useState([]);
-    const [pilotSelected, setPilotSelected] = useState(null);
-    const [availableBuses, setAvailableBuses] = useState([]);
-    const [busSelected, setBusSelected] = useState(null);
+    // ---- Filtros del historial ----
+    // Clientes del selector (según el ciclo que se está eligiendo) y números de ruta del cliente elegido
+    const [historySchools, setHistorySchools] = useState([]);
+    const [historyCorporations, setHistoryCorporations] = useState([]);
     const [availableRoutesList, setAvailableRoutesList] = useState([]);
-    const [routeSelected, setRouteSelected] = useState(null);
-    const [loadingRoutes, setLoadingRoutes] = useState(false);
     const routesCacheRef = React.useRef(new Map());
     const routeHistoryCacheRef = React.useRef(new Map());
-    const [pilotOpen, setPilotOpen] = useState(false);
-    const [busOpen, setBusOpen] = useState(false);
-    const [pilotInput, setPilotInput] = useState('');
-    const [busInput, setBusInput] = useState('');
-    const [loadingPilots, setLoadingPilots] = useState(false);
-    const [loadingBuses, setLoadingBuses] = useState(false);
-    const pilotsCacheRef = React.useRef(new Map());
-    const busesCacheRef = React.useRef(new Map());
-    const pilotTimerRef = React.useRef(null);
-    const busTimerRef = React.useRef(null);
-    const [initialFetchDone, setInitialFetchDone] = useState(false);
-    const [dateAnchorEl, setDateAnchorEl] = useState(null);
-    const [showAdvanced, setShowAdvanced] = useState(false);
 
-    const [routeNumber, setRouteNumber] = useState(initialRouteNumber);
-    const [clientId, ] = useState(initialClientId);
+    const historyDraftClientRef = React.useRef(null);
+    const loadPilotOptions = useCallback(async (text) => {
+        const client = historyDraftClientRef.current;
+        const params = { limit: 50, query: text };
+        if (client?.type === 'school') {
+            params.schoolId = client.id;
+        } else if (client?.type === 'corp') {
+            params.corporationId = client.id;
+        }
+        const resp = await api.get('/users/pilots', { params });
+        const pilots = Array.isArray(resp.data?.users) ? resp.data.users : (resp.data || []);
+        return (Array.isArray(pilots) ? pilots : [])
+            .map((p) => ({ value: String(p.id || p._id), label: p.name || p.fullName || p.nombre || '' }));
+    }, []);
+    const loadBusOptions = useCallback(async (text) => {
+        const params = { limit: 50, query: text, includeDecommissioned: true };
+        const resp = await api.get('/buses/simple', { params });
+        const busesList = resp.data?.buses || resp.data || [];
+        return (Array.isArray(busesList) ? busesList : [])
+            .map((b) => ({ value: String(b.id || b._id), label: b.placa || b.plate || b.licensePlate || '' }));
+    }, []);
+
+    const historyFilters = useFilters({
+        urlPrefix: 'h_',
+        fields: [
+            F.cycle(),
+            F.client({ schools: historySchools, corporations: historyCorporations }),
+            F.select('status', {
+                label: 'Estado',
+                width: 'sm',
+                options: [{ value: 'inprogress', label: 'En progreso' }, { value: 'completed', label: 'Completado' }],
+            }),
+            F.dateRange('dates'),
+            F.switch('onlyFailures', { label: 'Solo fallas' }),
+            F.autocomplete('pilot', { label: 'Piloto', advanced: true, loadOptions: loadPilotOptions, dependsOn: 'client', requireParent: false }),
+            F.route({ advanced: true, options: toRouteOptions(availableRoutesList.map((route) => route.number)) }),
+            F.autocomplete('bus', { label: 'Placa', width: 'sm', advanced: true, loadOptions: loadBusOptions, dependsOn: 'client', requireParent: false }),
+            F.timeRange('hours', { advanced: true }),
+        ],
+        onApplied: () => setPage(1),
+    });
+    const historyDraftClient = historyFilters.draft.client;
+    const historyDraftCycle = historyFilters.draft.cycle;
+    historyDraftClientRef.current = historyDraftClient;
+    const historyAppliedCycle = historyFilters.applied.cycle;
+
     // Estadísticas
     const [statsLoading, setStatsLoading] = useState(false);
     const [statsError, setStatsError] = useState(null);
-    const [statsGroupBy, setStatsGroupBy] = useState('route'); // 'route' | 'plate'
     const [statsData, setStatsData] = useState(null);
-    const [statsSelectedClient, setStatsSelectedClient] = useState(null);
-    const [statsClientTouched, setStatsClientTouched] = useState(false);
-    const [statsSelectedCicloEscolar, setStatsSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
-    const [statsClients, setStatsClients] = useState([]);
-    const [statsStartDate, setStatsStartDate] = useState('');
-    const [statsEndDate, setStatsEndDate] = useState('');
-    const [statsMonth, setStatsMonth] = useState('');
-    const [statsRouteNumber, setStatsRouteNumber] = useState('');
-    const [statsRouteSelected, setStatsRouteSelected] = useState(null);
-    const [statsAvailableRoutesList, setStatsAvailableRoutesList] = useState([]);
-    const [statsLoadingRoutes, setStatsLoadingRoutes] = useState(false);
-    const [statsPlate, setStatsPlate] = useState('');
-    const [statsBusSelected, setStatsBusSelected] = useState(null);
-    const [statsBusInput, setStatsBusInput] = useState('');
-    const [statsAvailableBuses, setStatsAvailableBuses] = useState([]);
-    const [statsLoadingBuses, setStatsLoadingBuses] = useState(false);
-    const statsBusTimerRef = React.useRef(null);
+    // Clientes y rutas de la barra de estadísticas (según el ciclo y el cliente que se están eligiendo)
+    const [statsSchools, setStatsSchools] = useState([]);
+    const [statsCorporations, setStatsCorporations] = useState([]);
+    const [statsRoutes, setStatsRoutes] = useState([]);
     const [statsShowEmptyDays, setStatsShowEmptyDays] = useState(false);
-    const [statsExpanded, setStatsExpanded] = useState(false);
-    const [statsDateAnchorEl, setStatsDateAnchorEl] = useState(null);
-    const [statsMonthAnchorEl, setStatsMonthAnchorEl] = useState(null);
-    const [statsMonthViewYear, setStatsMonthViewYear] = useState(new Date().getFullYear());
+    // Si se abre con estadísticas aplicadas en la URL (F5 o link), la sección arranca desplegada
+    const [statsExpanded, setStatsExpanded] = useState(() => new URLSearchParams(window.location.search).has('s_client'));
     const [statsSelectedKey, setStatsSelectedKey] = useState('');
     const [statsChartStep, setStatsChartStep] = useState(0);
-    const [statsHasLoadedOnce, setStatsHasLoadedOnce] = useState(false);
     const [statsLastLoadedGroupBy, setStatsLastLoadedGroupBy] = useState('');
-    const [statsFiltersDirty, setStatsFiltersDirty] = useState(false);
     const [statsTopSortByKm, setStatsTopSortByKm] = useState(false);
     const [statsReportLoading, setStatsReportLoading] = useState(false);
     const [statsLastLoadedParams, setStatsLastLoadedParams] = useState(null);
@@ -182,28 +163,66 @@ const RouteHistoryPage = () => {
         return { start, end: `${monthStr}-${String(lastDay).padStart(2, '0')}` };
     };
 
-    const buildRouteHistoryParams = (overrides = {}) => {
-        const selectedClientId = (selectedClient && (selectedClient.id || selectedClient.value || selectedClient._id)) || clientId || null;
-        const selectedClientType = selectedClient?.type || null;
-
-        const clientParam = {};
-        if (selectedClientId && selectedClientType === 'school') {
-            clientParam.schoolId = selectedClientId;
-        } else if (selectedClientId && selectedClientType === 'corporation') {
-            clientParam.corporationId = selectedClientId;
-        }
-
-        const effectivePage = overrides.page ?? page;
-
-        return {
-            ...getCicloEscolarFilterParams(selectedCicloEscolar),
-            ...clientParam,
-            routeNumber: (selectedClientType === 'school' || selectedClientType === 'corporation') ? routeNumber : undefined,
-            page: effectivePage,
-            pageSize,
-            ...overrides
-        };
+    // ---- Filtros de estadísticas ----
+    // Rango de un mes relativo al actual (0 = este mes, hasta hoy; -1 = mes anterior completo)
+    const monthRangeFromNow = (offset) => {
+        const d = new Date();
+        d.setDate(1);
+        d.setMonth(d.getMonth() + offset);
+        const { start, end } = getMonthRange(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+        return { from: start || '', to: end || '' };
     };
+
+    // La placa se busca entre todos los buses (mismo criterio que en el historial)
+    const loadStatsBusOptions = useCallback(async (text) => {
+        const resp = await api.get('/buses/simple', { params: { limit: 50, query: text, includeDecommissioned: true } });
+        const busesList = resp.data?.buses || resp.data || [];
+        return (Array.isArray(busesList) ? busesList : [])
+            .map((b) => ({ value: String(b.id || b._id), label: b.placa || b.plate || b.licensePlate || '' }));
+    }, []);
+
+    const statsFilters = useFilters({
+        urlPrefix: 's_',
+        fields: [
+            F.cycle(),
+            F.client({ schools: statsSchools, corporations: statsCorporations }),
+            F.route({ options: toRouteOptions(statsRoutes.map((route) => route.number)) }),
+            F.autocomplete('bus', { label: 'Placa', width: 'sm', loadOptions: loadStatsBusOptions, dependsOn: 'client' }),
+            F.dateRange('dates', { initial: () => monthRangeFromNow(0) }),
+            F.toggle('groupBy', {
+                label: 'Agrupar por',
+                initial: 'route',
+                options: [{ value: 'route', label: 'Ruta' }, { value: 'plate', label: 'Placa' }],
+            }),
+        ],
+        presets: [
+            { key: 'thisMonth', label: 'Este mes', values: () => ({ dates: monthRangeFromNow(0) }) },
+            { key: 'lastMonth', label: 'Mes anterior', values: () => ({ dates: monthRangeFromNow(-1) }) },
+        ],
+        validate: (values) => (values.client ? null : 'Seleccione un cliente para cargar las estadísticas.'),
+    });
+    const statsApplied = statsFilters.applied;
+    const statsDraftCycle = statsFilters.draft.cycle;
+    const statsDraftClientType = statsFilters.draft.client?.type || '';
+    const statsDraftClientId = statsFilters.draft.client?.id || '';
+
+    // Parámetros del historial a partir de los filtros aplicados.
+    const buildRouteHistoryParams = (values, pageNumber) => ({
+        ...getCicloEscolarFilterParams(values.cycle),
+        ...(values.client?.type === 'school' ? { schoolId: values.client.id } : {}),
+        ...(values.client?.type === 'corp' ? { corporationId: values.client.id } : {}),
+        routeNumber: values.client && values.route ? values.route : undefined,
+        startDate: values.dates?.from || undefined,
+        endDate: values.dates?.to || undefined,
+        pilotoId: values.pilot?.value || undefined,
+        busId: values.bus?.value || undefined,
+        onlyFailures: values.onlyFailures ? '1' : undefined,
+        status: values.status || undefined,
+        startHour: values.hours?.from || undefined,
+        endHour: values.hours?.to || undefined,
+        page: pageNumber,
+        pageSize,
+    });
 
     const getRouteHistoryCacheKey = (params) => {
         const normalized = {
@@ -214,8 +233,7 @@ const RouteHistoryPage = () => {
         return JSON.stringify(normalized);
     };
 
-    const fetchRouteHistory = async (opts = {}) => {
-        const params = buildRouteHistoryParams(opts);
+    const fetchRouteHistory = async (params) => {
         const cacheKey = getRouteHistoryCacheKey(params);
         const cached = routeHistoryCacheRef.current.get(cacheKey);
 
@@ -223,7 +241,6 @@ const RouteHistoryPage = () => {
             setRoutes(cached.routes || []);
             setTotal(cached.total || 0);
             setClientBreakdown(cached.clientBreakdown || { colegios: 0, corporativos: 0 });
-            setInitialFetchDone(true);
             setError(null);
             setLoading(false);
             return;
@@ -243,7 +260,7 @@ const RouteHistoryPage = () => {
             const currentPage = Number(params.page || 1);
             const nextPage = currentPage + 1;
             if (totalData > currentPage * pageSize) {
-                const nextParams = buildRouteHistoryParams({ ...opts, page: nextPage });
+                const nextParams = { ...params, page: nextPage };
                 const nextCacheKey = getRouteHistoryCacheKey(nextParams);
                 if (!routeHistoryCacheRef.current.has(nextCacheKey)) {
                     api.get('/transportistas/historial-rutas', { params: nextParams })
@@ -262,7 +279,6 @@ const RouteHistoryPage = () => {
             setRoutes(routesData);
             setTotal(totalData);
             setClientBreakdown(breakdownData);
-            setInitialFetchDone(true);
         } catch (err) {
             console.error('Error fetching route history (page):', err);
             const serverMessage = err?.response?.data?.message || err?.response?.data || err?.response?.statusText;
@@ -276,380 +292,111 @@ const RouteHistoryPage = () => {
             setLoading(false);
         }
     };
-    // Register page-level refresh handler for global refresh control
-    // Ensure we pass the current filters so the global refresh respects them
-    useRegisterPageRefresh(async () => {
-        setPage(1);
-        await fetchRouteHistory({
-            startDate: startDate || undefined,
-            endDate: endDate || undefined,
-            pilotoId: pilotSelected?.id || undefined,
-            busId: busSelected?.id || undefined,
-            onlyFailures: onlyFailures ? '1' : undefined,
-            status: statusFilter || undefined,
-            startHour: startHour || undefined,
-            endHour: endHour || undefined,
-            routeNumber: routeNumber || undefined,
-            page: 1
-        });
-    }, [fetchRouteHistory, startDate, endDate, pilotSelected, busSelected, onlyFailures, statusFilter, startHour, endHour, routeNumber, selectedCicloEscolar]);
-
+    const historyApplied = historyFilters.applied;
     useEffect(() => {
-        if (!initialFetchDone && (selectedClient || clientId)) {
-            setPage(1);
-            fetchRouteHistory({ page: 1 });
-        }
+        fetchRouteHistory(buildRouteHistoryParams(historyApplied, page));
+        // fetchRouteHistory se recrea en cada render; solo deben disparar los filtros aplicados y la página
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedClient, clientId]);
+    }, [historyApplied, page]);
+
+    // El refresco global vuelve a pedir la página actual con los filtros aplicados
+    useRegisterPageRefresh(async () => {
+        routeHistoryCacheRef.current.clear();
+        await fetchRouteHistory(buildRouteHistoryParams(historyApplied, page));
+    }, [historyApplied, page]);
 
     useEffect(() => {
-        // load clients when mounted
-                const loadClients = async () => {
-                    try {
-                        const [schoolsResp, corpsResp] = await Promise.all([
-                            api.get('/schools', { params: { ...getCicloEscolarFilterParams(selectedCicloEscolar), includeArchived: true } }),
-                            api.get('/corporations', { params: getCicloEscolarFilterParams(selectedCicloEscolar) })
-                        ]);
-
-                        const schoolsList = schoolsResp.data?.schools || schoolsResp.data || [];
-                        const corpsList = corpsResp.data?.corporations || corpsResp.data || [];
-
-                        // Build grouped options: Colegios, Corporaciones (no 'Todos' ni 'Sin afiliación')
-                        const combined = [];
-                        const pushIfValid = (item, type) => {
-                            if (!item) {
-                                return;
-                            }
-                            if (item.deleted) {
-                                return;
-                            }
-                            const id = item.id || item._id || item.value || item.uuid || item.name;
-                            const name = item.name || item.nombre || item.label || String(id);
-                            const cycle = item.cicloEscolar || item.CicloEscolar || {};
-                            const cycleId = item.cicloEscolarId || cycle.id || item.cicloEscolar_id;
-                            const cycleLabel = type === 'school'
-                                ? (getCicloEscolarOptionLabel(cycle) || (cycleId ? `Ciclo ${cycleId}` : 'Sin ciclo escolar'))
-                                : 'Corporaciones';
-                            const group = cycleLabel;
-                            combined.push({ id, name, _raw: item, type, group });
-                        };
-
-                        (Array.isArray(schoolsList) ? schoolsList : []).forEach((s) => pushIfValid(s, 'school'));
-                        (Array.isArray(corpsList) ? corpsList : []).forEach((c) => pushIfValid(c, 'corporation'));
-                        combined.sort((a, b) => a.group.localeCompare(b.group, 'es') || a.name.localeCompare(b.name, 'es'));
-
-                        // Añadir opcion "Todos los clientes" para que los usuarios puedan buscar globalmente
-                        const allOption = { id: 'ALL', name: 'Todos los clientes', type: 'all', group: 'Todos' };
-                        const clientsWithAll = [allOption, ...combined];
-                        setClients(clientsWithAll);
-
-                        // select default: if clientId provided try to find it, otherwise default to "Todos los clientes"
-                        const found = clientId ? clientsWithAll.find(s => String(s.id) === String(clientId)) : null;
-                        setSelectedClient(found || allOption);
-
-                        // Estadísticas: cliente independiente (sin selección por defecto)
-                        setStatsSelectedClient(null);
-                        setStatsClientTouched(false);
-                    } catch (err) {
-                        console.error('No se pudieron cargar los clientes (page):', err);
-                    }
-                };
+        const loadClients = async () => {
+            try {
+                const [schoolsResp, corpsResp] = await Promise.all([
+                    api.get('/schools', { params: { ...getCicloEscolarFilterParams(historyDraftCycle), includeArchived: true } }),
+                    api.get('/corporations', { params: getCicloEscolarFilterParams(historyDraftCycle) })
+                ]);
+                const schoolsList = schoolsResp.data?.schools || schoolsResp.data || [];
+                const corpsList = corpsResp.data?.corporations || corpsResp.data || [];
+                setHistorySchools((Array.isArray(schoolsList) ? schoolsList : []).filter((item) => item && !item.deleted));
+                setHistoryCorporations((Array.isArray(corpsList) ? corpsList : []).filter((item) => item && !item.deleted));
+            } catch (err) {
+                console.error('No se pudieron cargar los clientes (page):', err);
+            }
+        };
         loadClients();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedCicloEscolar]);
+    }, [historyDraftCycle]);
 
     useEffect(() => {
         const loadStatsClients = async () => {
             try {
                 const [schoolsResp, corpsResp] = await Promise.all([
-                    api.get('/schools', { params: { ...getCicloEscolarFilterParams(statsSelectedCicloEscolar), includeArchived: true } }),
-                    api.get('/corporations', { params: getCicloEscolarFilterParams(statsSelectedCicloEscolar) })
+                    api.get('/schools', { params: { ...getCicloEscolarFilterParams(statsDraftCycle), includeArchived: true } }),
+                    api.get('/corporations', { params: getCicloEscolarFilterParams(statsDraftCycle) })
                 ]);
-
                 const schoolsList = schoolsResp.data?.schools || schoolsResp.data || [];
                 const corpsList = corpsResp.data?.corporations || corpsResp.data || [];
-
-                const combined = [];
-                const pushIfValid = (item, type) => {
-                    if (!item) {
-                        return;
-                    }
-                    if (item.deleted) {
-                        return;
-                    }
-                    const id = item.id || item._id || item.value || item.uuid || item.name;
-                    const name = item.name || item.nombre || item.label || String(id);
-                    const cycle = item.cicloEscolar || item.CicloEscolar || {};
-                    const cycleId = item.cicloEscolarId || cycle.id || item.cicloEscolar_id;
-                    const cycleLabel = type === 'school'
-                        ? (getCicloEscolarOptionLabel(cycle) || (cycleId ? `Ciclo ${cycleId}` : 'Sin ciclo escolar'))
-                        : 'Corporaciones';
-                    const group = cycleLabel;
-                    combined.push({ id, name, _raw: item, type, group });
-                };
-
-                (Array.isArray(schoolsList) ? schoolsList : []).forEach((s) => pushIfValid(s, 'school'));
-                (Array.isArray(corpsList) ? corpsList : []).forEach((c) => pushIfValid(c, 'corporation'));
-                combined.sort((a, b) => a.group.localeCompare(b.group, 'es') || a.name.localeCompare(b.name, 'es'));
-
-                const allOption = { id: 'ALL', name: 'Todos los clientes', type: 'all', group: 'Todos' };
-                setStatsClients([allOption, ...combined]);
-                setStatsSelectedClient(null);
-                setStatsClientTouched(false);
+                setStatsSchools((Array.isArray(schoolsList) ? schoolsList : []).filter((item) => item && !item.deleted));
+                setStatsCorporations((Array.isArray(corpsList) ? corpsList : []).filter((item) => item && !item.deleted));
             } catch (err) {
                 console.error('No se pudieron cargar los clientes (stats):', err);
-                setStatsClients([]);
+                setStatsSchools([]);
+                setStatsCorporations([]);
             }
         };
 
         loadStatsClients();
-    }, [statsSelectedCicloEscolar]);
+    }, [statsDraftCycle]);
 
-    // Debounced server-side search for pilots
+    const historyDraftClientType = historyDraftClient?.type || '';
+    const historyDraftClientId = historyDraftClient?.id || '';
     useEffect(() => {
-        if (!selectedClient) {
-            setAvailablePilots([]);
-            return;
-        }
-
-        // clear previous timer
-        if (pilotTimerRef.current) {
-            clearTimeout(pilotTimerRef.current);
-        }
-
-        const hasSearchText = Boolean(pilotInput && pilotInput.trim().length >= 2);
-        const isInitialListRequest = pilotOpen && !hasSearchText;
-
-        if (!hasSearchText && !isInitialListRequest) {
-            setAvailablePilots([]);
-            return;
-        }
-
-        const cacheSuffix = hasSearchText ? `q:${pilotInput.trim()}` : 'initial';
-        const cacheKey = `${selectedClient.type}:${selectedClient.id || 'ALL'}:${cacheSuffix}`;
-        if (pilotsCacheRef.current.has(cacheKey)) {
-            setAvailablePilots(pilotsCacheRef.current.get(cacheKey));
-            return;
-        }
-
-        pilotTimerRef.current = setTimeout(async () => {
-            setLoadingPilots(true);
-            try {
-                const params = new URLSearchParams();
-                params.set('limit', '50');
-                if (hasSearchText) {
-                    params.set('query', pilotInput.trim());
-                }
-                // only add client filters when a specific client is selected
-                if (selectedClient.type === 'school') {
-                    params.set('schoolId', selectedClient.id);
-                }
-                else if (selectedClient.type === 'corporation') {
-                    params.set('corporationId', selectedClient.id);
-                }
-                const url = `/users/pilots?${params.toString()}`;
-                const resp = await api.get(url);
-                const pilots = Array.isArray(resp.data?.users) ? resp.data.users : (resp.data || []);
-                const pilotsOpts = pilots.map(p => ({ id: p.id || p._id, name: p.name || p.fullName || p.nombre }));
-                pilotsCacheRef.current.set(cacheKey, pilotsOpts);
-                setAvailablePilots(pilotsOpts);
-            } catch (err) {
-                console.error('Error searching pilots:', err);
-                setAvailablePilots([]);
-            } finally {
-                setLoadingPilots(false);
-            }
-        }, 300);
-
-        return () => { if (pilotTimerRef.current) {
-            clearTimeout(pilotTimerRef.current);
-        } };
-    }, [pilotInput, pilotOpen, selectedClient, auth.token]);
-
-    // Debounced server-side search for buses
-    useEffect(() => {
-        if (!selectedClient) {
-            setAvailableBuses([]);
-            return;
-        }
-
-        if (busTimerRef.current) {
-            clearTimeout(busTimerRef.current);
-        }
-
-        const hasSearchText = Boolean(busInput && busInput.trim().length >= 2);
-        const isInitialListRequest = busOpen && !hasSearchText;
-
-        if (!hasSearchText && !isInitialListRequest) {
-            setAvailableBuses([]);
-            return;
-        }
-
-        const cacheSuffix = hasSearchText ? `q:${busInput.trim()}` : 'initial';
-        const cacheKey = `${selectedClient.type}:${selectedClient.id || 'ALL'}:${cacheSuffix}`;
-        if (busesCacheRef.current.has(cacheKey)) {
-            setAvailableBuses(busesCacheRef.current.get(cacheKey));
-            return;
-        }
-
-        busTimerRef.current = setTimeout(async () => {
-            setLoadingBuses(true);
-            try {
-                const params = new URLSearchParams();
-                params.set('limit', '50');
-                if (hasSearchText) {
-                    params.set('query', busInput.trim());
-                }
-                // only add client filters when a specific client is selected
-                if (selectedClient.type === 'school') {
-                    params.set('schoolId', selectedClient.id);
-                }
-                else if (selectedClient.type === 'corporation') {
-                    params.set('corporationId', selectedClient.id);
-                }
-                const url = `/buses/simple?${params.toString()}`;
-                const resp = await api.get(url);
-                const busesList = resp.data?.buses || resp.data || [];
-                const busesOpts = (Array.isArray(busesList) ? busesList : []).map(b => ({ id: b.id || b._id, placa: b.placa || b.plate || b.licensePlate }));
-                busesCacheRef.current.set(cacheKey, busesOpts);
-                setAvailableBuses(busesOpts);
-            } catch (err) {
-                console.error('Error searching buses:', err);
-                setAvailableBuses([]);
-            } finally {
-                setLoadingBuses(false);
-            }
-        }, 300);
-
-        return () => { if (busTimerRef.current) {
-            clearTimeout(busTimerRef.current);
-        } };
-    }, [busInput, busOpen, selectedClient, auth.token]);
-
-    // Debounced server-side search for buses (stats)
-    useEffect(() => {
-        if (!statsSelectedClient) {
-            setStatsAvailableBuses([]);
-            return;
-        }
-
-        if (statsBusTimerRef.current) {
-            clearTimeout(statsBusTimerRef.current);
-        }
-
-        const queryText = statsBusInput || '';
-
-        const cacheKey = `${statsSelectedCicloEscolar}:${statsSelectedClient.type}:${statsSelectedClient.id}:${queryText}`;
-        if (busesCacheRef.current.has(cacheKey)) {
-            setStatsAvailableBuses(busesCacheRef.current.get(cacheKey));
-            return;
-        }
-
-        statsBusTimerRef.current = setTimeout(async () => {
-            setStatsLoadingBuses(true);
-            try {
-                const params = {
-                    query: queryText,
-                    ...getCicloEscolarFilterParams(statsSelectedCicloEscolar)
-                };
-                if (statsSelectedClient.type === 'school') {
-                    params.schoolId = statsSelectedClient.id;
-                }
-                if (statsSelectedClient.type === 'corporation') {
-                    params.corporationId = statsSelectedClient.id;
-                }
-                const resp = await api.get('/buses/simple', { params });
-                const busesList = resp.data?.buses || resp.data || [];
-                const busesOpts = (Array.isArray(busesList) ? busesList : []).map(b => ({ id: b.id || b._id, placa: b.placa || b.plate || b.licensePlate }));
-                busesCacheRef.current.set(cacheKey, busesOpts);
-                setStatsAvailableBuses(busesOpts);
-            } catch (err) {
-                console.error('Error searching buses (stats):', err);
-                setStatsAvailableBuses([]);
-            } finally {
-                setStatsLoadingBuses(false);
-            }
-        }, 300);
-
-        return () => { if (statsBusTimerRef.current) {
-            clearTimeout(statsBusTimerRef.current);
-        } };
-    }, [statsBusInput, statsSelectedClient, statsSelectedCicloEscolar, auth.token]);
-
-    // Load route numbers for selected client (no debounce; small payload)
-    useEffect(() => {
-        // do not load route numbers when no specific client is selected (global search)
-        if (!selectedClient || selectedClient.type === 'all') {
+        if (!historyDraftClientId) {
             setAvailableRoutesList([]);
             return;
         }
 
-        const cacheKey = `${selectedClient.type}:${selectedClient.id}`;
+        const cacheKey = `${historyDraftClientType}:${historyDraftClientId}`;
         if (routesCacheRef.current.has(cacheKey)) {
             setAvailableRoutesList(routesCacheRef.current.get(cacheKey));
             return;
         }
 
         const loadRoutes = async () => {
-            setLoadingRoutes(true);
             try {
-                let url = '';
-                if (selectedClient.type === 'school') {
-                    url = `/routes/school/${selectedClient.id}/numbers`;
-                } else if (selectedClient.type === 'corporation') {
-                    url = `/routes/corporation/${selectedClient.id}/numbers`;
-                } else {
-                    // fallback: try school endpoint
-                    url = `/routes/school/${selectedClient.id}/numbers`;
-                }
-
+                const url = historyDraftClientType === 'corp'
+                    ? `/routes/corporation/${historyDraftClientId}/numbers`
+                    : `/routes/school/${historyDraftClientId}/numbers`;
                 const resp = await api.get(url);
                 const nums = resp.data?.routeNumbers || resp.data?.routes || resp.data || [];
                 // Normalize to objects { number }
-                const opts = (Array.isArray(nums) ? nums : []).map(n => (typeof n === 'object' ? ({ number: n.routeNumber || n.routeNumber || n.routeNumber }) : ({ number: String(n) })));
+                const opts = (Array.isArray(nums) ? nums : []).map(n => (typeof n === 'object' ? ({ number: n.routeNumber }) : ({ number: String(n) })));
                 routesCacheRef.current.set(cacheKey, opts);
                 setAvailableRoutesList(opts);
             } catch (err) {
                 console.error('Error loading route numbers:', err);
                 setAvailableRoutesList([]);
-            } finally {
-                setLoadingRoutes(false);
             }
         };
 
         loadRoutes();
-    }, [selectedClient, auth.token]);
+    }, [historyDraftClientType, historyDraftClientId]);
 
-    // Load route numbers for stats selected client (independent from history)
+    // Números de ruta del cliente que se está eligiendo en estadísticas (independiente del historial)
     useEffect(() => {
-        if (!statsSelectedClient) {
-            setStatsAvailableRoutesList([]);
-            setStatsRouteSelected(null);
-            setStatsRouteNumber('');
-            setStatsBusSelected(null);
-            setStatsBusInput('');
-            setStatsPlate('');
+        if (!statsDraftClientId) {
+            setStatsRoutes([]);
             return;
         }
 
-        const cacheKey = `${statsSelectedCicloEscolar}:${statsSelectedClient.type}:${statsSelectedClient.id}`;
+        const cacheKey = `${statsDraftCycle}:${statsDraftClientType}:${statsDraftClientId}`;
         if (routesCacheRef.current.has(cacheKey)) {
-            setStatsAvailableRoutesList(routesCacheRef.current.get(cacheKey));
+            setStatsRoutes(routesCacheRef.current.get(cacheKey));
             return;
         }
 
         const loadStatsRoutes = async () => {
-            setStatsLoadingRoutes(true);
             try {
-                let url = '';
-                const params = getCicloEscolarFilterParams(statsSelectedCicloEscolar);
-                if (statsSelectedClient.type === 'school') {
-                    url = `/routes/school/${statsSelectedClient.id}/numbers`;
-                } else if (statsSelectedClient.type === 'corporation') {
-                    url = `/routes/corporation/${statsSelectedClient.id}/numbers`;
-                } else {
-                    url = `/routes/school/${statsSelectedClient.id}/numbers`;
-                }
+                const params = getCicloEscolarFilterParams(statsDraftCycle);
+                const url = statsDraftClientType === 'corp'
+                    ? `/routes/corporation/${statsDraftClientId}/numbers`
+                    : `/routes/school/${statsDraftClientId}/numbers`;
 
                 const resp = await api.get(url, { params });
                 const nums = resp.data?.routeNumbers || resp.data?.routes || resp.data || [];
@@ -662,17 +409,15 @@ const RouteHistoryPage = () => {
                 }).filter((o) => o.number);
 
                 routesCacheRef.current.set(cacheKey, opts);
-                setStatsAvailableRoutesList(opts);
+                setStatsRoutes(opts);
             } catch (err) {
                 console.error('Error loading route numbers (stats):', err);
-                setStatsAvailableRoutesList([]);
-            } finally {
-                setStatsLoadingRoutes(false);
+                setStatsRoutes([]);
             }
         };
 
         loadStatsRoutes();
-    }, [statsSelectedClient, statsSelectedCicloEscolar, auth.token]);
+    }, [statsDraftCycle, statsDraftClientType, statsDraftClientId]);
 
     const formatTime = (dateTime) => {
         if (!dateTime) {
@@ -703,15 +448,6 @@ const RouteHistoryPage = () => {
     const softPrimaryBg = alpha(theme.palette.primary.main, 0.04);
     const softerPrimaryBg = alpha(theme.palette.primary.main, 0.02);
     const softPrimaryRing = alpha(theme.palette.primary.main, 0.10);
-    const activeFieldSx = {
-        backgroundColor: softPrimaryBg,
-        borderRadius: 1,
-        '& .MuiOutlinedInput-root': {
-            '& fieldset': { borderColor: 'primary.main', borderWidth: 1 },
-            '&:hover fieldset': { borderColor: 'primary.dark' },
-        },
-        boxShadow: `0 0 0 3px ${alpha(theme.palette.primary.main, 0.08)}`,
-    };
 
     const overallActiveDaysFallback = useMemo(() => {
         const rows = statsData?.rows || [];
@@ -737,7 +473,7 @@ const RouteHistoryPage = () => {
 
     // Mientras se recargan estadísticas tras cambiar agrupación, mantenemos labels consistentes
     // con la data actualmente mostrada (la última agrupación cargada).
-    const statsEffectiveGroupBy = statsData ? (statsLastLoadedGroupBy || statsGroupBy) : statsGroupBy;
+    const statsEffectiveGroupBy = statsData ? (statsLastLoadedGroupBy || statsApplied.groupBy) : statsApplied.groupBy;
 
     const statsRowsSortedByKm = useMemo(() => {
         const rows = statsData?.rows || [];
@@ -801,60 +537,25 @@ const RouteHistoryPage = () => {
 
     const statsTopKeyByKm = statsRowsSortedByKm?.[0]?.key ?? '';
 
-    const loadStats = async (groupByOverride) => {
+    const loadStats = async (values) => {
         setStatsError(null);
         try {
             setStatsLoading(true);
-            const selectedStatsClientId = (statsSelectedClient && (statsSelectedClient.id || statsSelectedClient.value || statsSelectedClient._id)) || null;
-            if (!selectedStatsClientId) {
-                setStatsClientTouched(true);
-                setStatsError('Seleccione un cliente en los filtros de estadísticas antes de cargar.');
-                setStatsLoading(false);
-                return;
+            const groupByToUse = values.groupBy || 'route';
+            if (groupByToUse !== statsLastLoadedGroupBy) {
+                setStatsSelectedKey('');
+                setStatsChartStep(0);
             }
 
-            const clientParam = {};
-            if (statsSelectedClient?.type === 'school') {
-                clientParam.schoolId = selectedStatsClientId;
-            }
-            else if (statsSelectedClient?.type === 'corporation') {
-                clientParam.corporationId = selectedStatsClientId;
-            }
-            else {
-                clientParam.schoolId = selectedStatsClientId;
-            }
-
-            const groupByToUse = groupByOverride || statsGroupBy;
-
-            let startDateParam = statsStartDate || undefined;
-            let endDateParam = statsEndDate || undefined;
-
-            // Si no se especifica mes ni rango, por defecto usar mes actual (evita rangos enormes y gráficas pesadas)
-            if (!statsMonth && !startDateParam && !endDateParam) {
-                const now = new Date();
-                const yyyy = now.getFullYear();
-                const mm = String(now.getMonth() + 1).padStart(2, '0');
-                const currentMonth = `${yyyy}-${mm}`;
-                const { start, end } = getMonthRange(currentMonth);
-                startDateParam = start || startDateParam;
-                endDateParam = end || endDateParam;
-                setStatsMonth(currentMonth);
-                setStatsStartDate(startDateParam || '');
-                setStatsEndDate(endDateParam || '');
-            } else if (statsMonth) {
-                const { start, end } = getMonthRange(statsMonth);
-                startDateParam = start || startDateParam;
-                endDateParam = end || endDateParam;
-            }
-
+            const fallbackRange = monthRangeFromNow(0);
             const params = {
-                ...getCicloEscolarFilterParams(statsSelectedCicloEscolar),
-                ...clientParam,
-                startDate: startDateParam,
-                endDate: endDateParam,
+                ...getCicloEscolarFilterParams(values.cycle),
+                ...(values.client?.type === 'corp' ? { corporationId: values.client.id } : { schoolId: values.client?.id }),
+                startDate: values.dates?.from || (values.dates?.to ? undefined : fallbackRange.from),
+                endDate: values.dates?.to || (values.dates?.from ? undefined : fallbackRange.to),
                 groupBy: groupByToUse,
-                routeNumber: statsRouteNumber || undefined,
-                plate: statsPlate || undefined,
+                routeNumber: values.route || undefined,
+                plate: values.bus?.label || undefined,
             };
 
             const resp = await api.get('/transportistas/estadisticas-kilometros', { params });
@@ -882,10 +583,8 @@ const RouteHistoryPage = () => {
                 overallActiveDays: resp.data?.overallActiveDays,
                 overallAvgPerActiveDay: resp.data?.overallAvgPerActiveDay
             });
-            setStatsHasLoadedOnce(true);
             setStatsLastLoadedGroupBy(groupByToUse);
             setStatsLastLoadedParams(params);
-            setStatsFiltersDirty(false);
         } catch (err) {
             console.error('Error cargando estadísticas:', err);
             setStatsError(err.response?.data?.message || err.message || 'No se pudieron cargar las estadísticas');
@@ -894,6 +593,20 @@ const RouteHistoryPage = () => {
         }
     };
 
+    // Estadísticas: se cargan al aplicar filtros con un cliente.
+    useEffect(() => {
+        if (statsApplied.client) {
+            loadStats(statsApplied);
+            return;
+        }
+        setStatsData(null);
+        setStatsError(null);
+        setStatsLastLoadedParams(null);
+        setStatsLastLoadedGroupBy('');
+        setStatsSelectedKey('');
+        setStatsChartStep(0);
+    }, [statsApplied]);
+
     const downloadStatsPdfReport = async () => {
         if (!statsLastLoadedParams || !statsData) {
             return;
@@ -901,7 +614,7 @@ const RouteHistoryPage = () => {
         setStatsError(null);
         try {
             setStatsReportLoading(true);
-            const groupByToUse = statsLastLoadedParams.groupBy || statsLastLoadedGroupBy || statsGroupBy;
+            const groupByToUse = statsLastLoadedParams.groupBy || statsLastLoadedGroupBy || 'route';
 
             const resp = await api.get('/transportistas/estadisticas-kilometros/reporte', {
                 params: statsLastLoadedParams,
@@ -1249,443 +962,28 @@ const RouteHistoryPage = () => {
                         </Grid>
                     </Grid>
 
-                    {/* Barra de filtros (estilo registros de combustible) */}
+                    {/* Filtros de estadísticas */}
                     <Grid item xs={12}>
-                        <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, borderColor: 'divider', backgroundColor: alpha(theme.palette.primary.main, 0.01) }}>
-                            <Grid container spacing={2} alignItems="center">
-                                <Grid item xs={12} md={1.3}>
-                                    <CicloEscolarFilter
-                                        value={statsSelectedCicloEscolar}
-                                        onChange={(value) => {
-                                            setStatsSelectedCicloEscolar(value);
-                                            setStatsSelectedClient(null);
-                                            setStatsRouteSelected(null);
-                                            setStatsRouteNumber('');
-                                            setStatsBusSelected(null);
-                                            setStatsBusInput('');
-                                            setStatsPlate('');
-                                            setStatsAvailableRoutesList([]);
-                                            setStatsAvailableBuses([]);
-                                            setStatsFiltersDirty(true);
-                                        }}
-                                        size="small"
-                                    />
-                                </Grid>
-                                <Grid item xs={12} md={2}>
-                                    <Autocomplete
-                                        size="small"
-                                        options={statsClients.filter(c => c.type !== 'all')}
-                                        groupBy={(option) => option.group || ''}
-                                        renderGroup={renderClientGroup}
-                                        getOptionLabel={(opt) => opt ? (opt.name || opt.nombre || opt.label || String(opt.id || opt.value || opt._id)) : ''}
-                                        value={statsSelectedClient}
-                                        onChange={(_, newValue) => {
-                                            setStatsClientTouched(true);
-                                            setStatsSelectedClient(newValue);
-                                            setStatsFiltersDirty(true);
-                                        }}
-                                        isOptionEqualToValue={(opt, val) => String(opt?.id) === String(val?.id) && String(opt?.type) === String(val?.type)}
-                                        renderInput={(params) => (
-                                            <TextField
-                                                {...params}
-                                                label="Cliente"
-                                                error={statsClientTouched && !statsSelectedClient}
-                                                helperText={(statsClientTouched && !statsSelectedClient) ? 'Seleccione un cliente' : ''}
-                                                sx={statsSelectedClient ? activeFieldSx : {}}
-                                            />
-                                        )}
-                                    />
-                                </Grid>
-
-                                <Grid item xs={12} md={1}>
-                                    <Autocomplete
-                                        size="small"
-                                        options={statsAvailableRoutesList}
-                                        getOptionLabel={(opt) => opt ? (opt.number || String(opt)) : ''}
-                                        value={statsRouteSelected}
-                                        onChange={(_, newVal) => {
-                                            setStatsRouteSelected(newVal);
-                                            setStatsRouteNumber(newVal?.number ? String(newVal.number) : '');
-                                            setStatsFiltersDirty(true);
-                                        }}
-                                        loading={statsLoadingRoutes}
-                                        disabled={!statsSelectedClient}
-                                        isOptionEqualToValue={(opt, val) => String(opt?.number) === String(val?.number)}
-                                        renderInput={(params) => (
-                                            <TextField
-                                                {...params}
-                                                label="Ruta"
-                                                placeholder="Número"
-                                                fullWidth
-                                                InputProps={{
-                                                    ...params.InputProps,
-                                                    startAdornment: (
-                                                        <InputAdornment position="start">
-                                                            <Box component="span" sx={{ color: 'text.secondary', fontWeight: 600 }}>#</Box>
-                                                        </InputAdornment>
-                                                    ),
-                                                    endAdornment: (
-                                                        <>
-                                                            {statsLoadingRoutes ? <CircularProgress color="inherit" size={16} /> : null}
-                                                            {params.InputProps.endAdornment}
-                                                        </>
-                                                    ),
-                                                }}
-                                                sx={statsRouteNumber ? activeFieldSx : {}}
-                                            />
-                                        )}
-                                        clearOnEscape
-                                        autoHighlight
-                                        selectOnFocus
-                                    />
-                                </Grid>
-
-                                <Grid item xs={12} md={1.5}>
-                                    <Autocomplete
-                                        size="small"
-                                        options={statsAvailableBuses}
-                                        getOptionLabel={(opt) => opt ? (opt.placa || '') : ''}
-                                        value={statsBusSelected}
-                                        inputValue={statsBusInput}
-                                        onInputChange={(_, v) => setStatsBusInput(v)}
-                                        onChange={(_, newVal) => {
-                                            setStatsBusSelected(newVal);
-                                            setStatsPlate(newVal?.placa ? String(newVal.placa) : '');
-                                            setStatsFiltersDirty(true);
-                                        }}
-                                        loading={statsLoadingBuses}
-                                        disabled={!statsSelectedClient}
-                                        isOptionEqualToValue={(opt, val) => String(opt?.id) === String(val?.id)}
-                                        renderInput={(params) => (
-                                            <TextField
-                                                {...params}
-                                                label="Placa"
-                                                placeholder={statsSelectedClient ? 'Buscar placa' : 'Seleccione cliente'}
-                                                fullWidth
-                                                InputProps={{
-                                                    ...params.InputProps,
-                                                    startAdornment: (
-                                                        <InputAdornment position="start">
-                                                            <DirectionsBus fontSize="small" color="action" />
-                                                        </InputAdornment>
-                                                    ),
-                                                    endAdornment: (
-                                                        <>
-                                                            {statsLoadingBuses ? <CircularProgress color="inherit" size={16} /> : null}
-                                                            {params.InputProps.endAdornment}
-                                                        </>
-                                                    ),
-                                                }}
-                                                sx={statsPlate ? activeFieldSx : {}}
-                                            />
-                                        )}
-                                        clearOnEscape
-                                        autoHighlight
-                                        selectOnFocus
-                                    />
-                                </Grid>
-
-                                <Grid item xs={12} md={1.5}>
-                                    <TextField
-                                        size="small"
-                                        label="Mes"
-                                        fullWidth
-                                        value={(() => {
-                                            if (!statsMonth) {
-                                                return '';
-                                            }
-                                            const [yyStr, mmStr] = statsMonth.split('-');
-                                            const yy = Number.parseInt(yyStr, 10);
-                                            const mm = Number.parseInt(mmStr, 10);
-                                            if (Number.isNaN(yy) || Number.isNaN(mm)) {
-                                                return statsMonth;
-                                            }
-
-                                            const dt = new Date(Date.UTC(yy, mm - 1, 1));
-                                            return new Intl.DateTimeFormat('es-ES', {
-                                                month: 'long',
-                                                year: 'numeric',
-                                                timeZone: 'UTC',
-                                            }).format(dt);
-                                        })()}
-                                        onClick={(e) => {
-                                            setStatsMonthAnchorEl(e.currentTarget);
-                                            const base = statsMonth ? `${statsMonth}-01` : undefined;
-                                            if (base) {
-                                                const [yyStr] = base.split('-');
-                                                const yy = Number.parseInt(yyStr, 10);
-                                                if (!Number.isNaN(yy)) {
-                                                    setStatsMonthViewYear(yy);
-                                                }
-                                            } else {
-                                                setStatsMonthViewYear(new Date().getFullYear());
-                                            }
-                                        }}
-                                        InputProps={{ readOnly: true }}
-                                        InputLabelProps={{ shrink: true }}
-                                        placeholder="Seleccionar"
-                                        sx={statsMonth ? activeFieldSx : {}}
-                                    />
-
-                                    <Popover
-                                        open={Boolean(statsMonthAnchorEl)}
-                                        anchorEl={statsMonthAnchorEl}
-                                        onClose={() => setStatsMonthAnchorEl(null)}
-                                        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-                                    >
-                                        <Box
-                                            sx={{
-                                                p: 1.25,
-                                                minWidth: 260,
-                                                borderRadius: 2,
-                                            }}
-                                        >
-                                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                                                <IconButton
-                                                    size="small"
-                                                    onClick={() => setStatsMonthViewYear((y) => y - 1)}
-                                                    aria-label="Año anterior"
-                                                    sx={{
-                                                        border: `1px solid ${alpha(theme.palette.divider, 0.8)}`,
-                                                        borderRadius: 2,
-                                                    }}
-                                                >
-                                                    <KeyboardArrowLeft fontSize="small" />
-                                                </IconButton>
-
-                                                <Box sx={{ textAlign: 'center', px: 1 }}>
-                                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.1 }}>
-                                                        Seleccionar mes
-                                                    </Typography>
-                                                    <Typography variant="subtitle2" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-                                                        {statsMonthViewYear}
-                                                    </Typography>
-                                                </Box>
-
-                                                <IconButton
-                                                    size="small"
-                                                    onClick={() => setStatsMonthViewYear((y) => y + 1)}
-                                                    aria-label="Año siguiente"
-                                                    sx={{
-                                                        border: `1px solid ${alpha(theme.palette.divider, 0.8)}`,
-                                                        borderRadius: 2,
-                                                    }}
-                                                >
-                                                    <KeyboardArrowRight fontSize="small" />
-                                                </IconButton>
-                                            </Box>
-
-                                            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0.5 }}>
-                                                {statsMonthsShortEs.map((label, idx) => {
-                                                    const monthIndex = idx + 1;
-                                                    const monthStr = `${statsMonthViewYear}-${String(monthIndex).padStart(2, '0')}`;
-                                                    const selected = statsMonth === monthStr;
-                                                    return (
-                                                        <Button
-                                                            key={monthStr}
-                                                            size="small"
-                                                            variant={selected ? 'contained' : 'outlined'}
-                                                            onClick={() => {
-                                                                setStatsMonth(monthStr);
-                                                                setStatsFiltersDirty(true);
-                                                                const { start, end } = getMonthRange(monthStr);
-                                                                setStatsStartDate(start || '');
-                                                                setStatsEndDate(end || '');
-                                                                setStatsMonthAnchorEl(null);
-                                                            }}
-                                                            sx={{
-                                                                minWidth: 0,
-                                                                py: 0.75,
-                                                                borderRadius: 2,
-                                                                textTransform: 'capitalize',
-                                                                fontWeight: selected ? 700 : 600,
-                                                                borderColor: selected ? undefined : alpha(theme.palette.primary.main, 0.35),
-                                                                '&:hover': {
-                                                                    borderColor: selected ? undefined : alpha(theme.palette.primary.main, 0.55),
-                                                                },
-                                                            }}
-                                                        >
-                                                            {label}
-                                                        </Button>
-                                                    );
-                                                })}
-                                            </Box>
-
-                                            <Divider sx={{ my: 1 }} />
-
-                                            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 0.75 }}>
-                                                <Button
-                                                    size="small"
-                                                    variant="text"
-                                                    onClick={() => {
-                                                        setStatsMonth('');
-                                                        setStatsFiltersDirty(true);
-                                                        setStatsMonthAnchorEl(null);
-                                                    }}
-                                                    sx={{ textTransform: 'none' }}
-                                                >
-                                                    Limpiar
-                                                </Button>
-                                                <Button
-                                                    size="small"
-                                                    variant="text"
-                                                    onClick={() => {
-                                                        const now = new Date();
-                                                        const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-                                                        setStatsMonthViewYear(now.getFullYear());
-                                                        setStatsMonth(monthStr);
-                                                        setStatsFiltersDirty(true);
-                                                        const { start, end } = getMonthRange(monthStr);
-                                                        setStatsStartDate(start || '');
-                                                        setStatsEndDate(end || '');
-                                                        setStatsMonthAnchorEl(null);
-                                                    }}
-                                                    sx={{ textTransform: 'none' }}
-                                                >
-                                                    Hoy
-                                                </Button>
-                                            </Box>
-                                        </Box>
-                                    </Popover>
-                                </Grid>
-
-                                <Grid item xs={12} md={2}>
-                                    <TextField
-                                        size="small"
-                                        variant="outlined"
-                                        label="Rango de fechas"
-                                        fullWidth
-                                        value={statsStartDate && statsEndDate ? `${statsStartDate} — ${statsEndDate}` : (statsStartDate ? `${statsStartDate} —` : (statsEndDate ? `— ${statsEndDate}` : ''))}
-                                        onClick={(e) => setStatsDateAnchorEl(e.currentTarget)}
-                                        InputProps={{ readOnly: true, startAdornment: (<InputAdornment position="start"><CalendarToday fontSize="small" color="action"/></InputAdornment>) }}
-                                        sx={ (statsStartDate || statsEndDate) ? activeFieldSx : {} }
-                                    />
-                                    <Popover
-                                        open={Boolean(statsDateAnchorEl)}
-                                        anchorEl={statsDateAnchorEl}
-                                        onClose={() => setStatsDateAnchorEl(null)}
-                                        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-                                    >
-                                        <Box sx={{ p: 2, display: 'flex', gap: 1, alignItems: 'center', minWidth: 360 }}>
-                                            <TextField
-                                                size="small"
-                                                label="Fecha inicio"
-                                                type="date"
-                                                value={statsStartDate}
-                                                onChange={(e) => { setStatsStartDate(e.target.value); setStatsMonth(''); setStatsFiltersDirty(true); }}
-                                                InputLabelProps={{ shrink: true }}
-                                                sx={{ flex: 1 }}
-                                            />
-                                            <TextField
-                                                size="small"
-                                                label="Fecha fin"
-                                                type="date"
-                                                value={statsEndDate}
-                                                onChange={(e) => { setStatsEndDate(e.target.value); setStatsMonth(''); setStatsFiltersDirty(true); }}
-                                                InputLabelProps={{ shrink: true }}
-                                                sx={{ flex: 1 }}
-                                            />
-                                        </Box>
-                                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 1 }}>
-                                            <Button size="small" onClick={() => { setStatsStartDate(''); setStatsEndDate(''); setStatsMonth(''); setStatsFiltersDirty(true); setStatsDateAnchorEl(null); }}>Limpiar</Button>
-                                            <Button size="small" variant="contained" onClick={() => { setStatsDateAnchorEl(null); }} sx={{ ml: 1 }}>Aplicar</Button>
-                                        </Box>
-                                    </Popover>
-                                </Grid>
-
-                                <Grid item xs={12} md={1}>
-                                    <TextField
-                                        size="small"
-                                        select
-                                        fullWidth
-                                        SelectProps={{ native: true }}
-                                        value={statsGroupBy}
-                                        onChange={(e) => {
-                                            const newGroupBy = e.target.value;
-                                            setStatsGroupBy(newGroupBy);
-
-                                            setStatsSelectedKey('');
-                                            setStatsChartStep(0);
-                                            setStatsError(null);
-
-                                            // Auto-recarga solo si ya se cargaron estadísticas antes y
-                                            // NO se han cambiado otros filtros desde la última carga.
-                                            if (statsHasLoadedOnce && !statsFiltersDirty) {
-                                                loadStats(newGroupBy);
-                                            } else {
-                                                // Evita que quede data vieja con una agrupación distinta seleccionada.
-                                                setStatsData(null);
-                                                setStatsLastLoadedGroupBy('');
-                                            }
-                                        }}
-                                        label="Agrupar"
-                                        InputLabelProps={{ shrink: true }}
-                                        sx={statsGroupBy ? { '& .MuiOutlinedInput-root fieldset': { borderColor: 'divider' } } : {}}
-                                    >
-                                        <option value="route">Ruta</option>
-                                        <option value="plate">Placa</option>
-                                    </TextField>
-                                </Grid>
-
-                                {/* Selector de serie diaria se muestra dentro del carrusel, en la vista de "Km por día" */}
-
-                                <Grid item xs={12} md={3}>
-                                    <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', alignItems: 'center' }}>
-                                        <Button
-                                            size="small"
-                                            variant="outlined"
-                                            onClick={() => {
-                                                setStatsData(null);
-                                                setStatsError(null);
-                                                setStatsLoading(false);
-                                                setStatsHasLoadedOnce(false);
-                                                setStatsLastLoadedGroupBy('');
-                                                setStatsFiltersDirty(false);
-                                                setStatsSelectedKey('');
-                                                setStatsChartStep(0);
-                                                setStatsMonth('');
-                                                setStatsStartDate('');
-                                                setStatsEndDate('');
-                                                setStatsRouteNumber('');
-                                                setStatsRouteSelected(null);
-                                                setStatsPlate('');
-                                                setStatsBusSelected(null);
-                                                setStatsBusInput('');
-                                            }}
-                                        >
-                                            Limpiar
-                                        </Button>
-                                        <Button
-                                            size="small"
-                                            variant="contained"
-                                            onClick={() => loadStats()}
-                                        >
-                                            Cargar estadísticas
-                                        </Button>
-                                        {statsData && hasStatsResults && (
-                                            <Button
-                                                size="small"
-                                                variant="contained"
-                                                color="secondary"
-                                                onClick={downloadStatsPdfReport}
-                                                disabled={statsReportLoading || statsLoading || !statsLastLoadedParams}
-                                                startIcon={statsReportLoading ? <CircularProgress size={16} /> : <PictureAsPdf fontSize="small" />}
-                                                sx={{ textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap' }}
-                                            >
-                                                Generar PDF
-                                            </Button>
-                                        )}
-                                    </Box>
-                                </Grid>
-
-
-                            </Grid>
-                        </Paper>
+                        {statsData && hasStatsResults && (
+                            <Box sx={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
+                                <Button
+                                    size="small"
+                                    variant="contained"
+                                    color="secondary"
+                                    onClick={downloadStatsPdfReport}
+                                    disabled={statsReportLoading || statsLoading || !statsLastLoadedParams}
+                                    startIcon={statsReportLoading ? <CircularProgress size={16} /> : <PictureAsPdf fontSize="small" />}
+                                    sx={{ textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap' }}
+                                >
+                                    Generar PDF
+                                </Button>
+                            </Box>
+                        )}
+                        <FilterBar {...statsFilters.barProps} loading={statsLoading} />
                     </Grid>
-
                     <Grid item xs={12}>
                         {statsError && <Alert severity="error">{statsError}</Alert>}
-                        {!statsData && !statsLoading && !statsError && <Typography variant="body2" color="textSecondary">Seleccione un cliente y rango, luego presione "Cargar estadísticas".</Typography>}
+                        {!statsData && !statsLoading && !statsError && statsFilters.draft.client && <Typography variant="body2" color="textSecondary">Presione "Aplicar filtros" para cargar las estadísticas.</Typography>}
                         {statsData && (
                             <Box sx={{ mt: 2 }}>
                                 <Paper variant="outlined" sx={{ borderRadius: 2, borderColor: 'divider', backgroundColor: 'background.default', position: 'relative' }}>
@@ -1934,205 +1232,17 @@ const RouteHistoryPage = () => {
 
             {/* Historial: transferido desde RouteHistoryModal */}
             <Paper elevation={1} sx={{ p: 2, borderRadius: 2 }}>
+                <FilterBar
+                    {...historyFilters.barProps}
+                    loading={loading}
+                    caption={historyAppliedCycle && historyAppliedCycle !== ALL_CYCLES_VALUE
+                        ? 'Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.'
+                        : undefined}
+                />
+                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                    {total} recorridos: {clientBreakdown.colegios} de colegios · {clientBreakdown.corporativos} corporativos
+                </Typography>
                 <Grid container spacing={2} alignItems="center">
-                    <Grid item xs={12} md={2}>
-                        <CicloEscolarFilter
-                            value={selectedCicloEscolar}
-                            onChange={(value) => {
-                                setSelectedCicloEscolar(value);
-                                setSelectedClient(null);
-                                setStatsSelectedClient(null);
-                                setRouteNumber('');
-                                setRouteSelected(null);
-                                setStatsFiltersDirty(true);
-                                setPage(1);
-                            }}
-                        />
-                    </Grid>
-                            <Grid item xs={12} md={3}>
-                        <Autocomplete
-                            size="small"
-                            options={clients}
-                            groupBy={(option) => option.group || ''}
-                                        renderGroup={renderClientGroup}
-                            getOptionLabel={(opt) => opt ? (opt.name || opt.nombre || opt.label || String(opt.id || opt.value || opt._id)) : ''}
-                            value={selectedClient}
-                            onChange={(e, newVal) => { setSelectedClient(newVal); setClientTouched(true); }}
-                            isOptionEqualToValue={(option, value) => {
-                                if (!value) {
-                                    return false;
-                                }
-                                return String(option.id) === String(value.id) && option.type === value.type;
-                            }}
-                            renderInput={(params) => (
-                                <TextField {...params} label="Cliente (Todos/Colegios/Corporaciones)" variant="outlined" InputProps={{ ...params.InputProps, startAdornment: (<InputAdornment position="start"><SchoolIcon fontSize="small" color="action"/></InputAdornment>) }} sx={ clientTouched ? { backgroundColor: 'rgba(25,118,210,0.04)', borderRadius: 1, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'primary.main', borderWidth: 1 }, '&:hover fieldset': { borderColor: 'primary.dark' } }, boxShadow: '0 0 0 3px rgba(25,118,210,0.06)' } : {} } />
-                            )}
-                            renderOption={(props, option) => (
-                                <li {...props} key={`${option.type}-${option.id || option.value || option._id}`}>
-                                    {option.name || option.nombre || option.label}
-                                </li>
-                            )}
-                                autoHighlight
-                                selectOnFocus
-                                clearOnEscape
-                        />
-                    </Grid>
-
-                        <Grid item xs={12} md={1}>
-                        <TextField size="small" variant="outlined" label="Estado" select fullWidth InputLabelProps={{ shrink: true }} SelectProps={{ native: true }} value={statusFilter} onChange={(e)=>setStatusFilter(e.target.value)} sx={ statusFilter ? { backgroundColor: 'rgba(25,118,210,0.04)', borderRadius: 1, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'primary.main', borderWidth: 1 }, '&:hover fieldset': { borderColor: 'primary.dark' } }, boxShadow: '0 0 0 3px rgba(25,118,210,0.06)' } : {} }>
-                            <option value="">Todos</option>
-                            <option value="inprogress">En progreso</option>
-                            <option value="completed">Completado</option>
-                        </TextField>
-                    </Grid>
-
-                        <Grid item xs={12} md={2}>
-                        <TextField
-                            size="small"
-                            variant="outlined"
-                            label="Rango de fechas"
-                            fullWidth
-                            value={startDate && endDate ? `${startDate} — ${endDate}` : (startDate ? `${startDate} —` : (endDate ? `— ${endDate}` : ''))}
-                            onClick={(e) => setDateAnchorEl(e.currentTarget)}
-                            InputProps={{ readOnly: true, startAdornment: (<InputAdornment position="start"><CalendarToday fontSize="small" color="action"/></InputAdornment>) }}
-                            sx={ (startDate || endDate) ? { backgroundColor: 'rgba(25,118,210,0.04)', borderRadius: 1, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'primary.main', borderWidth: 1 }, '&:hover fieldset': { borderColor: 'primary.dark' } }, boxShadow: '0 0 0 3px rgba(25,118,210,0.06)' } : {} }
-                        />
-                        <Popover
-                            open={Boolean(dateAnchorEl)}
-                            anchorEl={dateAnchorEl}
-                            onClose={() => setDateAnchorEl(null)}
-                            anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-                        >
-                            <Box sx={{ p: 2, display: 'flex', gap: 1, alignItems: 'center', minWidth: 360 }}>
-                                <TextField
-                                    size="small"
-                                    label="Fecha inicio"
-                                    type="date"
-                                    value={startDate}
-                                    onChange={(e) => setStartDate(e.target.value)}
-                                    InputLabelProps={{ shrink: true }}
-                                    sx={{ flex: 1 }}
-                                />
-                                <TextField
-                                    size="small"
-                                    label="Fecha fin"
-                                    type="date"
-                                    value={endDate}
-                                    onChange={(e) => setEndDate(e.target.value)}
-                                    InputLabelProps={{ shrink: true }}
-                                    sx={{ flex: 1 }}
-                                />
-                            </Box>
-                            <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 1 }}>
-                                <Button size="small" onClick={() => { setStartDate(''); setEndDate(''); setDateAnchorEl(null); setPage(1); }}>Limpiar</Button>
-                                <Button size="small" variant="contained" onClick={() => { setDateAnchorEl(null); setPage(1); }} sx={{ ml: 1 }}>Aplicar</Button>
-                            </Box>
-                        </Popover>
-                    </Grid>
-
-                    <Grid item xs={12} md={1}>
-                        <FormControlLabel
-                            control={<Checkbox checked={onlyFailures} onChange={(e)=>setOnlyFailures(e.target.checked)} />}
-                            label="Solo fallas"
-                            sx={{ '& .MuiFormControlLabel-label': { whiteSpace: 'nowrap' } }}
-                        />
-                    </Grid>
-
-                    <Grid item xs={12} md={12}>
-                        <Box sx={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:2 }}>
-                            <Box>
-                                <Button size="small" startIcon={<ExpandMoreIcon sx={{ transform: showAdvanced ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 200ms' }} />} onClick={()=>setShowAdvanced(s=>!s)}>MÁS FILTROS</Button>
-                            </Box>
-                            <Box sx={{ display:'flex', gap:1 }}>
-                                        <Button size="small" variant="outlined" color="inherit" startIcon={<ClearIcon />} onClick={() => { setStartDate(''); setEndDate(''); setPilotoFilter(''); setBusFilter(''); setPilotSelected(null); setBusSelected(null); setRouteNumber(''); setRouteSelected(null); /* preserve selectedClient for comparison */ setOnlyFailures(false); setStatusFilter(''); setStartHour(''); setEndHour(''); setPage(1); }}>LIMPIAR</Button>
-                                <Button size="small" variant="contained" color="primary" startIcon={<SearchIcon />} onClick={() => { setPage(1); fetchRouteHistory({ startDate: startDate||undefined, endDate: endDate||undefined, pilotoId: pilotSelected?.id||undefined, busPlaca: busSelected?.id||undefined, onlyFailures: onlyFailures?'1':undefined, status: statusFilter||undefined, startHour: startHour||undefined, endHour: endHour||undefined, page: 1 }); }}>APLICAR FILTROS</Button>
-                            </Box>
-                        </Box>
-                    </Grid>
-
-                            
-                    
-
-                    <Grid item xs={12}>
-                        <Collapse in={showAdvanced} timeout="auto" unmountOnExit>
-                            <Grid container spacing={2} alignItems="center" sx={{ mt: 1 }}>
-                                <Grid item xs={12} sm={6} md={1.5}>
-                                    <Autocomplete
-                                        size="small"
-                                        options={availablePilots}
-                                        getOptionLabel={(opt) => opt ? (opt.name || '') : ''}
-                                        value={pilotSelected}
-                                        inputValue={pilotInput}
-                                        onInputChange={(e, v) => setPilotInput(v)}
-                                        onOpen={() => setPilotOpen(true)}
-                                        onClose={() => setPilotOpen(false)}
-                                        onChange={(e, newVal) => { setPilotSelected(newVal); setPilotoFilter(newVal ? newVal.name : ''); }}
-                                        loading={loadingPilots}
-                                        renderInput={(params) => (
-                                            <TextField {...params} label="Piloto" placeholder="Nombre piloto" fullWidth InputProps={{ ...params.InputProps, startAdornment:(<InputAdornment position="start"><Person fontSize="small" color="action"/></InputAdornment>), endAdornment: (loadingPilots ? <CircularProgress color="inherit" size={16} /> : params.InputProps.endAdornment) }} sx={ pilotoFilter ? { backgroundColor: 'rgba(25,118,210,0.04)', borderRadius: 1, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'primary.main', borderWidth: 1 }, '&:hover fieldset': { borderColor: 'primary.dark' } }, boxShadow: '0 0 0 3px rgba(25,118,210,0.06)' } : {} } />
-                                        )}
-                                        clearOnEscape
-                                        autoHighlight
-                                        selectOnFocus
-                                        openOnFocus
-                                        noOptionsText={selectedClient ? (pilotInput.trim().length < 2 ? 'Abre el filtro o escribe para buscar' : 'Sin coincidencias') : 'Seleccione un cliente primero'}
-                                    />
-                                </Grid>
-                                        <Grid item xs={12} sm={6} md={0.8}>
-                                    <Autocomplete
-                                        size="small"
-                                        options={availableRoutesList}
-                                        getOptionLabel={(opt) => opt ? (opt.number || String(opt)) : ''}
-                                        value={routeSelected}
-                                        onChange={(e, newVal) => { setRouteSelected(newVal); setRouteNumber(newVal ? (newVal.number || String(newVal)) : ''); }}
-                                        loading={loadingRoutes}
-                                        disabled={!selectedClient || selectedClient.type === 'all'}
-                                        renderInput={(params) => (
-                                            <TextField {...params} label="Número de ruta" placeholder="Número de ruta" fullWidth InputProps={{ ...params.InputProps, startAdornment: (<InputAdornment position="start"><Box component="span" sx={{ color: 'text.secondary', fontWeight: 600 }}>#</Box></InputAdornment>), endAdornment: (loadingRoutes ? <CircularProgress color="inherit" size={16} /> : params.InputProps.endAdornment) }} sx={ routeNumber ? { backgroundColor: 'rgba(25,118,210,0.04)', borderRadius: 1, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'primary.main', borderWidth: 1 }, '&:hover fieldset': { borderColor: 'primary.dark' } }, boxShadow: '0 0 0 3px rgba(25,118,210,0.06)' } : {} } />
-                                        )}
-                                        clearOnEscape
-                                        autoHighlight
-                                        selectOnFocus
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6} md={1.3}>
-                                    <Autocomplete
-                                        size="small"
-                                        options={availableBuses}
-                                        getOptionLabel={(opt) => opt ? (opt.placa || '') : ''}
-                                        value={busSelected}
-                                        inputValue={busInput}
-                                        onInputChange={(e, v) => setBusInput(v)}
-                                        onOpen={() => setBusOpen(true)}
-                                        onClose={() => setBusOpen(false)}
-                                        onChange={(e, newVal) => { setBusSelected(newVal); setBusFilter(newVal ? newVal.placa : ''); }}
-                                        loading={loadingBuses}
-                                        renderInput={(params) => (
-                                            <TextField {...params} label="Bus (Placa)" placeholder="Placa" fullWidth InputProps={{ ...params.InputProps, startAdornment:(<InputAdornment position="start"><DirectionsBus fontSize="small" color="action"/></InputAdornment>), endAdornment: (loadingBuses ? <CircularProgress color="inherit" size={16} /> : params.InputProps.endAdornment) }} sx={ busFilter ? { backgroundColor: 'rgba(25,118,210,0.04)', borderRadius: 1, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'primary.main', borderWidth: 1 }, '&:hover fieldset': { borderColor: 'primary.dark' } }, boxShadow: '0 0 0 3px rgba(25,118,210,0.06)' } : {} } />
-                                        )}
-                                        clearOnEscape
-                                        autoHighlight
-                                        selectOnFocus
-                                        openOnFocus
-                                        noOptionsText={selectedClient ? (busInput.trim().length < 2 ? 'Abre el filtro o escribe para buscar' : 'Sin coincidencias') : 'Seleccione un cliente primero'}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6} md={1}>
-                                    <TextField size="small" label="Hora inicio" type="time" fullWidth InputLabelProps={{ shrink:true }} value={startHour} onChange={(e)=>setStartHour(e.target.value)} sx={ startHour ? { backgroundColor: 'rgba(25,118,210,0.04)', borderRadius: 1, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'primary.main', borderWidth: 1 }, '&:hover fieldset': { borderColor: 'primary.dark' } }, boxShadow: '0 0 0 3px rgba(25,118,210,0.06)' } : {} } />
-                                </Grid>
-                                <Grid item xs={12} sm={6} md={1}>
-                                    <TextField size="small" label="Hora fin" type="time" fullWidth InputLabelProps={{ shrink:true }} value={endHour} onChange={(e)=>setEndHour(e.target.value)} sx={ endHour ? { backgroundColor: 'rgba(25,118,210,0.04)', borderRadius: 1, '& .MuiOutlinedInput-root': { '& fieldset': { borderColor: 'primary.main', borderWidth: 1 }, '&:hover fieldset': { borderColor: 'primary.dark' } }, boxShadow: '0 0 0 3px rgba(25,118,210,0.06)' } : {} } />
-                                </Grid>
-                            </Grid>
-                        </Collapse>
-                    </Grid>
-
-                    <Grid item xs={12}>
-                        <Typography variant="body2" color="textSecondary">
-                            {total} recorridos: {clientBreakdown.colegios} de colegios · {clientBreakdown.corporativos} corporativos
-                            {selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE ? ' — Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.' : ''}
-                        </Typography>
-                    </Grid>
 
                     <Grid item xs={12}>
                         {/* Content area */}
@@ -2274,7 +1384,7 @@ const RouteHistoryPage = () => {
                         <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'nowrap' }}>
                             <Box sx={{ width: 56 }} />
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflowX: 'auto' }}>
-                                <Pagination count={Math.max(1, Math.ceil((total || 0) / pageSize))} page={page} onChange={(e, p) => { setPage(p); fetchRouteHistory({ startDate: startDate || undefined, endDate: endDate || undefined, pilotoId: pilotSelected?.id || undefined, busPlaca: busSelected?.id || undefined, onlyFailures: onlyFailures ? '1' : undefined, status: statusFilter || undefined, startHour: startHour || undefined, endHour: endHour || undefined, page: p }); }} color="primary" />
+                                <Pagination count={Math.max(1, Math.ceil((total || 0) / pageSize))} page={page} onChange={(e, p) => setPage(p)} color="primary" />
                             </Box>
                         </Box>
                     </Grid>

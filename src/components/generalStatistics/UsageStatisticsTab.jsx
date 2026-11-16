@@ -33,7 +33,10 @@ import useRegisterPageRefresh from '../../hooks/useRegisterPageRefresh';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import moment from 'moment-timezone';
-import CicloEscolarFilter, { getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../CicloEscolarFilter';
+import { getCicloEscolarFilterParams } from '../../utils/cicloEscolarFilterParams';
+import FilterBar from '../filters/FilterBar';
+import useFilters from '../../hooks/useFilters';
+import { F } from '../filters/filterFields';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -133,7 +136,8 @@ const UsageStatisticsTab = () => {
     // Controles TOP-N
     const [distanceTopN, setDistanceTopN] = useState(isMobile ? 10 : 15);
     const [schoolsTopN, setSchoolsTopN] = useState(isMobile ? 8 : 12);
-    const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
+    const pageFilters = useFilters({ urlPrefix: 'use_', fields: [F.cycle()] });
+    const { cycle: selectedCicloEscolar } = pageFilters.applied;
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -275,17 +279,12 @@ const UsageStatisticsTab = () => {
 
     return (
         <>
+            <FilterBar {...pageFilters.barProps} loading={loading} />
+
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }}>
                 <Button variant="contained" color="primary" onClick={generatePDF}>
                     Generar PDF
                 </Button>
-
-                <CicloEscolarFilter
-                    value={selectedCicloEscolar}
-                    onChange={setSelectedCicloEscolar}
-                    size="small"
-                    sx={{ minWidth: 220 }}
-                />
 
                 <TopNSelect
                     label="Top pilotos"

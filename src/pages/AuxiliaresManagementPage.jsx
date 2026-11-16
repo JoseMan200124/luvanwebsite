@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useContext } from 'react';
 import {
     Typography,
-    TextField,
     Paper,
     CircularProgress,
     Table,
@@ -23,6 +22,10 @@ import {
     InputLabel,
     Select
 } from '@mui/material';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F } from '../components/filters/filterFields';
+import { matchSearchTokens } from '../utils/clientFilter';
 import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
 import styled from 'styled-components';
 import tw from 'twin.macro';
@@ -101,9 +104,13 @@ const AuxiliaresManagementPage = () => {
     const [loading, setLoading] = useState(false);
 
     // Para búsqueda y paginación
-    const [searchQuery, setSearchQuery] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(5);
+    const pageFilters = useFilters({
+        fields: [F.search('search', { placeholder: 'Nombre o correo' })],
+        onApplied: () => setPage(0),
+    });
+    const { search: searchQuery } = pageFilters.applied;
 
     const [expanded, setExpanded] = useState(false);
     const [monitoraPages, setMonitoraPages] = useState({});
@@ -135,13 +142,7 @@ const AuxiliaresManagementPage = () => {
         }, [fetchAuxiliares]);
 
     // Filtrar auxiliares
-    const filteredAuxiliares = auxiliares.filter((a) => {
-        const search = searchQuery.toLowerCase();
-        return (
-            (a.name || '').toLowerCase().includes(search) ||
-            (a.email || '').toLowerCase().includes(search)
-        );
-    });
+    const filteredAuxiliares = auxiliares.filter((a) => matchSearchTokens(searchQuery, [a.name, a.email]));
 
     // Paginación
     const handleChangePage = (event, newPage) => {
@@ -183,23 +184,7 @@ const AuxiliaresManagementPage = () => {
                 Gestión de Auxiliares
             </Typography>
 
-            <div
-                style={{
-                    marginBottom: '1rem',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px'
-                }}
-            >
-                <TextField
-                    label="Buscar Auxiliares"
-                    variant="outlined"
-                    size="small"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    style={{ width: isMobile ? '100%' : '33%' }}
-                />
-            </div>
+            <FilterBar {...pageFilters.barProps} loading={loading} />
 
             {loading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}>

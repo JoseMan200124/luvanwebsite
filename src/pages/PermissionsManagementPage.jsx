@@ -18,8 +18,6 @@ import {
     AccordionDetails,
     Chip,
     Grid,
-    TextField,
-    InputAdornment,
     Checkbox,
     Tooltip,
     Dialog,
@@ -35,8 +33,6 @@ import {
 import {
     ExpandMore as ExpandMoreIcon,
     Save as SaveIcon,
-    Search as SearchIcon,
-    Clear as ClearIcon,
     PhoneIphone as PhoneIphoneIcon,
     WarningAmber as WarningAmberIcon,
 } from '@mui/icons-material';
@@ -46,6 +42,9 @@ import api from '../utils/axiosConfig';
 import usePermissions from '../hooks/usePermissions';
 import useManageableRoles from '../hooks/useManageableRoles';
 import CatalogOrganizer from '../components/CatalogOrganizer';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F } from '../components/filters/filterFields';
 
 const PageContainer = tw.div`p-8 bg-gray-50 min-h-screen`;
 
@@ -237,8 +236,10 @@ const PermissionsManagementPage = () => {
     const [catalog, setCatalog] = useState([]);
     const [permissions, setPermissions] = useState({});
     const [originalPermissions, setOriginalPermissions] = useState({});
-    const [busquedaInput, setBusquedaInput] = useState('');
-    const [busqueda, setBusqueda] = useState('');
+    const pageFilters = useFilters({
+        fields: [F.search('search', { placeholder: 'Permiso o grupo' })],
+    });
+    const { search: busqueda } = pageFilters.applied;
     const [expandidos, setExpandidos] = useState({});
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -395,16 +396,6 @@ const PermissionsManagementPage = () => {
 
     const alternarExpandido = useCallback((key) => {
         setExpandidos((prev) => ({ ...prev, [key]: !prev[key] }));
-    }, []);
-
-    /** La búsqueda se aplica solo al pulsar Buscar o Enter, no al escribir. */
-    const ejecutarBusqueda = useCallback(() => {
-        setBusqueda(busquedaInput.trim());
-    }, [busquedaInput]);
-
-    const limpiarBusqueda = useCallback(() => {
-        setBusquedaInput('');
-        setBusqueda('');
     }, []);
 
     const aplicarAGrupo = useCallback((grupo, modo) => {
@@ -581,56 +572,11 @@ const PermissionsManagementPage = () => {
                                             </Alert>
                                         )}
                                     </Grid>
-                                    <Grid item xs={12} md={7}>
-                                        <Box sx={{ display: 'flex', gap: 1 }}>
-                                            <TextField
-                                                fullWidth
-                                                placeholder="Buscar un permiso por lo que hace..."
-                                                value={busquedaInput}
-                                                onChange={(e) => setBusquedaInput(e.target.value)}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                        ejecutarBusqueda();
-                                                    }
-                                                }}
-                                                disabled={!selectedRoleId}
-                                                InputProps={{
-                                                    startAdornment: (
-                                                        <InputAdornment position="start">
-                                                            <SearchIcon />
-                                                        </InputAdornment>
-                                                    ),
-                                                    endAdornment: (busquedaInput || busqueda) && (
-                                                        <InputAdornment position="end">
-                                                            <Tooltip title="Limpiar búsqueda">
-                                                                <Button
-                                                                    size="small"
-                                                                    onClick={limpiarBusqueda}
-                                                                    sx={{ minWidth: 0 }}
-                                                                >
-                                                                    <ClearIcon fontSize="small" />
-                                                                </Button>
-                                                            </Tooltip>
-                                                        </InputAdornment>
-                                                    ),
-                                                }}
-                                            />
-                                            <Button
-                                                variant="contained"
-                                                onClick={ejecutarBusqueda}
-                                                disabled={
-                                                    !selectedRoleId ||
-                                                    busquedaInput.trim() === busqueda
-                                                }
-                                                sx={{ px: 3, flexShrink: 0 }}
-                                            >
-                                                Buscar
-                                            </Button>
-                                        </Box>
-                                    </Grid>
                                 </Grid>
                             </CardContent>
                         </Card>
+
+                        <FilterBar {...pageFilters.barProps} disabled={!selectedRoleId} />
 
                         {isLoading && (
                             <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>

@@ -3,7 +3,6 @@
 import React, { useEffect, useState, useContext } from 'react';
 import {
     Typography,
-    TextField,
     Paper,
     Table,
     TableBody,
@@ -25,6 +24,10 @@ import {
     Box,
     TableSortLabel
 } from '@mui/material';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F } from '../components/filters/filterFields';
+import { matchSearchTokens } from '../utils/clientFilter';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 import { Visibility as VisibilityIcon } from '@mui/icons-material';
@@ -147,9 +150,13 @@ const MonitorsManagementPage = () => {
     const [loading, setLoading] = useState(false);
 
     // Para búsqueda y paginación
-    const [searchQuery, setSearchQuery] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
+    const pageFilters = useFilters({
+        fields: [F.search('search', { placeholder: 'Nombre o correo' })],
+        onApplied: () => setPage(0),
+    });
+    const { search: searchQuery } = pageFilters.applied;
 
     // Estados para ordenamiento (agregados)
     const [order, setOrder] = useState('asc');
@@ -194,13 +201,7 @@ const MonitorsManagementPage = () => {
     }, [fetchMonitors]);
 
     // Filtrado por texto
-    const filteredMonitors = monitors.filter((m) => {
-        const search = searchQuery.toLowerCase();
-        return (
-            (m.name || '').toLowerCase().includes(search) ||
-            (m.email || '').toLowerCase().includes(search)
-        );
-    });
+    const filteredMonitors = monitors.filter((m) => matchSearchTokens(searchQuery, [m.name, m.email]));
 
     // Manejo de paginación
     const handleChangePage = (event, newPage) => {
@@ -242,16 +243,7 @@ const MonitorsManagementPage = () => {
             </Typography>
 
             {/* Búsqueda */}
-            <div style={{ marginBottom: 16, display: 'flex', flexWrap: 'wrap' }}>
-                <TextField
-                    label="Buscar Monitores"
-                    variant="outlined"
-                    size="small"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    style={{ width: isMobile ? '100%' : '33%' }}
-                />
-            </div>
+            <FilterBar {...pageFilters.barProps} loading={loading} />
 
             {loading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}>

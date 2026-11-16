@@ -1,5 +1,5 @@
 // Dashboard.jsx
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import tw from 'twin.macro';
 import styled from 'styled-components';
 import { Button, CircularProgress, Snackbar, Alert } from '@mui/material';
@@ -9,8 +9,14 @@ import html2canvas from 'html2canvas';
 import StatsCard from '../components/dashboard/StatsCard';
 import IncidentsPerPilotChart from '../components/dashboard/IncidentsPerPilotChart';
 import TotalRoutesCompletedChart from '../components/dashboard/TotalRoutesCompletedChart';
-import Filters from '../components/dashboard/Filters';
 import api from '../utils/axiosConfig';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F } from '../components/filters/filterFields';
+import { getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
+
+const MONTH_OPTIONS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+    .map((month) => ({ value: month, label: month }));
 
 // Contenedor principal del dashboard
 const DashboardContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
@@ -30,13 +36,39 @@ const StatsGrid = tw.div`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb
 const ChartsGrid = tw.div`grid grid-cols-1 lg:grid-cols-2 gap-6`;
 
 const Dashboard = () => {
-    // Estado de filtros
-    const [filters, setFilters] = useState({
-        colegio: '',
-        mes: '',
-        fechaInicio: '',
-        fechaFin: ''
+    // Colegios del filtro. Los reportes filtran por el NOMBRE del colegio, por eso el valor es el nombre.
+    const [schools, setSchools] = useState([]);
+
+    const schoolNames = [...new Set(schools.map((school) => school.name).filter(Boolean))];
+    const pageFilters = useFilters({
+        fields: [
+            F.cycle(),
+            F.select('colegio', {
+                label: 'Colegio',
+                dependsOn: 'cycle',
+                requireParent: false,
+                options: schoolNames.map((name) => ({ value: name, label: name })),
+            }),
+            F.select('mes', { label: 'Mes', width: 'sm', options: MONTH_OPTIONS }),
+            F.dateRange('dates'),
+        ],
     });
+    const { cycle, colegio, mes, dates } = pageFilters.applied;
+    const draftCycle = pageFilters.draft.cycle;
+
+    useEffect(() => {
+        const fetchSchools = async () => {
+            try {
+                const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true } });
+                setSchools(response.data.schools || []);
+            } catch (err) {
+                console.error('Error fetching schools:', err);
+                setSchools([]);
+            }
+        };
+
+        fetchSchools();
+    }, [draftCycle]);
 
     // Estados para guardar los datos de cada indicador
     const [totalRoutesCompleted, setTotalRoutesCompleted] = useState(0);
@@ -49,32 +81,26 @@ const Dashboard = () => {
     // Referencia para generar PDF
     const reportRef = useRef();
 
-    // Construye el query string según los filtros aplicados
-    const buildQueryString = () => {
-        const queryParams = new URLSearchParams();
-        if (filters.colegio) {
-            queryParams.append('colegio', filters.colegio);
-        }
-        if (filters.mes) {
-            queryParams.append('mes', filters.mes);
-        }
-        if (filters.fechaInicio) {
-            queryParams.append('fechaInicio', filters.fechaInicio);
-        }
-        if (filters.fechaFin) {
-            queryParams.append('fechaFin', filters.fechaFin);
-        }
-
-        return queryParams.toString() ? `?${queryParams.toString()}` : '';
-    };
-
-    // Función para llamar a la API y obtener los datos
-    const fetchData = async () => {
+    // Función para llamar a la API con los filtros aplicados
+    const fetchData = useCallback(async () => {
         setLoading(true);
         setError(null);
 
         try {
-            const qs = buildQueryString();
+            const queryParams = new URLSearchParams(getCicloEscolarFilterParams(cycle));
+            if (colegio) {
+                queryParams.append('colegio', colegio);
+            }
+            if (mes) {
+                queryParams.append('mes', mes);
+            }
+            if (dates.from) {
+                queryParams.append('fechaInicio', dates.from);
+            }
+            if (dates.to) {
+                queryParams.append('fechaFin', dates.to);
+            }
+            const qs = queryParams.toString() ? `?${queryParams.toString()}` : '';
             const [
                 totalRoutesRes,
                 incidentsRes
@@ -104,12 +130,12 @@ const Dashboard = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [cycle, colegio, mes, dates.from, dates.to]);
 
-    // Carga inicial
+    // Carga inicial y cada vez que se aplican o limpian los filtros
     useEffect(() => {
         fetchData();
-    }, []);
+    }, [fetchData]);
 
     // Función para generar PDF del reporte
     const generatePDF = () => {
@@ -130,19 +156,6 @@ const Dashboard = () => {
         });
     };
 
-    // Función para resetear los filtros y recargar los datos
-    const handleResetFilters = () => {
-        setFilters({
-            colegio: '',
-            mes: '',
-            fechaInicio: '',
-            fechaFin: ''
-        });
-        setTimeout(() => {
-            fetchData();
-        }, 0);
-    };
-
     return (
         <DashboardContainer>
             {/* Encabezado */}
@@ -156,17 +169,7 @@ const Dashboard = () => {
             </Header>
 
             {/* Filtros */}
-            <Filters filters={filters} setFilters={setFilters} />
-
-            {/* Botones de Filtrar y Resetear */}
-            <div tw="mb-4 flex space-x-3">
-                <Button variant="contained" color="primary" onClick={fetchData}>
-                    Filtrar
-                </Button>
-                <Button variant="outlined" color="secondary" onClick={handleResetFilters}>
-                    Resetear
-                </Button>
-            </div>
+            <FilterBar {...pageFilters.barProps} loading={loading} />
 
             {/* Se muestra spinner mientras se cargan los datos; en caso contrario, se renderiza el contenido del dashboard */}
             {loading ? (

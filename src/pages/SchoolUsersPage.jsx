@@ -15,6 +15,7 @@ import {
     Alert,
     Grid,
     Chip,
+    Tooltip,
     Table,
     TableBody,
     TableCell,
@@ -27,7 +28,6 @@ import {
     Select,
     MenuItem,
     TablePagination,
-    InputAdornment,
     TableSortLabel,
     TextField,
     IconButton,
@@ -42,8 +42,6 @@ import {
     School as SchoolIcon, 
     CalendarToday,
     ArrowBack,
-    Search,
-    FilterList,
     Email,
     Edit,
     Delete,
@@ -66,15 +64,25 @@ import useManageableRoles from '../hooks/useManageableRoles';
 import styled from 'styled-components';
 import { normalizeKey } from '../utils/stringHelpers';
 import BulkFamilyDraftsReview, { BulkPendingSteps, getDraftIssues, getDuplicateRowsByEmail, getExistingChanges, hasNothingToUpdate } from '../components/BulkFamilyDraftsReview';
-import { getServerPairing, pruneStalePairing } from '../utils/bulkStudentPairing';
+import { getServerPairing, pruneStalePairing, normalizeStudentText } from '../utils/bulkStudentPairing';
 import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
 import tw from 'twin.macro';
 import StudentScheduleModal from '../components/modals/StudentScheduleModal';
 import BulkStopsEditor from '../components/paradas/BulkStopsEditor';
 import RetroactiveApplyModal from '../components/modals/RetroactiveApplyModal';
 import UserServiceStatusModal from '../components/UserServiceStatusModal';
+import InactiveStudentsList from '../components/InactiveStudentsList';
+import RemoveStudentDialog from '../components/RemoveStudentDialog';
+import { cambiarServicioAlumno } from '../services/studentServiceApi';
 import { getScheduleCodesFromSchool, resolveScheduleCodeFromSlot, slotHasScheduleData } from '../utils/scheduleConfig';
 import { getCicloEscolarYear } from '../services/cicloEscolarService';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F } from '../components/filters/filterFields';
+import { matchSearchTokens } from '../utils/clientFilter';
+
+const FAMILY_STATUS_OPTIONS = ['Nuevo', 'Duplicado', 'Actualizado', 'Sin asignaciones']
+    .map((status) => ({ value: status, label: status }));
 
 // Opciones de roles disponibles en esta vista: Padre solamente
 const roleOptions = [
@@ -88,6 +96,7 @@ const DOWNLOAD_FAMILY_OPTIONS = [
     { value: 'ACTIVE', label: 'Activas' },
     { value: 'PAUSED', label: 'Pausadas' },
     { value: 'SUSPENDED', label: 'Suspendidas' },
+    { value: 'PENDING_START', label: 'Pendientes de inicio' },
     { value: 'INACTIVE', label: 'Inactivas' }
 ];
 const DOWNLOAD_FAMILY_OPTION_LABELS = DOWNLOAD_FAMILY_OPTIONS.reduce((acc, o) => { acc[o.value] = o.label; return acc; }, {});
@@ -140,16 +149,21 @@ const SchoolUsersPage = () => {
     // Sorting state
     const [sortBy, setSortBy] = useState(null); // 'status' | 'updatedAt' | 'familyLastName' | 'name' | 'email' | 'role' | 'students'
     const [sortOrder, setSortOrder] = useState('asc');
-    const [searchInput, setSearchInput] = useState('');
-    const [searchQuery, setSearchQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState('');
-    const [serviceStatusFilter, setServiceStatusFilter] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [selectedUser, setSelectedUser] = useState(null);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-    const prevFilterKeyRef = useRef('');
+    // Filtros (en el navegador): solo se aplican con "Aplicar filtros", Enter o "Limpiar filtros".
+    const pageFilters = useFilters({
+        fields: [
+            F.search('search', { placeholder: 'Nombre, apellido o email' }),
+            F.select('status', { label: 'Estado', options: FAMILY_STATUS_OPTIONS }),
+            F.serviceStatus(),
+        ],
+        onApplied: () => setPage(0),
+    });
+    const { search: searchQuery, status: statusFilter, serviceStatus: serviceStatusFilter } = pageFilters.applied;
 
     // Nuevos estados para funcionalidades
     
@@ -210,6 +224,9 @@ const SchoolUsersPage = () => {
         emergencyRelationship: '',
         emergencyPhone: '',
         students: [],
+        inactiveStudents: [],
+        deleteStudentIds: [],
+        notasSalida: {},
         scheduleSlots: [],
         specialFee: 0
     });
@@ -217,6 +234,9 @@ const SchoolUsersPage = () => {
     const [routeTypeDraft, setRouteTypeDraft] = useState('');
     const [isRouteTypeSelectOpen, setIsRouteTypeSelectOpen] = useState(false);
     const [originalStudents, setOriginalStudents] = useState([]);
+    // Quitar un alumno guardado (desactivar / eliminar) y reactivar uno inactivo desde la edición de familia.
+    const [removeTarget, setRemoveTarget] = useState(null); // { index, student }
+    const [reactivatingId, setReactivatingId] = useState(null);
     const [newStudent, setNewStudent] = useState({ fullName: '', grade: '' });
 
     // Estados para Supervisor y Auxiliar
@@ -244,6 +264,7 @@ const SchoolUsersPage = () => {
             case 'ACTIVE': return 'Activo';
             case 'PAUSED': return 'Pausado';
             case 'SUSPENDED': return 'Suspendido';
+            case 'PENDING_START': return 'Pendiente de inicio';
             case 'INACTIVE': return 'Inactivo';
             default: return '';
         }
@@ -818,6 +839,66 @@ const SchoolUsersPage = () => {
         setNewStudent({ fullName: '', grade: '' });
     };
 
+    // ---------- Alumnos inactivos (desactivados por el colegio) en la edición de familia ----------
+    // Desactivar, eliminar o reactivar exige alumnos-cambiar-estado (el servidor lo vuelve a verificar al guardar).
+    const canChangeStudentState = hasPermission('alumnos-cambiar-estado');
+
+    // Fila nueva (sin id) cuyo nombre coincide con un inactivo y el usuario aún no decidió si es el mismo alumno.
+    const inactiveMatchFor = (student) => {
+        if (!student || student.id || student.decisionInactivo === 'nuevo' || !String(student.fullName || '').trim()) {
+            return null;
+        }
+        return (familyDetail.inactiveStudents || []).find(s => normalizeStudentText(s.fullName) === normalizeStudentText(student.fullName)) || null;
+    };
+
+    // "Reactivar a X": la fila nueva pasa a ser el inactivo (mismo id); el servidor lo reactiva al guardar.
+    const reactivarCoincidencia = (index) => {
+        setFamilyDetail(prev => {
+            const copy = [...prev.students];
+            const match = (prev.inactiveStudents || []).find(s => normalizeStudentText(s.fullName) === normalizeStudentText(copy[index]?.fullName));
+            if (!match) {
+                return prev;
+            }
+            copy[index] = { ...copy[index], id: match.id };
+            return { ...prev, students: copy, inactiveStudents: prev.inactiveStudents.filter(s => s.id !== match.id) };
+        });
+    };
+
+    // Botón "Reactivar" de la lista de inactivos: se aplica en el acto (PATCH) y el alumno vuelve a la lista editable.
+    const reactivarInactivo = async (student) => {
+        setReactivatingId(student.id);
+        try {
+            await cambiarServicioAlumno(student.id, true);
+            const reactivado = { ...student, servicioActivo: true };
+            setFamilyDetail(prev => ({
+                ...prev,
+                students: [...prev.students, reactivado],
+                inactiveStudents: (prev.inactiveStudents || []).filter(s => s.id !== student.id)
+            }));
+            setOriginalStudents(prev => [...(prev || []), reactivado]);
+            setSnackbar({ open: true, message: `${student.fullName} reactivado. Asígnale sus horarios.`, severity: 'success' });
+            // El cambio ya está guardado: se refresca la lista para que, si se cancela la edición, al reabrirla el alumno
+            // venga como activo (con datos viejos, guardar otra edición lo volvería a desactivar).
+            fetchUsers();
+        } catch (err) {
+            setSnackbar({ open: true, message: err?.response?.data?.message || 'No se pudo reactivar al alumno.', severity: 'error' });
+        } finally {
+            setReactivatingId(null);
+        }
+    };
+
+    // Diálogo "Quitar a X": desactivar (con motivo) o eliminar del sistema. Se aplica al guardar la familia.
+    const confirmarQuitarAlumno = ({ accion, nota }) => {
+        const { index, student } = removeTarget;
+        setFamilyDetail(prev => ({
+            ...prev,
+            students: prev.students.filter((_, i) => i !== index),
+            deleteStudentIds: accion === 'eliminar' ? [...(prev.deleteStudentIds || []), student.id] : (prev.deleteStudentIds || []),
+            notasSalida: accion === 'desactivar' && nota ? { ...(prev.notasSalida || {}), [student.id]: nota } : (prev.notasSalida || {})
+        }));
+        setRemoveTarget(null);
+    };
+
     const handleToggleSupervisorPilot = useCallback((pilotId) => {
         setSelectedSupervisorPilots(prev => {
             if (prev.includes(pilotId)) {
@@ -839,6 +920,25 @@ const SchoolUsersPage = () => {
     }, []);
     const [scheduleSchoolId, setScheduleSchoolId] = useState(null);
     const [schools, setSchools] = useState([]);
+    // cycleStatus de la fila cuando no llegó en la navegación (recarga o URL directa): la lista GET /schools
+    // excluye las filas archivadas, así que se pide GET /schools/:id, que trae el modelo completo.
+    const [cycleStatusFila, setCycleStatusFila] = useState(null);
+    useEffect(() => {
+        if (location.state?.school?.cycleStatus || !schoolId) {
+            return undefined;
+        }
+        let cancelado = false;
+        api.get(`/schools/${schoolId}`)
+            .then((res) => {
+                if (!cancelado) {
+                    setCycleStatusFila(res.data?.school?.cycleStatus || null);
+                }
+            })
+            .catch(() => {});
+        return () => {
+            cancelado = true;
+        };
+    }, [schoolId, location.state]);
 
     // Prefer FamilyDetail-level updatedAt (for the selected school + ciclo) over global User.updatedAt
     const getFamilyUpdatedAt = useCallback((user) => {
@@ -1101,7 +1201,11 @@ const SchoolUsersPage = () => {
                     students = [];
                 }
                 students = students.filter(s => s && (typeof s === 'object' || String(s).trim() !== ''));
-                const fdClean = { ...fdRaw, Students: students };
+                // Los desactivados por el colegio no cuentan en ninguna vista (bus, conteos, horarios); solo la edición
+                // de la familia los muestra aparte, en "Alumnos inactivos".
+                const inactiveStudents = students.filter(s => typeof s === 'object' && s.servicioActivo === false);
+                students = students.filter(s => !(typeof s === 'object' && s.servicioActivo === false));
+                const fdClean = { ...fdRaw, Students: students, InactiveStudents: inactiveStudents };
                 const studentsCount = students.length || (u.studentsCount ? Number(u.studentsCount) : 0);
                 return { ...u, FamilyDetail: fdClean, studentsCount };
             });
@@ -1149,48 +1253,15 @@ const SchoolUsersPage = () => {
 
         // Filtrar por búsqueda (case-insensitive y sin acentos). Soporta búsqueda por varias palabras.
         if (searchQuery) {
-            const normalize = (str) => {
-                if (!str) {
-                    return '';
-                }
-                try {
-                    return str
-                        .toString()
-                        .normalize('NFD')
-                        .replace(/\p{Diacritic}/gu, '')
-                        .toLowerCase();
-                } catch (e) {
-                    // Fallback for environments without Unicode property escapes
-                    return str
-                        .toString()
-                        .normalize('NFD')
-                        .replace(/[\u0300-\u036f]/g, '')
-                        .toLowerCase();
-                }
-            };
-
-            const tokens = normalize(searchQuery).split(/\s+/).filter(Boolean);
-
-            filtered = filtered.filter(user => {
-                const familyLast = normalize(user.FamilyDetail?.familyLastName || user.familyLastName || '');
-                const motherName = normalize(user.motherName || user.FamilyDetail?.motherName || '');
-                const fatherName = normalize(user.fatherName || user.FamilyDetail?.fatherName || '');
-                const motherEmail = normalize(user.motherEmail || '');
-                const fatherEmail = normalize(user.fatherEmail || '');
-                const name = normalize(user.name || '');
-                const email = normalize(stripArchivedEmailPrefix(user.email || ''));
-
-                // For each token, ensure it matches at least one field
-                return tokens.every(token => (
-                    familyLast.includes(token) ||
-                    motherName.includes(token) ||
-                    fatherName.includes(token) ||
-                    motherEmail.includes(token) ||
-                    fatherEmail.includes(token) ||
-                    name.includes(token) ||
-                    email.includes(token)
-                ));
-            });
+            filtered = filtered.filter((user) => matchSearchTokens(searchQuery, [
+                user.FamilyDetail?.familyLastName || user.familyLastName,
+                user.motherName || user.FamilyDetail?.motherName,
+                user.fatherName || user.FamilyDetail?.fatherName,
+                user.motherEmail,
+                user.fatherEmail,
+                user.name,
+                stripArchivedEmailPrefix(user.email || ''),
+            ]));
         }
 
         // Filtrar por estado
@@ -1215,11 +1286,6 @@ const SchoolUsersPage = () => {
         }
 
         setFilteredUsers(filtered);
-        const currentFilterKey = `${searchQuery}||${statusFilter}||${serviceStatusFilter}`;
-        if (prevFilterKeyRef.current !== currentFilterKey) {
-            setPage(0); // Reset page when filters change
-            prevFilterKeyRef.current = currentFilterKey;
-        }
     }, [users, searchQuery, statusFilter, serviceStatusFilter]);
 
     const handleBackToDashboard = () => {
@@ -1241,18 +1307,6 @@ const SchoolUsersPage = () => {
             setSortBy(field);
             setSortOrder('asc');
         }
-        setPage(0);
-    };
-
-    const handleSearch = () => {
-        setSearchQuery(searchInput);
-        setPage(0);
-    };
-
-    const handleClearFilters = () => {
-        setSearchInput('');
-        setSearchQuery('');
-        setStatusFilter('');
         setPage(0);
     };
 
@@ -1284,6 +1338,9 @@ const SchoolUsersPage = () => {
                 emergencyRelationship: user.FamilyDetail.emergencyRelationship || '',
                 emergencyPhone: user.FamilyDetail.emergencyPhone || '',
                 students: user.FamilyDetail.Students || [],
+                inactiveStudents: user.FamilyDetail.InactiveStudents || [],
+                deleteStudentIds: [],
+                notasSalida: {},
                 scheduleSlots: user.FamilyDetail.ScheduleSlots || [],
                 specialFee: user.FamilyDetail.specialFee ?? 0
             });
@@ -1308,6 +1365,9 @@ const SchoolUsersPage = () => {
                 emergencyRelationship: '',
                 emergencyPhone: '',
                 students: [],
+                inactiveStudents: [],
+                deleteStudentIds: [],
+                notasSalida: {},
                 scheduleSlots: [],
                 specialFee: 0
             });
@@ -1564,6 +1624,16 @@ const SchoolUsersPage = () => {
                 delete familyDetailPayload.routeType;
             }
 
+            // Un alumno nuevo que coincide con uno inactivo exige decidir si es el mismo (Reactivar) u otro.
+            if (Number(selectedUser.roleId) === 3 && (familyDetail.students || []).some(s => inactiveMatchFor(s))) {
+                setSnackbar({ open: true, message: 'Indica si cada alumno nuevo es uno inactivo (Reactivar) o es otro alumno.', severity: 'warning' });
+                return;
+            }
+
+            // Estado de la UI que no va al servidor tal cual.
+            delete familyDetailPayload.inactiveStudents;
+            delete familyDetailPayload.InactiveStudents;
+
             // Solo envía students si realmente hubo cambios
             const currentStudentsNorm  = normalizeStudents(familyDetail?.students);
             const originalStudentsNorm = normalizeStudents(originalStudents);
@@ -1574,9 +1644,14 @@ const SchoolUsersPage = () => {
                 // No hubo cambios de alumnos: no enviar
                 delete familyDetailPayload.students;
                 delete familyDetailPayload.Students; // por compatibilidad
+                delete familyDetailPayload.deleteStudentIds;
+                delete familyDetailPayload.notasSalida;
             } else {
-                // Hubo cambios: enviar con id para preservar rutas
+                // Hubo cambios: enviar con id para preservar rutas. Los guardados que faltan se desactivan, salvo los
+                // marcados para eliminar (deleteStudentIds); notasSalida lleva el motivo de cada desactivación.
                 familyDetailPayload.students = currentStudentsNorm;
+                familyDetailPayload.deleteStudentIds = familyDetail.deleteStudentIds || [];
+                familyDetailPayload.notasSalida = familyDetail.notasSalida || {};
                 delete familyDetailPayload.Students; // por compatibilidad
             }
 
@@ -1697,6 +1772,9 @@ const SchoolUsersPage = () => {
             emergencyRelationship: '',
             emergencyPhone: '',
             students: [],
+            inactiveStudents: [],
+            deleteStudentIds: [],
+            notasSalida: {},
             scheduleSlots: [],
             specialFee: 0
         });
@@ -2428,6 +2506,11 @@ const SchoolUsersPage = () => {
                                     label={`Ciclo Escolar ${currentCycleLabel || ''}`}
                                     sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
                                 />
+                                {(managedSchool.cycleStatus || cycleStatusFila) === 'ARCHIVED' && (
+                                    <Tooltip title="Este ciclo ya no está en operaciones. Los estados de servicio son los que tenía cada familia al cerrar el ciclo.">
+                                        <Chip label="Ciclo cerrado" sx={{ backgroundColor: 'rgba(255,255,255,0.85)' }} />
+                                    </Tooltip>
+                                )}
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                     <Typography variant="body1" sx={{ opacity: 0.9 }}>
                                         {users.length} familias encontradas
@@ -2450,87 +2533,7 @@ const SchoolUsersPage = () => {
             </HeaderCard>
 
             {/* Filtros y búsqueda */}
-            <Card sx={{ mb: 3 }}>
-                <CardContent>
-                    <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} md={5}>
-                            <TextField
-                                fullWidth
-                                variant="outlined"
-                                placeholder="Buscar por nombre, apellido o email..."
-                                value={searchInput}
-                                onChange={(e) => setSearchInput(e.target.value)}
-                                onKeyPress={(e) => {
-                                    if (e.key === 'Enter') {
-                                        handleSearch();
-                                    }
-                                }}
-                                InputProps={{
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <Search />
-                                        </InputAdornment>
-                                    ),
-                                }}
-                            />
-                        </Grid>
-                        <Grid item xs={12} md={1}>
-                            <Button
-                                variant="contained"
-                                fullWidth
-                                onClick={handleSearch}
-                                sx={{ height: '56px' }}
-                            >
-                                Buscar
-                            </Button>
-                        </Grid>
-                        <Grid item xs={12} md={2}>
-                            <FormControl fullWidth variant="outlined">
-                                <InputLabel>Estado</InputLabel>
-                                <Select
-                                    value={statusFilter}
-                                    onChange={(e) => setStatusFilter(e.target.value)}
-                                    label="Estado"
-                                    startAdornment={<FilterList />}
-                                >
-                                    <MenuItem value="">Todos</MenuItem>
-                                    <MenuItem value="Nuevo">Nuevo</MenuItem>
-                                    <MenuItem value="Duplicado">Duplicado</MenuItem>
-                                    <MenuItem value="Actualizado">Actualizado</MenuItem>
-                                    <MenuItem value="Sin asignaciones">Sin asignaciones</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid item xs={12} md={2}>
-                            <FormControl fullWidth variant="outlined">
-                                <InputLabel>Estado del Servicio</InputLabel>
-                                <Select
-                                    value={serviceStatusFilter}
-                                    onChange={(e) => setServiceStatusFilter(e.target.value)}
-                                    label="Estado del Servicio"
-                                    startAdornment={<FilterList />}
-                                >
-                                    <MenuItem value="">Todos</MenuItem>
-                                    <MenuItem value="ACTIVE">Activo</MenuItem>
-                                    <MenuItem value="PAUSED">Pausado</MenuItem>
-                                    <MenuItem value="SUSPENDED">Suspendido</MenuItem>
-                                    <MenuItem value="INACTIVE">Inactivo</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        {/* Role filter removed: this view only handles Padres */}
-                        <Grid item xs={12} md={2}>
-                            <Button
-                                variant="outlined"
-                                fullWidth
-                                onClick={handleClearFilters}
-                            >
-                                Limpiar
-                            </Button>
-                        </Grid>
-                    </Grid>
-                </CardContent>
-            </Card>
+            <FilterBar {...pageFilters.barProps} loading={loading} />
 
             {/* Botones de Acción */}
             <Card sx={{ mb: 3 }}>
@@ -2770,6 +2773,8 @@ const SchoolUsersPage = () => {
                                                     return <Chip label="Pausado" size="small" color="warning" />;
                                                 } else if (serviceStatus === 'SUSPENDED') {
                                                     return <Chip label="Suspendido" size="small" color="error" />;
+                                                } else if (serviceStatus === 'PENDING_START') {
+                                                    return <Chip label="Pendiente de inicio" size="small" color="info" />;
                                                 } else if (serviceStatus === 'INACTIVE') {
                                                     return <Chip label="Inactivo" size="small" sx={{ backgroundColor: '#9e9e9e', color: 'white' }} />;
                                                 }
@@ -2848,7 +2853,7 @@ const SchoolUsersPage = () => {
                                                 <TableCell align="center">
                                                     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
                                                         <PermissionGuard permission="usuarios-editar">
-                                                            <IconButton size="small" onClick={() => handleEditClick(user)}>
+                                                            <IconButton size="small" data-testid={`edit-user-${user.id}`} onClick={() => handleEditClick(user)}>
                                                                 <Edit fontSize="small" />
                                                             </IconButton>
                                                         </PermissionGuard>
@@ -3034,6 +3039,8 @@ const SchoolUsersPage = () => {
                                 allowedRouteTypes={bulkAllowedRouteTypes}
                                 passwordMinLength={bulkPasswordMinLength}
                                 canResetPassword={hasPermission('padres-restablecer-password')}
+                                canChangeStudentState={hasPermission('alumnos-cambiar-estado')}
+                                canDeleteStudents={hasPermission('alumnos-eliminar')}
                                 cicloLabel={bulkCicloLabel}
                                 onChangeDraft={handleChangeBulkDraft}
                                 onToggleSkip={handleToggleBulkDraftSkip}
@@ -3707,12 +3714,14 @@ const SchoolUsersPage = () => {
                                             </Typography>
                                         </Grid>
                                     )}
-                                    {familyDetail.students.length > 0 && (
+                                    {(familyDetail.students.length > 0 || (familyDetail.inactiveStudents || []).length > 0) && (
                                         <Grid item xs={12}>
                                             <Typography variant="subtitle2" sx={{ mb: 1 }}>
                                                 Estudiantes registrados:
                                             </Typography>
-                                            {familyDetail.students.map((student, index) => (
+                                            {familyDetail.students.map((student, index) => {
+                                                const inactiveMatch = inactiveMatchFor(student);
+                                                return (
                                                 <Grid container spacing={2} key={index} sx={{ mb: 2, alignItems: 'center' }}>
                                                     <Grid item xs={12} md={6}>
                                                         <TextField
@@ -3752,12 +3761,67 @@ const SchoolUsersPage = () => {
                                                         </FormControl>
                                                     </Grid>
                                                     <Grid item xs={3} md={1} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                        <IconButton size="small" onClick={() => setFamilyDetail(prev => ({ ...prev, students: prev.students.filter((_, i) => i !== index) }))}>
+                                                        {/* Un alumno guardado solo lo quita (desactiva / elimina) quien tiene alumnos-cambiar-estado. */}
+                                                        {(!student.id || canChangeStudentState) && (
+                                                        <IconButton
+                                                            size="small"
+                                                            aria-label="Quitar alumno"
+                                                            data-testid={`remove-student-${student.id ?? `new-${index}`}`}
+                                                            onClick={() => {
+                                                                // Fila nueva (sin guardar): se quita sin más. Alumno guardado: desactivar o eliminar.
+                                                                if (!student.id) {
+                                                                    setFamilyDetail(prev => ({ ...prev, students: prev.students.filter((_, i) => i !== index) }));
+                                                                    return;
+                                                                }
+                                                                setRemoveTarget({ index, student });
+                                                            }}
+                                                        >
                                                             <Delete fontSize="small" />
                                                         </IconButton>
+                                                        )}
                                                     </Grid>
+                                                    {inactiveMatch && (
+                                                        <Grid item xs={12}>
+                                                            <Alert
+                                                                severity="info"
+                                                                data-testid={`inactive-match-${index}`}
+                                                                action={(
+                                                                    <>
+                                                                        {canChangeStudentState && (
+                                                                            <Button size="small" onClick={() => reactivarCoincidencia(index)}>
+                                                                                Reactivar a {inactiveMatch.fullName.split(' ')[0]}
+                                                                            </Button>
+                                                                        )}
+                                                                        <Button size="small" onClick={() => setFamilyDetail(prev => {
+                                                                            const copy = [...prev.students];
+                                                                            copy[index] = { ...copy[index], decisionInactivo: 'nuevo' };
+                                                                            return { ...prev, students: copy };
+                                                                        })}>
+                                                                            Es otro alumno
+                                                                        </Button>
+                                                                    </>
+                                                                )}
+                                                            >
+                                                                Coincide con {inactiveMatch.fullName} ({inactiveMatch.grade}), inactivo. ¿Es el mismo alumno?
+                                                            </Alert>
+                                                        </Grid>
+                                                    )}
                                                 </Grid>
-                                            ))}
+                                                );
+                                            })}
+                                            <InactiveStudentsList
+                                                students={familyDetail.inactiveStudents}
+                                                canReactivate={canChangeStudentState}
+                                                busyId={reactivatingId}
+                                                onReactivate={reactivarInactivo}
+                                            />
+                                            <RemoveStudentDialog
+                                                open={Boolean(removeTarget)}
+                                                student={removeTarget?.student}
+                                                canDelete={hasPermission('alumnos-eliminar')}
+                                                onClose={() => setRemoveTarget(null)}
+                                                onConfirm={confirmarQuitarAlumno}
+                                            />
                                         </Grid>
                                     )}
                                 </Grid>

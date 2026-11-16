@@ -1,5 +1,8 @@
 import { Autocomplete, ListSubheader, TextField } from '@mui/material';
 import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
+import { isSameClient } from '../utils/clientValue';
+
+export { getClientSchoolId, getClientCorporationId } from '../utils/clientValue';
 
 export const CORPORATIONS_GROUP_LABEL = 'Corporaciones';
 
@@ -17,13 +20,13 @@ const getSchoolCycleGroupLabel = (school) =>
     getCicloEscolarOptionLabel(school?.cicloEscolar) || (school?.cicloEscolarId ? `Ciclo ${school.cicloEscolarId}` : 'Sin ciclo escolar');
 
 // Opciones de cliente: colegios agrupados por ciclo escolar y una sección de Corporaciones, todo en orden alfabético.
-const buildClientOptions = (schools = [], corporations = []) => [
+const buildClientOptions = (schools = [], corporations = [], schoolsGroupLabel = null) => [
     ...schools.map((school) => ({
         label: school.name,
         value: `school-${school.id}`,
         type: 'school',
         id: school.id,
-        groupLabel: getSchoolCycleGroupLabel(school)
+        groupLabel: schoolsGroupLabel || getSchoolCycleGroupLabel(school)
     })),
     ...corporations.map((corporation) => ({
         label: corporation.name,
@@ -34,16 +37,11 @@ const buildClientOptions = (schools = [], corporations = []) => [
     }))
 ].sort((a, b) => a.groupLabel.localeCompare(b.groupLabel, 'es') || a.label.localeCompare(b.label, 'es'));
 
-// Dos clientes son el mismo si coinciden en tipo e id (el valor guardado de un registro no trae `value`).
-const isSameClient = (a, b) => a?.type === b?.type && String(a?.id) === String(b?.id);
-
-// Id de colegio o de corporación del cliente elegido, o '' si no hay uno de ese tipo.
-export const getClientSchoolId = (client) => (client?.type === 'school' ? String(client.id) : '');
-export const getClientCorporationId = (client) => (client?.type === 'corp' ? String(client.id) : '');
-
 /**
  * Filtro "Cliente" unificado: colegios por ciclo y corporaciones en un solo selector.
- * `value` es una opción devuelta por `onChange` (o null).
+ * `value` es una opción devuelta por `onChange` o un `{ type, id }` (o null).
+ * `extraOptions` se muestran primero (p. ej. "Sin afiliación"); cada una lleva `{ label, type, id, groupLabel }`.
+ * `schoolsGroupLabel` agrupa todos los colegios bajo un solo encabezado en lugar de por ciclo (p. ej. listas de un colegio por nombre).
  */
 const ClientSelector = ({
     schools,
@@ -53,15 +51,20 @@ const ClientSelector = ({
     size = 'small',
     fullWidth = true,
     helperText,
-    sx
+    sx,
+    label = 'Cliente',
+    extraOptions = [],
+    schoolsGroupLabel = null,
+    disabled = false
 }) => {
-    const options = buildClientOptions(schools, corporations);
+    const options = [...extraOptions, ...buildClientOptions(schools, corporations, schoolsGroupLabel)];
 
     return (
         <Autocomplete
             size={size}
             fullWidth={fullWidth}
             sx={sx}
+            disabled={disabled}
             options={options}
             value={value ? (options.find((option) => isSameClient(option, value)) || value) : null}
             onChange={(event, newValue) => onChange(newValue)}
@@ -71,7 +74,7 @@ const ClientSelector = ({
             isOptionEqualToValue={isSameClient}
             noOptionsText="Sin coincidencias"
             clearOnEscape
-            renderInput={(params) => <TextField {...params} label="Cliente" helperText={helperText} />}
+            renderInput={(params) => <TextField {...params} label={label} helperText={helperText} />}
         />
     );
 };

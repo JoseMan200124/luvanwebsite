@@ -1,13 +1,13 @@
 // src/components/financialStatistics/FuelStatisticsTab.jsx
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-    Alert, Box, Button, Checkbox, Chip, CircularProgress, FormControl, InputLabel, ListItemText,
-    ListSubheader, MenuItem, Select, Snackbar, TextField, ToggleButton, ToggleButtonGroup, Typography
-} from '@mui/material';
+import { Alert, Box, Button, CircularProgress, Snackbar, Typography } from '@mui/material';
 import { Download } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../../hooks/useRegisterPageRefresh';
+import FilterBar from '../filters/FilterBar';
+import useFilters from '../../hooks/useFilters';
+import { F } from '../filters/filterFields';
 import { getCurrentDateSync } from '../../hooks/useCurrentDate';
 import { getFuelFinancialStatistics, getFuelClients } from '../../services/fuelStatisticsService';
 import {
@@ -36,42 +36,24 @@ const KpiCard = ({ label, value, sub, color = '#111827' }) => (
 );
 
 const FuelStatisticsTab = () => {
-    const initial = useMemo(() => computePresetRange(DEFAULT_PRESET, getCurrentDateSync()), []);
-    const [preset, setPreset] = useState(DEFAULT_PRESET);
-    const [fromMonth, setFromMonth] = useState(initial.fromMonth);
-    const [toMonth, setToMonth] = useState(initial.toMonth);
-    const [granularity, setGranularity] = useState(initial.granularity);
-    const [selectedClients, setSelectedClients] = useState([]);
-    const [selectedFuelTypes, setSelectedFuelTypes] = useState([]);
-    const [selectedReasons, setSelectedReasons] = useState([]);
     const [clientOptions, setClientOptions] = useState({ schools: [], corporations: [], hasUnassigned: false });
     const [result, setResult] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const applyPreset = (key) => {
-        const range = computePresetRange(key, getCurrentDateSync());
-        if (!range) {
-            return;
-        }
-        setPreset(key);
-        setFromMonth(range.fromMonth);
-        setToMonth(range.toMonth);
-        setGranularity(range.granularity);
-    };
-
-    const fetchStats = useCallback(async () => {
+    // Recibe los filtros aplicados. Listas vacías = todos.
+    const fetchStats = useCallback(async (values) => {
         setLoading(true);
         setError(null);
         try {
-            const { from, to } = monthRangeToDates(fromMonth, toMonth, getCurrentDateSync());
+            const { from, to } = monthRangeToDates(values.months.from, values.months.to, getCurrentDateSync());
             const data = await getFuelFinancialStatistics({
                 from,
                 to,
-                granularity,
-                clients: buildClientsParam(selectedClients),
-                fuelTypes: buildListParam(selectedFuelTypes),
-                fuelingReasons: buildListParam(selectedReasons)
+                granularity: values.granularity,
+                clients: buildClientsParam(values.clients),
+                fuelTypes: buildListParam(values.fuelTypes),
+                fuelingReasons: buildListParam(values.reasons)
             });
             setResult(data);
         } catch (e) {
@@ -81,21 +63,13 @@ const FuelStatisticsTab = () => {
         } finally {
             setLoading(false);
         }
-    }, [fromMonth, toMonth, granularity, selectedClients, selectedFuelTypes, selectedReasons]);
+    }, []);
 
     useEffect(() => {
         getFuelClients()
             .then((data) => setClientOptions({ schools: data?.schools || [], corporations: data?.corporations || [], hasUnassigned: !!data?.hasUnassigned }))
             .catch((e) => console.error('getFuelClients error', e));
     }, []);
-
-    useEffect(() => {
-        fetchStats();
-    }, []);
-
-    useRegisterPageRefresh(async () => {
-        await fetchStats();
-    }, [fetchStats]);
 
     // Colegios agrupados por ciclo (cada ciclo tiene su propia fila School).
     const schoolGroups = useMemo(() => {
@@ -109,6 +83,63 @@ const FuelStatisticsTab = () => {
         }
         return [...map.entries()].sort(([a], [b]) => b - a);
     }, [clientOptions.schools]);
+
+    const fuelClientOptions = [
+        ...schoolGroups.flatMap(([year, schools]) => schools.map((s) => ({
+            value: `school:${s.id}`,
+            label: s.name,
+            group: year ? `Colegios · Ciclo ${year}` : 'Colegios',
+        }))),
+        ...clientOptions.corporations.map((c) => ({ value: `corp:${c.id}`, label: c.name, group: 'Corporaciones' })),
+        ...(clientOptions.hasUnassigned ? [{ value: 'none', label: 'Sin cliente asignado', group: 'Otros' }] : []),
+    ];
+
+    // Filtros: por defecto los últimos 6 meses agrupados por mes. Los atajos ajustan rango y agrupación.
+    const defaultRange = () => computePresetRange(DEFAULT_PRESET, getCurrentDateSync());
+    const pageFilters = useFilters({
+        urlPrefix: 'fuel_',
+        fields: [
+            F.multiSelect('clients', { label: 'Cliente', width: 'lg', allLabel: 'Todos los clientes', options: fuelClientOptions }),
+            F.monthRange('months', { initial: () => ({ from: defaultRange().fromMonth, to: defaultRange().toMonth }) }),
+            F.multiSelect('fuelTypes', {
+                label: 'Tipo de combustible',
+                allLabel: 'Todos los tipos',
+                options: FUEL_TYPES.map((type) => ({ value: type.key, label: type.label })),
+            }),
+            F.multiSelect('reasons', {
+                label: 'Razón',
+                allLabel: 'Todas las razones',
+                options: FUELING_REASONS.map((reason) => ({ value: reason.key, label: reason.label })),
+            }),
+            F.toggle('granularity', {
+                label: 'Agrupar por',
+                initial: () => defaultRange().granularity,
+                options: GRANULARITIES.map((g) => ({ value: g.key, label: g.label })),
+            }),
+        ],
+        presets: DATE_PRESETS.map((preset) => ({
+            key: preset.key,
+            label: preset.label,
+            values: () => {
+                const range = computePresetRange(preset.key, getCurrentDateSync());
+                return { months: { from: range.fromMonth, to: range.toMonth }, granularity: range.granularity };
+            },
+        })),
+    });
+    const fuelApplied = pageFilters.applied;
+    const {
+        clients: selectedClients,
+        fuelTypes: selectedFuelTypes,
+        reasons: selectedReasons,
+    } = fuelApplied;
+
+    useEffect(() => {
+        fetchStats(fuelApplied);
+    }, [fetchStats, fuelApplied]);
+
+    useRegisterPageRefresh(async () => {
+        await fetchStats(fuelApplied);
+    }, [fetchStats, fuelApplied]);
 
     const clientName = useCallback((value) => {
         if (value === 'none') {
@@ -141,25 +172,6 @@ const FuelStatisticsTab = () => {
         ? `${moment(result.from).format('DD/MM/YYYY')} — ${moment(result.to).format('DD/MM/YYYY')}`
         : '';
 
-    // Mismo comportamiento que el selector de colegios de Ingresos: elegir "Todos" limpia lo demás.
-    const multiSelectProps = (value, setter, allLabel, renderItem) => ({
-        multiple: true,
-        value,
-        onChange: (e) => {
-            const next = e.target.value;
-            setter(next.includes(ALL_OPTION) ? [ALL_OPTION] : next);
-        },
-        renderValue: (selected) => (isAllSelected(selected) ? allLabel : selected.map(renderItem).join(', ')),
-        sx: { bgcolor: '#fff', borderRadius: 1 }
-    });
-
-    const allMenuItem = (selected, label) => (
-        <MenuItem value={ALL_OPTION}>
-            <Checkbox checked={selected.includes(ALL_OPTION)} size="small" />
-            <ListItemText primary={label} />
-        </MenuItem>
-    );
-
     return (
         <>
             {/* Acciones */}
@@ -175,122 +187,7 @@ const FuelStatisticsTab = () => {
                 </Button>
             </Box>
 
-            {/* Atajos de fecha */}
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-                {DATE_PRESETS.map((p) => (
-                    <Chip
-                        key={p.key}
-                        label={p.label}
-                        size="small"
-                        clickable
-                        color={preset === p.key ? 'primary' : 'default'}
-                        variant={preset === p.key ? 'filled' : 'outlined'}
-                        onClick={() => applyPreset(p.key)}
-                    />
-                ))}
-            </Box>
-
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'flex-end', mb: 3 }}>
-                <FormControl size="small" sx={{ width: 280 }}>
-                    <InputLabel id="fuel-client-label">Cliente</InputLabel>
-                    <Select labelId="fuel-client-label" label="Cliente" {...multiSelectProps(selectedClients, setSelectedClients, 'Todos los clientes', clientName)}>
-                        {allMenuItem(selectedClients, 'Todos los clientes')}
-                        {schoolGroups.map(([year, schools]) => [
-                            <ListSubheader key={`h-${year}`} sx={{ fontWeight: 700, color: '#1976d2', lineHeight: '32px' }}>
-                                {year ? `Colegios · Ciclo ${year}` : 'Colegios'}
-                            </ListSubheader>,
-                            ...schools.map((s) => (
-                                <MenuItem key={`school:${s.id}`} value={`school:${s.id}`} sx={{ pl: 4 }}>
-                                    <Checkbox size="small" checked={selectedClients.includes(`school:${s.id}`)} />
-                                    <ListItemText primary={s.name} />
-                                </MenuItem>
-                            ))
-                        ])}
-                        {clientOptions.corporations.length > 0 && (
-                            <ListSubheader sx={{ fontWeight: 700, color: '#1976d2', lineHeight: '32px' }}>Corporaciones</ListSubheader>
-                        )}
-                        {clientOptions.corporations.map((c) => (
-                            <MenuItem key={`corp:${c.id}`} value={`corp:${c.id}`} sx={{ pl: 4 }}>
-                                <Checkbox size="small" checked={selectedClients.includes(`corp:${c.id}`)} />
-                                <ListItemText primary={c.name} />
-                            </MenuItem>
-                        ))}
-                        {clientOptions.hasUnassigned && (
-                            <ListSubheader sx={{ fontWeight: 700, color: '#1976d2', lineHeight: '32px' }}>Otros</ListSubheader>
-                        )}
-                        {clientOptions.hasUnassigned && (
-                            <MenuItem value="none" sx={{ pl: 4 }}>
-                                <Checkbox size="small" checked={selectedClients.includes('none')} />
-                                <ListItemText primary="Sin cliente asignado" />
-                            </MenuItem>
-                        )}
-                    </Select>
-                </FormControl>
-
-                <TextField
-                    size="small"
-                    type="month"
-                    label="Desde"
-                    value={fromMonth}
-                    onChange={(e) => { setFromMonth(e.target.value); setPreset(null); }}
-                    slotProps={{ inputLabel: { shrink: true } }}
-                    sx={{ width: 150, bgcolor: '#fff', borderRadius: 1 }}
-                />
-                <TextField
-                    size="small"
-                    type="month"
-                    label="Hasta"
-                    value={toMonth}
-                    onChange={(e) => { setToMonth(e.target.value); setPreset(null); }}
-                    slotProps={{ inputLabel: { shrink: true } }}
-                    sx={{ width: 150, bgcolor: '#fff', borderRadius: 1 }}
-                />
-
-                <FormControl size="small" sx={{ width: 200 }}>
-                    <InputLabel id="fuel-type-label">Tipo de combustible</InputLabel>
-                    <Select
-                        labelId="fuel-type-label" label="Tipo de combustible"
-                        {...multiSelectProps(selectedFuelTypes, setSelectedFuelTypes, 'Todos los tipos', fuelTypeLabel)}
-                    >
-                        {allMenuItem(selectedFuelTypes, 'Todos los tipos')}
-                        {FUEL_TYPES.map((t) => (
-                            <MenuItem key={t.key} value={t.key}>
-                                <Checkbox size="small" checked={selectedFuelTypes.includes(t.key)} />
-                                <ListItemText primary={t.label} />
-                            </MenuItem>
-                        ))}
-                    </Select>
-                </FormControl>
-
-                <FormControl size="small" sx={{ width: 200 }}>
-                    <InputLabel id="fuel-reason-label">Razón</InputLabel>
-                    <Select
-                        labelId="fuel-reason-label" label="Razón"
-                        {...multiSelectProps(selectedReasons, setSelectedReasons, 'Todas las razones', reasonItemLabel)}
-                    >
-                        {allMenuItem(selectedReasons, 'Todas las razones')}
-                        {FUELING_REASONS.map((r) => (
-                            <MenuItem key={r.key} value={r.key}>
-                                <Checkbox size="small" checked={selectedReasons.includes(r.key)} />
-                                <ListItemText primary={r.label} />
-                            </MenuItem>
-                        ))}
-                    </Select>
-                </FormControl>
-
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Typography variant="caption" color="text.secondary">Agrupar por</Typography>
-                    <ToggleButtonGroup size="small" exclusive value={granularity} onChange={(e, v) => { if (v) {
-                        setGranularity(v);
-                    } }}>
-                        {GRANULARITIES.map((g) => <ToggleButton key={g.key} value={g.key}>{g.label}</ToggleButton>)}
-                    </ToggleButtonGroup>
-                </Box>
-
-                <Button variant="contained" color="primary" onClick={fetchStats} disabled={loading} sx={{ borderRadius: 1, fontWeight: 600, height: 40 }}>
-                    {loading ? 'Aplicando…' : 'Aplicar filtros'}
-                </Button>
-            </Box>
+            <FilterBar {...pageFilters.barProps} loading={loading} />
 
             {loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '16rem' }}>

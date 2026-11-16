@@ -1,19 +1,12 @@
 import React, { useState, useEffect, useContext } from 'react';
 import {
-    Autocomplete,
     Box,
-    Button,
     Card,
     CardContent,
     Chip,
     CircularProgress,
     Alert,
-    FormControl,
-    Grid2,
-    InputLabel,
-    MenuItem,
     Paper,
-    Select,
     Table,
     TableBody,
     TableCell,
@@ -21,7 +14,6 @@ import {
     TableHead,
     TableRow,
     TablePagination,
-    TextField,
     Typography
 } from '@mui/material';
 import {
@@ -35,8 +27,11 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import moment from 'moment-timezone';
-import ClientSelector, { getClientSchoolId, getClientCorporationId } from '../components/ClientSelector';
-import CicloEscolarFilter, { ALL_CYCLES_VALUE, getCicloEscolarFilterParams, getInitialCicloEscolarFilter } from '../components/CicloEscolarFilter';
+import { getClientSchoolId, getClientCorporationId } from '../utils/clientValue';
+import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F } from '../components/filters/filterFields';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -330,34 +325,36 @@ const BusAssignmentHistoryPage = () => {
     const [rowsPerPage, setRowsPerPage] = useState(25);
     const [totalRecords, setTotalRecords] = useState(0);
 
-    // Filtros
-    const [changeTypeFilter, setChangeTypeFilter] = useState('');
-    const [busId, setBusId] = useState('');
-    const [busInputValue, setBusInputValue] = useState('');
-    const [selectedClient, setSelectedClient] = useState(null);
-    const schoolId = getClientSchoolId(selectedClient);
-    const corporationId = getClientCorporationId(selectedClient);
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
-    const [selectedCicloEscolar, setSelectedCicloEscolar] = useState(getInitialCicloEscolarFilter);
-
     const [buses, setBuses] = useState([]);
     const [schools, setSchools] = useState([]);
     const [corporations, setCorporations] = useState([]);
     const [stats, setStats] = useState(null);
 
-    const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
+    const pageFilters = useFilters({
+        fields: [
+            F.cycle(),
+            F.client({ schools, corporations }),
+            F.autocomplete('bus', {
+                label: 'Placa',
+                width: 'sm',
+                dependsOn: 'cycle',
+                requireParent: false,
+                options: buses.map((bus) => ({ value: String(bus.id), label: bus.plate })),
+            }),
+            F.select('changeType', { label: 'Tipo de cambio', options: CHANGE_TYPE_LABELS }),
+            F.dateRange('dates'),
+        ],
+        onApplied: () => setPage(0),
+    });
+    const { cycle: selectedCicloEscolar, client: selectedClient, changeType: changeTypeFilter, dates } = pageFilters.applied;
+    const busId = pageFilters.applied.bus?.value || '';
+    const schoolId = getClientSchoolId(selectedClient);
+    const corporationId = getClientCorporationId(selectedClient);
+    const startDate = dates.from;
+    const endDate = dates.to;
+    const draftCycle = pageFilters.draft.cycle;
 
-    const clearFilters = () => {
-        setChangeTypeFilter('');
-        setBusId('');
-        setBusInputValue('');
-        setSelectedClient(null);
-        setStartDate('');
-        setEndDate('');
-        setStats(null);
-        setPage(0);
-    };
+    const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
 
     const fetchHistory = React.useCallback(async () => {
         setLoading(true);
@@ -449,14 +446,14 @@ const BusAssignmentHistoryPage = () => {
             setBuses(busesRes.data.buses || []);
 
             const schoolsRes = await api.get('/schools', {
-                params: { ...getCicloEscolarFilterParams(selectedCicloEscolar), includeArchived: true },
+                params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true },
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
             const schoolsData = Array.isArray(schoolsRes.data) ? schoolsRes.data : (schoolsRes.data?.schools || []);
             setSchools(schoolsData);
 
             const corpsRes = await api.get('/corporations', {
-                params: getCicloEscolarFilterParams(selectedCicloEscolar),
+                params: getCicloEscolarFilterParams(draftCycle),
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
             const corpsData = Array.isArray(corpsRes.data) ? corpsRes.data : (corpsRes.data?.corporations || []);
@@ -464,25 +461,26 @@ const BusAssignmentHistoryPage = () => {
         } catch (err) {
             console.error('Error cargando catálogos de buses:', err);
         }
-    }, [auth.token, selectedCicloEscolar]);
+    }, [auth.token, draftCycle]);
 
     const handleGlobalRefresh = React.useCallback(async () => {
         await Promise.all([fetchHistory(), fetchCatalogs(), fetchStats()]);
     }, [fetchHistory, fetchCatalogs, fetchStats]);
 
-    useRegisterPageRefresh(handleGlobalRefresh, [page, rowsPerPage, changeTypeFilter, busId, schoolId, corporationId, startDate, endDate, selectedCicloEscolar]);
+    useRegisterPageRefresh(handleGlobalRefresh, [handleGlobalRefresh]);
 
     useEffect(() => {
         fetchHistory();
-        fetchCatalogs();
         fetchStats();
-    }, [fetchHistory, fetchCatalogs, fetchStats]);
+    }, [fetchHistory, fetchStats]);
+
+    // Los catálogos siguen al ciclo que se está eligiendo, no se recargan con cada filtro aplicado
+    useEffect(() => {
+        fetchCatalogs();
+    }, [fetchCatalogs]);
 
     const handleChangePage = (event, newPage) => setPage(newPage);
     const handleChangeRowsPerPage = (event) => { setRowsPerPage(Number.parseInt(event.target.value, 10)); setPage(0); };
-
-    // Selected bus object for Autocomplete
-    const selectedBus = busId ? buses.find((b) => b.id === Number(busId)) || null : null;
 
     return (
         <Box sx={{ p: 3 }}>
@@ -510,102 +508,20 @@ const BusAssignmentHistoryPage = () => {
                 </Box>
             )}
 
-            {isSpecificCicloEscolarSelected && (
-                <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
-                    Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.
-                </Typography>
-            )}
-
             {/* Filtros */}
-            <Card sx={{ mb: 3 }}>
-                <CardContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                        <Typography variant="h6">Filtros</Typography>
-                        <Button size="small" variant="text" color="inherit" onClick={clearFilters}>
-                            Limpiar filtros
-                        </Button>
-                    </Box>
-                    <Grid2 container spacing={2}>
-                        {/* 1. Bus — Autocomplete */}
-                        <Grid2 size={{ xs: 12, sm: 6, md: 1.3 }}>
-                            <Autocomplete
-                                size="small"
-                                options={buses}
-                                getOptionLabel={(option) => option.plate}
-                                value={selectedBus}
-                                inputValue={busInputValue}
-                                onInputChange={(event, newInputValue) => setBusInputValue(newInputValue)}
-                                onChange={(event, newValue) => {
-                                    setBusId(newValue ? String(newValue.id) : '');
-                                    setPage(0);
-                                }}
-                                renderInput={(params) => <TextField {...params} label="Bus (Placa)" />}
-                                noOptionsText="No se encontraron buses"
-                                isOptionEqualToValue={(option, val) => option.id === val.id}
-                                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1 } }}
-                            />
-                        </Grid2>
-
-                        {/* 2. Tipo de Cambio */}
-                        <Grid2 size={{ xs: 12, sm: 6, md: 1.25 }}>
-                            <FormControl fullWidth size="small">
-                                <InputLabel>Tipo de Cambio</InputLabel>
-                                <Select
-                                    value={changeTypeFilter}
-                                    onChange={(e) => { setChangeTypeFilter(e.target.value); setPage(0); }}
-                                    label="Tipo de Cambio"
-                                >
-                                    <MenuItem value="">Todos</MenuItem>
-                                    <MenuItem value="assignment">Asignación</MenuItem>
-                                    <MenuItem value="unassignment">Desasignación</MenuItem>
-                                    <MenuItem value="reassignment">Reasignación</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Grid2>
-
-                        {/* 3. Ciclo Escolar */}
-                        <Grid2 size={{ xs: 12, sm: 6, md: 1.5 }}>
-                            <CicloEscolarFilter
-                                value={selectedCicloEscolar}
-                                onChange={(value) => { setSelectedCicloEscolar(value); setBusId(''); setBusInputValue(''); setSelectedClient(null); setPage(0); }}
-                                label="Ciclo escolar"
-                                allLabel="Todos los ciclos"
-                                size="small"
-                            />
-                        </Grid2>
-
-                        {/* 4. Cliente (colegios por ciclo y corporaciones) */}
-                        <Grid2 size={{ xs: 12, sm: 6, md: 3 }}>
-                            <ClientSelector
-                                schools={schools}
-                                corporations={corporations}
-                                value={selectedClient}
-                                onChange={(client) => { setSelectedClient(client); setPage(0); }}
-                                helperText={isSpecificCicloEscolarSelected && !selectedClient
-                                    ? 'Se tomarán en cuenta todos los colegios del ciclo seleccionado.'
-                                    : 'Los colegios dependen del ciclo escolar seleccionado.'}
-                            />
-                        </Grid2>
-
-                        {/* 6. Rango de fechas */}
-                        <Grid2 size={{ xs: 12, sm: 6, md: 1.2 }}>
-                            <TextField fullWidth size="small" type="date" label="Desde" value={startDate} onChange={(e) => setStartDate(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
-                        </Grid2>
-
-                        <Grid2 size={{ xs: 12, sm: 6, md: 1.2 }}>
-                            <TextField fullWidth size="small" type="date" label="Hasta" value={endDate} onChange={(e) => setEndDate(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
-                        </Grid2>
-
+            <FilterBar
+                {...pageFilters.barProps}
+                loading={loading}
+                caption={(isSpecificCicloEscolarSelected || (startDate && endDate)) ? (
+                    <>
+                        {isSpecificCicloEscolarSelected && 'Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.'}
+                        {isSpecificCicloEscolarSelected && startDate && endDate && <br />}
                         {startDate && endDate && (
-                            <Grid2 size={{ xs: 12 }}>
-                                <Typography variant="caption" color="text.secondary">
-                                    Mostrando cambios desde <strong>{moment(startDate).format('DD/MM/YYYY')}</strong> hasta <strong>{moment(endDate).format('DD/MM/YYYY')}</strong>
-                                </Typography>
-                            </Grid2>
+                            <>Mostrando cambios desde <strong>{moment(startDate).format('DD/MM/YYYY')}</strong> hasta <strong>{moment(endDate).format('DD/MM/YYYY')}</strong></>
                         )}
-                    </Grid2>
-                </CardContent>
-            </Card>
+                    </>
+                ) : undefined}
+            />
 
             {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 

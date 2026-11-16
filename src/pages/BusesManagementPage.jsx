@@ -28,16 +28,11 @@ import {
     Link,
     Box,
     FormControlLabel,
-    FormControl,
-    InputLabel,
-    Select,
-    MenuItem,
     Switch,
     useTheme,
     useMediaQuery,
     TableSortLabel
 } from '@mui/material';
-import { Autocomplete } from '@mui/material';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import {
     Edit,
@@ -49,15 +44,28 @@ import {
 } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
-import { getCiclosEscolares, getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
+import { getCiclosEscolares } from '../services/cicloEscolarService';
 import tw from 'twin.macro';
 import styled from 'styled-components';
 import * as XLSX from 'xlsx';
 import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
-import { renderClientGroup, CORPORATIONS_GROUP_LABEL } from '../components/ClientSelector';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F } from '../components/filters/filterFields';
+import { matchSearchTokens } from '../utils/clientFilter';
 
 const BusesContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
+
+const AVAILABILITY_OPTIONS = [
+    { value: 'assigned', label: 'Asignados' },
+    { value: 'unassigned', label: 'Sin asignar' },
+];
+const WORKSHOP_OPTIONS = [
+    { value: 'in', label: 'En taller' },
+    { value: 'out', label: 'Disponible' },
+    { value: 'decommissioned', label: 'Dado de baja' },
+];
 
 /**
  * Función para formatear fecha/hora (para el nombre del archivo de plantilla, etc.)
@@ -214,10 +222,6 @@ const BusesManagementPage = () => {
         message: '',
         severity: 'success'
     });
-    const [searchQuery, setSearchQuery] = useState('');
-    const [clientFilter, setClientFilter] = useState(null); // {id, type}
-    const [availabilityFilter, setAvailabilityFilter] = useState('all'); // all | assigned | unassigned
-    const [inWorkshopFilter, setInWorkshopFilter] = useState('all'); // all | in | out
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [loading, setLoading] = useState(false);
@@ -519,24 +523,8 @@ const BusesManagementPage = () => {
     };
 
     // =================== Búsqueda y filtros ===================
-    const handleSearchChange = (e) => {
-        setSearchQuery(e.target.value);
-    };
-
-    // client filter is handled via Autocomplete onChange (sets `clientFilter` directly)
-
-    const handleAvailabilityFilterChange = (e) => {
-        setAvailabilityFilter(e.target.value);
-        setPage(0);
-    };
-
-    const handleInWorkshopFilterChange = (e) => {
-        setInWorkshopFilter(e.target.value);
-        setPage(0);
-    };
-
-    // client options (schools + corporations) - loaded from API
-    const [clientOptions, setClientOptions] = useState([]);
+    const [clientSchools, setClientSchools] = useState([]);
+    const [clientCorporations, setClientCorporations] = useState([]);
 
     useEffect(() => {
         const loadClients = async () => {
@@ -547,44 +535,21 @@ const BusesManagementPage = () => {
                     api.get('/corporations', { params: { allCycles: true } })
                 ]);
 
+                // El selector agrupa los colegios por ciclo: se completa el objeto del ciclo si la respuesta no lo trae
                 const ciclosList = ciclosData?.ciclosEscolares || (Array.isArray(ciclosData) ? ciclosData : []);
-                const cicloMap = {};
+                const ciclosById = {};
                 for (const c of ciclosList) {
-                    cicloMap[c.id] = getCicloEscolarOptionLabel(c);
+                    ciclosById[c.id] = c;
                 }
 
                 const schoolsList = schoolsResp.data?.schools || schoolsResp.data || [];
                 const corpsList = corpsResp.data?.corporations || corpsResp.data || [];
 
-                const combined = [];
-                const pushIfValid = (item, type) => {
-                    if (!item) {
-                        return;
-                    }
-                    if (item.deleted) {
-                        return;
-                    }
-                    const id = item.id || item._id || item.value || item.uuid || item.name;
-                    const name = item.name || item.nombre || item.label || String(id);
-                    const cicloLabel = type === 'corporation'
-                        ? CORPORATIONS_GROUP_LABEL
-                        : (item.cicloEscolarId && cicloMap[item.cicloEscolarId] ? cicloMap[item.cicloEscolarId] : 'Sin ciclo');
-                    combined.push({ id, name, cicloLabel, _raw: item, type });
-                };
-
-                (Array.isArray(schoolsList) ? schoolsList : []).forEach((s) => pushIfValid(s, 'school'));
-                (Array.isArray(corpsList) ? corpsList : []).forEach((c) => pushIfValid(c, 'corporation'));
-
-                // Secciones en orden alfabético (igual que el resto de selectores de cliente).
-                combined.sort((a, b) => {
-                    const cmp = a.cicloLabel.localeCompare(b.cicloLabel, 'es');
-                    if (cmp !== 0) {
-                        return cmp;
-                    }
-                    return a.name.localeCompare(b.name, 'es');
-                });
-
-                setClientOptions(combined);
+                setClientSchools((Array.isArray(schoolsList) ? schoolsList : [])
+                    .filter((school) => school && !school.deleted)
+                    .map((school) => ({ ...school, cicloEscolar: school.cicloEscolar || ciclosById[school.cicloEscolarId] })));
+                setClientCorporations((Array.isArray(corpsList) ? corpsList : [])
+                    .filter((corporation) => corporation && !corporation.deleted));
             } catch (err) {
                 console.error('Error loading clients for filters:', err);
             }
@@ -593,11 +558,24 @@ const BusesManagementPage = () => {
         loadClients();
     }, [auth.token]);
 
+    const pageFilters = useFilters({
+        fields: [
+            F.search('search', { placeholder: 'Placa o descripción' }),
+            F.client({ schools: clientSchools, corporations: clientCorporations }),
+            F.select('availability', { label: 'Disponibilidad', width: 'sm', options: AVAILABILITY_OPTIONS }),
+            F.select('workshop', { label: 'Estado', width: 'sm', options: WORKSHOP_OPTIONS }),
+        ],
+        onApplied: () => setPage(0),
+    });
+    const {
+        search: searchQuery,
+        client: clientFilter,
+        availability: availabilityFilter,
+        workshop: inWorkshopFilter,
+    } = pageFilters.applied;
+
     const filteredBuses = buses.filter((bus) => {
-        const q = searchQuery.toLowerCase();
-        const inPlate = bus.plate?.toLowerCase().includes(q);
-        const inDesc = bus.description?.toLowerCase().includes(q);
-        if (!(inPlate || inDesc)) {
+        if (!matchSearchTokens(searchQuery, [bus.plate, bus.description])) {
             return false;
         }
 
@@ -612,7 +590,7 @@ const BusesManagementPage = () => {
                 if (String(sid) !== String(clientFilter.id)) {
                     return false;
                 }
-            } else if (clientFilter.type === 'corporation') {
+            } else if (clientFilter.type === 'corp') {
                 const c = bus.corporation;
                 if (!c) {
                     return false;
@@ -770,102 +748,32 @@ const BusesManagementPage = () => {
                 Gestión de Buses
             </Typography>
 
-            <Box
-                sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    marginBottom: '16px',
-                    gap: '6px'
-                }}
-            >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                    <TextField
-                        label="Buscar buses"
-                        variant="outlined"
-                        size="small"
-                        value={searchQuery}
-                        onChange={handleSearchChange}
-                        sx={{ width: 200 }}
-                    />
-
-                    <Autocomplete
-                        size="small"
-                        options={clientOptions}
-                        getOptionLabel={(opt) => opt.name || ''}
-                        groupBy={(opt) => opt.cicloLabel || 'Sin ciclo'}
-                        renderGroup={renderClientGroup}
-                        value={clientFilter ? clientOptions.find((o) => 
-                            String(o.id) === String(clientFilter.id) && o.type === clientFilter.type
-                        ) || null : null}
-                        onChange={(e, newVal) => {
-                            setClientFilter(newVal ? { id: newVal.id, type: newVal.type } : null);
-                            setPage(0);
-                        }}
-                        isOptionEqualToValue={(option, value) => {
-                            if (!value) {
-                                return false;
-                            }
-                            return String(option.id) === String(value.id) && option.type === value.type;
-                        }}
-                        sx={{ minWidth: 160, width: 220 }}
-                        renderInput={(params) => <TextField {...params} label="Cliente" />}
-                    />
-
-                    <FormControl size="small" sx={{ minWidth: 110 }}>
-                        <InputLabel id="availability-filter-label">Disponibilidad</InputLabel>
-                        <Select
-                            labelId="availability-filter-label"
-                            value={availabilityFilter}
-                            label="Disponibilidad"
-                            onChange={handleAvailabilityFilterChange}
-                        >
-                            <MenuItem value="all">Todos</MenuItem>
-                            <MenuItem value="assigned">Asignados</MenuItem>
-                            <MenuItem value="unassigned">Sin asignar</MenuItem>
-                        </Select>
-                    </FormControl>
-
-                    <FormControl size="small" sx={{ minWidth: 90 }}>
-                        <InputLabel id="inworkshop-filter-label">Estado</InputLabel>
-                        <Select
-                            labelId="inworkshop-filter-label"
-                            value={inWorkshopFilter}
-                            label="Taller"
-                            onChange={handleInWorkshopFilterChange}
-                        >
-                            <MenuItem value="all">Todos</MenuItem>
-                            <MenuItem value="in">En taller</MenuItem>
-                            <MenuItem value="out">Disponible</MenuItem>
-                            <MenuItem value="decommissioned">Dado de baja</MenuItem>
-                        </Select>
-                    </FormControl>
-                </Box>
-                <div>
-                    {/* Historial de rutas eliminado: botón removido */}
-                    <PermissionGuard permission="buses-carga-masiva">
-                        <Button
-                            variant="contained"
-                            color="info"
-                            startIcon={<FileUpload />}
-                            sx={{ mr: 2 }}
-                            onClick={handleOpenBulkDialog}
-                        >
-                            Carga Masiva
-                        </Button>
-                    </PermissionGuard>
-                    <PermissionGuard permission="buses-crear">
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            startIcon={<Add />}
-                            onClick={handleAddBus}
-                        >
-                            Añadir Bus
-                        </Button>
-                    </PermissionGuard>
-                </div>
+            {/* Acciones */}
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
+                <PermissionGuard permission="buses-carga-masiva">
+                    <Button
+                        variant="contained"
+                        color="info"
+                        startIcon={<FileUpload />}
+                        onClick={handleOpenBulkDialog}
+                    >
+                        Carga Masiva
+                    </Button>
+                </PermissionGuard>
+                <PermissionGuard permission="buses-crear">
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        startIcon={<Add />}
+                        onClick={handleAddBus}
+                    >
+                        Añadir Bus
+                    </Button>
+                </PermissionGuard>
             </Box>
+
+            {/* Filtros */}
+            <FilterBar {...pageFilters.barProps} loading={loading} />
 
             {loading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>

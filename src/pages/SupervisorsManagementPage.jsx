@@ -3,7 +3,6 @@
 import React, { useEffect, useState, useContext } from 'react';
 import {
     Typography,
-    TextField,
     Paper,
     CircularProgress,
     Table,
@@ -22,6 +21,10 @@ import {
     Chip,
     Alert
 } from '@mui/material';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F } from '../components/filters/filterFields';
+import { matchSearchTokens } from '../utils/clientFilter';
 import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
 import styled from 'styled-components';
 import tw from 'twin.macro';
@@ -142,9 +145,13 @@ const SupervisorsManagementPage = () => {
     const [loading, setLoading] = useState(false);
 
     // Para búsqueda y paginación
-    const [searchQuery, setSearchQuery] = useState('');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(5);
+    const pageFilters = useFilters({
+        fields: [F.search('search', { placeholder: 'Nombre o correo' })],
+        onApplied: () => setPage(0),
+    });
+    const { search: searchQuery } = pageFilters.applied;
 
     const [expanded, setExpanded] = useState(false);
 
@@ -173,13 +180,7 @@ const SupervisorsManagementPage = () => {
         }, [fetchSupervisors]);
 
     // Filtrar supervisores
-    const filteredSupervisors = supervisors.filter((s) => {
-        const search = searchQuery.toLowerCase();
-        return (
-            (s.name || '').toLowerCase().includes(search) ||
-            (s.email || '').toLowerCase().includes(search)
-        );
-    });
+    const filteredSupervisors = supervisors.filter((s) => matchSearchTokens(searchQuery, [s.name, s.email]));
 
     // Paginación
     const handleChangePage = (event, newPage) => {
@@ -200,23 +201,7 @@ const SupervisorsManagementPage = () => {
                 Gestión de Supervisores
             </Typography>
 
-            <div
-                style={{
-                    marginBottom: '1rem',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px'
-                }}
-            >
-                <TextField
-                    label="Buscar Supervisores"
-                    variant="outlined"
-                    size="small"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    style={{ width: isMobile ? '100%' : '33%' }}
-                />
-            </div>
+            <FilterBar {...pageFilters.barProps} loading={loading} />
 
             {loading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}>

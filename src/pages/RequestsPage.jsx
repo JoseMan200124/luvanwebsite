@@ -68,6 +68,9 @@ import {
     Create as CreateIcon,
 } from '@mui/icons-material';
 import PermissionGuard from '../components/PermissionGuard';
+import FilterBar from '../components/filters/FilterBar';
+import useFilters from '../hooks/useFilters';
+import { F } from '../components/filters/filterFields';
 import api from '../utils/axiosConfig';
 import { getCicloEscolarYear } from '../services/cicloEscolarService';
 
@@ -89,9 +92,16 @@ const HeaderCard = styled(Card)`
     color: white;
 `;
 
-const FiltersContainer = styled(Paper)`
-    ${tw`p-4 mb-4`}
-`;
+const STATUS_LABELS_ES = {
+    pending: 'Pendiente',
+    in_review: 'En revisión',
+    cancelled: 'Cancelada',
+    approved: 'Completada',
+    rejected: 'Rechazada',
+    completed: 'Completada'
+};
+
+const SELECTABLE_REQUEST_STATES = Object.keys(REQUEST_STATES).filter((s) => s !== 'approved');
 
 const StatsCard = styled(Card)`
     ${tw`h-full`}
@@ -152,9 +162,24 @@ const RequestsPage = () => {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [totalCount, setTotalCount] = useState(0);
 
-    const initialFilters = { userName: '', status: '', requestType: '', startDate: '', endDate: '' };
-    const [filters, setFilters] = useState(initialFilters);
-    const [draftFilters, setDraftFilters] = useState(initialFilters);
+    const pageFilters = useFilters({
+        fields: [
+            F.select('requestType', { label: 'Tipo', options: VALID_REQUEST_TYPES }),
+            F.select('status', {
+                label: 'Estado',
+                width: 'sm',
+                options: SELECTABLE_REQUEST_STATES.map((state) => ({ value: state, label: STATUS_LABELS_ES[state] || REQUEST_STATES[state] || state })),
+            }),
+            F.search('userName', { label: 'Solicitante', width: 'md' }),
+            F.dateRange('dates'),
+        ],
+        onApplied: () => setPage(0),
+    });
+    const { requestType, status, userName, dates } = pageFilters.applied;
+    const filters = useMemo(
+        () => ({ userName, status, requestType, startDate: dates.from, endDate: dates.to }),
+        [userName, status, requestType, dates.from, dates.to]
+    );
     const [sortBy, setSortBy] = useState('createdAt');
     const [sortOrder, setSortOrder] = useState('desc');
 
@@ -248,10 +273,6 @@ const RequestsPage = () => {
                 ? { cicloEscolarId, cicloEscolar: currentCicloEscolar, school: scopeData || stateSchool }
                 : { fiscalYear, corporation: scopeData || stateCorporation }
         });
-    };
-
-    const handleDraftChange = (field) => (event) => {
-        setDraftFilters(prev => ({ ...prev, [field]: event.target.value }));
     };
 
     const handleChangePage = (event, newPage) => setPage(newPage);
@@ -377,15 +398,6 @@ const RequestsPage = () => {
         low: '#9E9E9E'
     };
 
-    const STATUS_LABELS_ES = {
-        pending: 'Pendiente',
-        in_review: 'En revisión',
-        cancelled: 'Cancelada',
-        approved: 'Completada',
-        rejected: 'Rechazada',
-        completed: 'Completada'
-    };
-
     const STATUS_BG = {
         pending: '#FB8C00',
         in_review: '#42A5F5',
@@ -394,8 +406,6 @@ const RequestsPage = () => {
         completed: '#388E3C',
         rejected: '#E53935'
     };
-
-    const SELECTABLE_REQUEST_STATES = Object.keys(REQUEST_STATES).filter((s) => s !== 'approved');
 
     const getStatusIcon = (status) => {
         switch (status) {
@@ -845,39 +855,7 @@ const RequestsPage = () => {
                 </Grid>
             )}
 
-            <FiltersContainer elevation={1}>
-                <Grid container spacing={2} alignItems="center">
-                    <Grid item xs="auto" sm="auto" md={"auto"}>
-                        <TextField fullWidth size="small" label="Tipo" select value={draftFilters.requestType} onChange={handleDraftChange('requestType')} sx={{ width: 200 }}>
-                            <MenuItem value="">Todos</MenuItem>
-                            {Object.entries(VALID_REQUEST_TYPES).map(([k, label]) => (
-                                <MenuItem key={k} value={k}>{label}</MenuItem>
-                            ))}
-                        </TextField>
-                    </Grid>
-                    <Grid item xs="auto" sm="auto" md={"auto"}>
-                        <TextField fullWidth size="small" label="Estado" select value={draftFilters.status} onChange={handleDraftChange('status')} sx={{ width: 150 }}>
-                            <MenuItem value="">Todos</MenuItem>
-                                {SELECTABLE_REQUEST_STATES.map(s => (
-                                    <MenuItem key={s} value={s}>{STATUS_LABELS_ES[s] || REQUEST_STATES[s] || s}</MenuItem>
-                                ))}
-                        </TextField>
-                    </Grid>
-                    <Grid item xs="auto" sm="auto" md={"auto"}>
-                        <TextField fullWidth size="small" label="Solicitante (nombre)" value={draftFilters.userName} onChange={handleDraftChange('userName')} />
-                    </Grid>
-                    <Grid item xs="auto" sm="auto" md={"auto"}>
-                        <TextField sx={{ width: 150 }} size="small" type="date" fullWidth label="Fecha Inicio" value={draftFilters.startDate} onChange={handleDraftChange('startDate')} InputLabelProps={{ shrink: true }} />
-                    </Grid>
-                    <Grid item xs="auto" sm="auto" md={"auto"}>
-                        <TextField sx={{ width: 150 }} size="small" type="date" fullWidth label="Fecha Fin" value={draftFilters.endDate} onChange={handleDraftChange('endDate')} InputLabelProps={{ shrink: true }} />
-                    </Grid>
-                    <Grid item xs="auto" sm="auto" md={"auto"} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Button size="small" variant="outlined" onClick={() => { setDraftFilters(initialFilters); setFilters(initialFilters); setPage(0); }}>Limpiar filtros</Button>
-                        <Button size="small" variant="contained" onClick={() => { setFilters(draftFilters); setPage(0); }}>Buscar</Button>
-                    </Grid>
-                </Grid>
-            </FiltersContainer>
+            <FilterBar {...pageFilters.barProps} loading={loading} />
 
             <TableContainer component={Paper} sx={{ borderRadius: 2, boxShadow: 1, overflowX: 'auto' }}>
                 <Table size="small" sx={{ minWidth: 900 }}>
