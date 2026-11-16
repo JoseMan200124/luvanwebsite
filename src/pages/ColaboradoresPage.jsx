@@ -36,9 +36,6 @@ import {
     AccordionDetails
 } from '@mui/material';
 import { 
-    Business as CorporationIcon, 
-    CalendarToday,
-    ArrowBack,
     Edit,
     Delete,
     Add,
@@ -50,12 +47,11 @@ import {
     ToggleOn,
     ToggleOff
 } from '@mui/icons-material';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import api from '../utils/axiosConfig';
 import styled from 'styled-components';
-import tw from 'twin.macro';
 import ColaboradorScheduleModal from '../components/modals/ColaboradorScheduleModal';
 import BulkScheduleColaboradoresModal from '../components/modals/BulkScheduleColaboradoresModal';
 import ExcelJS from 'exceljs';
@@ -70,27 +66,13 @@ import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F, SERVICE_STATUS_OPTIONS } from '../components/filters/filterFields';
 import { matchSearchTokens } from '../utils/clientFilter';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
+import useClientScope from '../hooks/useClientScope';
 
 const COLABORADOR_STATUS_OPTIONS = ['Nuevo', 'Duplicado', 'Actualizado', 'Sin asignaciones', 'Activo', 'Inactivo']
     .map((status) => ({ value: status, label: status }));
 const COLABORADOR_SERVICE_OPTIONS = SERVICE_STATUS_OPTIONS.filter((option) => option.value !== 'SUSPENDED');
-
-const PageContainer = styled.div`
-    ${tw`bg-gray-50 min-h-screen w-full`}
-    padding: 2rem;
-    max-width: 1400px;
-    margin: 0 auto;
-
-    @media (max-width: 640px) {
-        padding: 1rem;
-    }
-`;
-
-const HeaderCard = styled(Card)`
-    ${tw`mb-6 shadow-lg`}
-    background: linear-gradient(135deg, #1976d2 0%, #0d47a1 100%);
-    color: white;
-`;
 
 const StyledAccordion = styled(Accordion)`
     &.MuiAccordion-root {
@@ -167,7 +149,6 @@ const ColaboradoresPage = () => {
         'usuarios-suspender-servicio',
         'usuarios-desactivar-servicio',
     ]);
-    const navigate = useNavigate();
     const location = useLocation();
     const { fiscalYear, corporationId } = useParams();
 
@@ -554,15 +535,6 @@ const ColaboradoresPage = () => {
         
         setFilteredColaboradores(filtered);
     }, [colaboradores, searchQuery, statusFilter, serviceStatusFilter, getColaboradorStatus]);
-
-    const handleBackToDashboard = () => {
-        navigate(`/admin/corporaciones/${fiscalYear}/${corporationId}`, {
-            state: {
-                fiscalYear: fiscalYear,
-                corporation: corporationData
-            }
-        });
-    };
 
     const handleSortChange = (field) => {
         if (sortBy === field) {
@@ -1558,6 +1530,7 @@ const ColaboradoresPage = () => {
     };
 
     const currentCorporation = corporationData || location.state?.corporation;
+    const scope = useClientScope({ entity: currentCorporation });
 
     // Aplicar ordenamiento a los colaboradores filtrados antes de paginar
     const sortedColaboradores = (() => {
@@ -1886,172 +1859,81 @@ const ColaboradoresPage = () => {
         </Dialog>
     );
 
+    const headerActions = [
+        { key: 'download', label: 'Descargar colaboradores', group: 'download', onClick: () => setOpenDownloadDialog(true) },
+        puedeGestionarColaboradores && { key: 'bulk', label: 'Carga masiva', group: 'upload', permission: 'corporaciones-carga-masiva-colaboradores', onClick: () => setOpenBulkDialog(true) },
+        { key: 'schedules', label: 'Cargar horarios', group: 'upload', permission: 'corporaciones-carga-masiva-horarios', onClick: () => setOpenBulkScheduleDialog(true) },
+        { key: 'circular', label: 'Enviar circular', group: 'send', permission: 'mail-enviar-circular-colaboradores', onClick: () => setOpenCircularDialog(true) },
+        puedeGestionarColaboradores && { key: 'add', label: 'Añadir colaborador', icon: <Add />, primary: true, permission: 'corporaciones-crear-colaborador', onClick: handleOpenCreateDialog },
+    ];
+
     return (
         <PageContainer>
-            {/* Header */}
-            <HeaderCard>
-                <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                        <Button
-                            startIcon={<ArrowBack />}
-                            onClick={handleBackToDashboard}
-                            sx={{ color: 'white', '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
+            <PageHeader
+                variant="hero"
+                tone={scope.tone}
+                title="Colaboradores"
+                name={currentCorporation?.name ?? null}
+                back={scope.back}
+                period={scope.periodLabel(fiscalYear)}
+                meta={[`${filteredColaboradores.length} colaboradores`]}
+                actions={headerActions}
+            />
+
+            <Dialog open={openDownloadDialog} onClose={() => setOpenDownloadDialog(false)}>
+                <DialogTitle>Descargar Colaboradores</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>Selecciona qué deseas descargar:</DialogContentText>
+                    <FormControl fullWidth sx={{ mt: 2 }}>
+                        <InputLabel id="colab-download-select-label">Opción</InputLabel>
+                        <Select
+                            labelId="colab-download-select-label"
+                            value={downloadChoice}
+                            label="Opción"
+                            onChange={(e) => setDownloadChoice(e.target.value)}
                         >
-                            Volver al Dashboard
-                        </Button>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <CorporationIcon sx={{ fontSize: 40 }} />
-                        <Box>
-                            <Typography variant="h4" component="h1" gutterBottom>
-                                Colaboradores - {corporationData?.name || 'Corporación'}
-                            </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                <Chip 
-                                    icon={<CalendarToday />}
-                                    label={`Año Fiscal ${fiscalYear}`}
-                                    sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
-                                />
-                                <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                                    {filteredColaboradores.length} colaboradores
-                                </Typography>
-                            </Box>
-                        </Box>
-                    </Box>
-                </CardContent>
-            </HeaderCard>
+                            <MenuItem value="all">Todos</MenuItem>
+                            <MenuItem value="new">Nuevos</MenuItem>
+                            
+                            <MenuItem value="ACTIVE">Activos</MenuItem>
+                            <MenuItem value="PAUSED">Pausados</MenuItem>
+                            <MenuItem value="SUSPENDED">Suspendidos</MenuItem>
+                            <MenuItem value="INACTIVE">Inactivos</MenuItem>
+                            <MenuItem value="report">Reporte de Paradas</MenuItem>
+                        </Select>
+                    </FormControl>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setOpenDownloadDialog(false)}>Cancelar</Button>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        startIcon={<GetApp />}
+                        onClick={async () => {
+                            const upper = (downloadChoice || '').toString().toUpperCase();
+                            const serviceStates = ['ACTIVE', 'PAUSED', 'SUSPENDED', 'INACTIVE'];
+                            if (downloadChoice === 'new') {
+                                await handleDownloadNewColaboradores();
+                            }
+                            else if (downloadChoice === 'all') {
+                                await handleDownloadAllColaboradores();
+                            }
+                            else if (downloadChoice === 'report') {
+                                await handleDownloadRouteReport();
+                            }
+                            else if (serviceStates.includes(upper)) {
+                                await handleDownloadByServiceStatusColaboradores(upper);
+                            }
+                            setOpenDownloadDialog(false);
+                        }}
+                    >
+                        Descargar
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
             {/* Filtros y búsqueda */}
             <FilterBar {...pageFilters.barProps} loading={loading} />
-
-            {/* Botones de Acción */}
-            <Card sx={{ mb: 3 }}>
-                <CardContent>
-                    <Grid container spacing={2}>
-                        {puedeGestionarColaboradores && (
-                            <PermissionGuard permission="corporaciones-carga-masiva-colaboradores">
-                                <Grid item xs={12} md={2}>
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        startIcon={<FileUpload />}
-                                        fullWidth
-                                        onClick={() => setOpenBulkDialog(true)}
-                                    >
-                                        Carga Masiva
-                                    </Button>
-                                </Grid>
-                            </PermissionGuard>
-                        )}
-                        <PermissionGuard permission="corporaciones-carga-masiva-horarios">
-                            <Grid item xs={12} md={2}>
-                                <Button
-                                    variant="contained"
-                                    color="primary"
-                                    startIcon={<FileUpload />}
-                                    fullWidth
-                                    onClick={() => setOpenBulkScheduleDialog(true)}
-                                >
-                                    Cargar Horarios
-                                </Button>
-                            </Grid>
-                        </PermissionGuard>
-                        {puedeGestionarColaboradores && (
-                            <PermissionGuard permission="corporaciones-crear-colaborador">
-                                <Grid item xs={12} md={2}>
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        startIcon={<Add />}
-                                        fullWidth
-                                        onClick={handleOpenCreateDialog}
-                                        sx={{ fontSize: '0.811rem' }}
-                                    >
-                                        Añadir Colaborador
-                                    </Button>
-                                </Grid>
-                            </PermissionGuard>
-                        )}
-                        <PermissionGuard permission="mail-enviar-circular-colaboradores">
-                            <Grid item xs={12} md={2}>
-                                <Button
-                                    variant="contained"
-                                    color="secondary"
-                                    startIcon={<Mail />}
-                                    fullWidth
-                                    onClick={() => setOpenCircularDialog(true)}
-                                >
-                                    Enviar Circular
-                                </Button>
-                            </Grid>
-                        </PermissionGuard>
-                        <Grid item xs={12} md={2}>
-                            <Button
-                                variant="contained"
-                                color="success"
-                                startIcon={<GetApp />}
-                                fullWidth
-                                onClick={() => setOpenDownloadDialog(true)}
-                            >
-                                Descargar
-                            </Button>
-                        </Grid>
-
-                        <Dialog open={openDownloadDialog} onClose={() => setOpenDownloadDialog(false)}>
-                            <DialogTitle>Descargar Colaboradores</DialogTitle>
-                            <DialogContent>
-                                <DialogContentText>Selecciona qué deseas descargar:</DialogContentText>
-                                <FormControl fullWidth sx={{ mt: 2 }}>
-                                    <InputLabel id="colab-download-select-label">Opción</InputLabel>
-                                    <Select
-                                        labelId="colab-download-select-label"
-                                        value={downloadChoice}
-                                        label="Opción"
-                                        onChange={(e) => setDownloadChoice(e.target.value)}
-                                    >
-                                        <MenuItem value="all">Todos</MenuItem>
-                                        <MenuItem value="new">Nuevos</MenuItem>
-                                        
-                                        <MenuItem value="ACTIVE">Activos</MenuItem>
-                                        <MenuItem value="PAUSED">Pausados</MenuItem>
-                                        <MenuItem value="SUSPENDED">Suspendidos</MenuItem>
-                                        <MenuItem value="INACTIVE">Inactivos</MenuItem>
-                                        <MenuItem value="report">Reporte de Paradas</MenuItem>
-                                    </Select>
-                                </FormControl>
-                            </DialogContent>
-                            <DialogActions>
-                                <Button onClick={() => setOpenDownloadDialog(false)}>Cancelar</Button>
-                                <Button
-                                    variant="contained"
-                                    color="primary"
-                                    startIcon={<GetApp />}
-                                    onClick={async () => {
-                                        const upper = (downloadChoice || '').toString().toUpperCase();
-                                        const serviceStates = ['ACTIVE', 'PAUSED', 'SUSPENDED', 'INACTIVE'];
-                                        if (downloadChoice === 'new') {
-                                            await handleDownloadNewColaboradores();
-                                        }
-                                        else if (downloadChoice === 'all') {
-                                            await handleDownloadAllColaboradores();
-                                        }
-                                        else if (downloadChoice === 'report') {
-                                            await handleDownloadRouteReport();
-                                        }
-                                        else if (serviceStates.includes(upper)) {
-                                            await handleDownloadByServiceStatusColaboradores(upper);
-                                        }
-                                        setOpenDownloadDialog(false);
-                                    }}
-                                >
-                                    Descargar
-                                </Button>
-                            </DialogActions>
-                        </Dialog>
-                        
-                    </Grid>
-                </CardContent>
-            </Card>
 
             {/* Tabla de colaboradores */}
             <Card>

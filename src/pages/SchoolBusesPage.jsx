@@ -26,8 +26,8 @@ import {
     Chip,
     Tooltip
 } from '@mui/material';
-import { DirectionsBus, Save, Clear, ArrowBack, Refresh, ContentCopy, Schedule } from '@mui/icons-material';
-import { useParams, useLocation, useNavigate } from 'react-router-dom';
+import { DirectionsBus, Save, Clear, Refresh, ContentCopy, Schedule } from '@mui/icons-material';
+import { useParams, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import PermissionGuard from '../components/PermissionGuard';
@@ -36,28 +36,15 @@ import { getCicloEscolarYear } from '../services/cicloEscolarService';
 import { getSchoolSchedules } from '../services/scheduleService';
 import { DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool } from '../utils/scheduleConfig';
 import ScheduleThresholdsDialog from '../components/ScheduleThresholdsDialog';
-import styled from 'styled-components';
-import tw from 'twin.macro';
-
-const PageContainer = styled.div`
-    ${tw`bg-gray-50 min-h-screen w-full`}
-    padding: 2rem;
-    max-width: 1200px;
-    margin: 0 auto;
-`;
-
-const HeaderCard = styled(Card)`
-    ${tw`mb-6 shadow-lg`}
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-`;
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
+import useClientScope from '../hooks/useClientScope';
 
 const SchoolBusesPage = () => {
     const { hasPermission } = usePermissions();
     const { auth } = useContext(AuthContext);
     const { cicloEscolarId: routeCicloEscolarId, schoolId } = useParams();
     const location = useLocation();
-    const navigate = useNavigate();
 
     const stateSchool = location.state?.school;
     const stateCicloEscolarId = routeCicloEscolarId || location.state?.cicloEscolarId || stateSchool?.cicloEscolarId || '';
@@ -97,6 +84,7 @@ const SchoolBusesPage = () => {
     const stateCicloEscolar = location.state?.cicloEscolar || stateSchool?.cicloEscolar || stateSchool?.CicloEscolar || null;
     const currentCicloEscolar = schoolData?.cicloEscolar || schoolData?.CicloEscolar || stateCicloEscolar;
     const currentSchool = schoolData || stateSchool;
+    const scope = useClientScope({ entity: currentSchool, cicloEscolar: currentCicloEscolar });
     const currentCycleLabel = getCicloEscolarYear(currentCicloEscolar);
     const currentSchoolCycleId = String(stateCicloEscolarId || currentSchool?.cicloEscolarId || '').trim();
     const currentOperationStatus = String(currentSchool?.operationStatus || 'ACTIVE').trim().toUpperCase();
@@ -606,10 +594,6 @@ const SchoolBusesPage = () => {
         }
     };
 
-    const handleBack = () => {
-        navigate(-1);
-    };
-
     // Obtener buses disponibles para una ruta específica
     // Excluye buses que ya están asignados a otras rutas en el estado actual (no guardado)
     const getAvailableBusesForRoute = (currentRouteNumber) => {
@@ -706,35 +690,16 @@ const SchoolBusesPage = () => {
 
     return (
         <PageContainer>
-            <HeaderCard>
-                <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                        <Button
-                            startIcon={<ArrowBack />}
-                            onClick={handleBack}
-                            sx={{ color: 'white', '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
-                        >
-                            Volver
-                        </Button>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <DirectionsBus sx={{ fontSize: 40 }} />
-                        <Box>
-                            <Typography variant="h4">Asignación de Buses - {currentSchool?.name || 'Cargando...'}</Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                                <Typography variant="body2">Ciclo Escolar {currentCycleLabel}</Typography>
-                                <Chip
-                                    label={assignmentModeLabel}
-                                    size="small"
-                                    color={isPreparationMode ? 'warning' : 'success'}
-                                    variant="filled"
-                                    sx={{ bgcolor: isPreparationMode ? 'warning.main' : 'success.main', color: 'white' }}
-                                />
-                            </Box>
-                        </Box>
-                    </Box>
-                </CardContent>
-            </HeaderCard>
+            <PageHeader
+                variant="hero"
+                tone={scope.tone}
+                icon={DirectionsBus}
+                title="Asignación de Buses"
+                name={currentSchool?.name ?? null}
+                back={scope.back}
+                period={scope.periodLabel(currentCycleLabel)}
+                chips={[{ key: 'mode', label: assignmentModeLabel, sx: { backgroundColor: isPreparationMode ? 'warning.main' : 'success.main' } }]}
+            />
 
             {isPreparationMode && (
                 <Alert severity="warning" sx={{ mb: 2 }}>

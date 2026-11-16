@@ -1,8 +1,7 @@
 // Dashboard.jsx
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import tw from 'twin.macro';
-import styled from 'styled-components';
-import { Button, CircularProgress, Snackbar, Alert } from '@mui/material';
+import { CircularProgress, Snackbar, Alert } from '@mui/material';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -14,20 +13,11 @@ import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
 import { getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
 
 const MONTH_OPTIONS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
     .map((month) => ({ value: month, label: month }));
-
-// Contenedor principal del dashboard
-const DashboardContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
-
-// Encabezado del dashboard
-const Header = styled.div`
-    ${tw`flex flex-col md:flex-row items-center justify-between mb-8`}
-`;
-
-// Título del dashboard
-const Title = tw.h1`text-3xl font-bold text-gray-800`;
 
 // Grid para las tarjetas de indicadores
 const StatsGrid = tw.div`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8`;
@@ -157,16 +147,8 @@ const Dashboard = () => {
     };
 
     return (
-        <DashboardContainer>
-            {/* Encabezado */}
-            <Header>
-                <Title>Dashboard</Title>
-                <div tw="flex space-x-4">
-                    <Button variant="contained" color="primary" onClick={generatePDF}>
-                        Generar PDF
-                    </Button>
-                </div>
-            </Header>
+        <PageContainer width="xl">
+            <PageHeader title="Dashboard" actions={[{ key: 'pdf', label: 'Generar PDF', group: 'download', onClick: generatePDF }]} />
 
             {/* Filtros */}
             <FilterBar {...pageFilters.barProps} loading={loading} />
@@ -205,7 +187,7 @@ const Dashboard = () => {
                     </Alert>
                 </Snackbar>
             )}
-        </DashboardContainer>
+        </PageContainer>
     );
 };
 

@@ -13,12 +13,9 @@ import {
     TablePagination,
     Paper,
     Chip,
-    IconButton,
-    Tooltip,
     CircularProgress,
     Alert
 } from '@mui/material';
-import { Refresh as RefreshIcon } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import moment from 'moment-timezone';
@@ -27,6 +24,8 @@ import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEsc
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -416,17 +415,12 @@ const AssignmentHistoryPage = () => {
     };
 
     return (
-        <Box sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h4" component="h1">
-                    Historial de Asignaciones
-                </Typography>
-                <Tooltip title="Recargar">
-                    <IconButton onClick={fetchHistory} color="primary">
-                        <RefreshIcon />
-                    </IconButton>
-                </Tooltip>
-            </Box>
+        <PageContainer width="xl">
+            <PageHeader
+                eyebrow="Historiales"
+                title="Historial de Asignaciones"
+                actions={[{ key: 'reload', label: 'Recargar', group: 'other', onClick: fetchHistory }]}
+            />
 
             {!loading && (
                 <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
@@ -537,7 +531,7 @@ const AssignmentHistoryPage = () => {
                     )}
                 </CardContent>
             </Card>
-        </Box>
+        </PageContainer>
     );
 };
 

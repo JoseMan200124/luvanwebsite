@@ -35,8 +35,8 @@ import {
     Save as SaveIcon,
     PhoneIphone as PhoneIphoneIcon,
     WarningAmber as WarningAmberIcon,
+    AdminPanelSettings,
 } from '@mui/icons-material';
-import tw from 'twin.macro';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import usePermissions from '../hooks/usePermissions';
@@ -45,8 +45,8 @@ import CatalogOrganizer from '../components/CatalogOrganizer';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
-
-const PageContainer = tw.div`p-8 bg-gray-50 min-h-screen`;
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
 
 /** Grupo que se muestra aparte: no aplica a quien solo usa el sistema web. */
 const GRUPO_MOVIL = 'app-movil';
@@ -492,18 +492,15 @@ const PermissionsManagementPage = () => {
 
     // ---------------------------------------------------------------- render
     return (
-        <PageContainer>
-            <Box sx={{ maxWidth: 1200, mx: 'auto', pb: 10 }}>
-                <Box sx={{ mb: 3 }}>
-                    <Typography variant="h4" sx={{ fontWeight: 600, color: '#1a237e', mb: 1 }}>
-                        Gestión de Permisos
-                    </Typography>
-                    <Typography variant="body1" sx={{ color: '#666' }}>
-                        {pestana === 'asignar'
-                            ? 'Elige un rol y define qué puede hacer dentro del sistema.'
-                            : 'Organiza cómo se agrupan y describen los permisos.'}
-                    </Typography>
-                </Box>
+        <PageContainer width="xl">
+            <Box sx={{ pb: 10 }}>
+                <PageHeader
+                    icon={AdminPanelSettings}
+                    title="Gestión de Permisos"
+                    subtitle={pestana === 'asignar'
+                        ? 'Elige un rol y define qué puede hacer dentro del sistema.'
+                        : 'Organiza cómo se agrupan y describen los permisos.'}
+                />
 
                 {puedeOrganizar && (
                     <Tabs

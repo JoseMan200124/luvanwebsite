@@ -8,6 +8,7 @@ import Sidebar from './Sidebar';
 import NotificationsMenu from './NotificationsMenu';
 import { AuthContext } from '../context/AuthProvider';
 import PageRefreshProvider, { PageRefreshContext } from '../context/PageRefreshProvider';
+import { LAYOUT_ACCENT, PAGE_BG } from '../theme/tokens';
 
 const GlobalRefreshButton = ({ compact = false, onRefreshStart, onRefreshEnd }) => {
     const refreshCtx = useContext(PageRefreshContext);
@@ -35,12 +36,12 @@ const GlobalRefreshButton = ({ compact = false, onRefreshStart, onRefreshEnd }) 
                         disabled={!refreshCtx || isRefreshing}
                         aria-label="Refrescar"
                         sx={{
-                            backgroundColor: '#9c27b0',
+                            backgroundColor: LAYOUT_ACCENT.main,
                             color: '#fff',
                             borderRadius: '50%',
-                            boxShadow: '0 0 0 3px rgba(156,39,176,0.14)',
+                            boxShadow: '0 0 0 3px rgba(58,162,98,0.14)',
                             transition: 'box-shadow 180ms ease, background-color 150ms ease, transform 120ms ease',
-                            '&:hover': { backgroundColor: '#7b1fa2', boxShadow: '0 0 0 4px rgba(156,39,176,0.22)', transform: 'translateY(-1px)' },
+                            '&:hover': { backgroundColor: LAYOUT_ACCENT.dark, boxShadow: '0 0 0 4px rgba(58,162,98,0.22)', transform: 'translateY(-1px)' },
                             padding: '7px'
                         }}
                     >
@@ -61,10 +62,10 @@ const GlobalRefreshButton = ({ compact = false, onRefreshStart, onRefreshEnd }) 
             sx={{
                 textTransform: 'none',
                 borderRadius: 2,
-                backgroundColor: '#9c27b0',
+                backgroundColor: LAYOUT_ACCENT.main,
                 color: '#fff',
-                boxShadow: '0 0 0 3px rgba(156,39,176,0.14)',
-                '&:hover': { backgroundColor: '#7b1fa2', boxShadow: '0 0 0 4px rgba(156,39,176,0.22)' },
+                boxShadow: '0 0 0 3px rgba(58,162,98,0.14)',
+                '&:hover': { backgroundColor: LAYOUT_ACCENT.dark, boxShadow: '0 0 0 4px rgba(58,162,98,0.22)' },
                 padding: '4px 8px',
                 fontSize: '0.9rem',
                 minHeight: '36px',
@@ -175,7 +176,7 @@ const ProtectedLayout = () => {
                     </div>
 
                     {/* Contenido Principal */}
-                    <div style={{ padding: isMobile ? '64px 12px 16px' : '20px' }}>
+                    <div style={{ padding: isMobile ? '64px 12px 16px' : '20px', backgroundColor: PAGE_BG, minHeight: '100vh' }}>
                         <div
                             ref={outletWrapperRef}
                             style={{

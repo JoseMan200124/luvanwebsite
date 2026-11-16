@@ -45,7 +45,6 @@ import {
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import { getCiclosEscolares } from '../services/cicloEscolarService';
-import tw from 'twin.macro';
 import styled from 'styled-components';
 import * as XLSX from 'xlsx';
 import PermissionGuard from '../components/PermissionGuard';
@@ -53,9 +52,9 @@ import usePermissions from '../hooks/usePermissions';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
 import { matchSearchTokens } from '../utils/clientFilter';
-
-const BusesContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
 
 const AVAILABILITY_OPTIONS = [
     { value: 'assigned', label: 'Asignados' },
@@ -743,35 +742,15 @@ const BusesManagementPage = () => {
     );
 
     return (
-        <BusesContainer>
-            <Typography variant="h4" gutterBottom>
-                Gestión de Buses
-            </Typography>
-
-            {/* Acciones */}
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
-                <PermissionGuard permission="buses-carga-masiva">
-                    <Button
-                        variant="contained"
-                        color="info"
-                        startIcon={<FileUpload />}
-                        onClick={handleOpenBulkDialog}
-                    >
-                        Carga Masiva
-                    </Button>
-                </PermissionGuard>
-                <PermissionGuard permission="buses-crear">
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        startIcon={<Add />}
-                        onClick={handleAddBus}
-                    >
-                        Añadir Bus
-                    </Button>
-                </PermissionGuard>
-            </Box>
-
+        <PageContainer width="xl">
+            <PageHeader
+                eyebrow="Gestión de Buses"
+                title="Gestión de Buses"
+                actions={[
+                    { key: 'bulk', label: 'Carga masiva', group: 'upload', permission: 'buses-carga-masiva', onClick: handleOpenBulkDialog },
+                    { key: 'add', label: 'Añadir bus', icon: <Add />, primary: true, permission: 'buses-crear', onClick: handleAddBus },
+                ]}
+            />
             {/* Filtros */}
             <FilterBar {...pageFilters.barProps} loading={loading} />
 
@@ -1343,7 +1322,7 @@ const BusesManagementPage = () => {
                 </Alert>
             </Snackbar>
             {/* RouteHistoryModal removed */}
-        </BusesContainer>
+        </PageContainer>
     );
 };
 

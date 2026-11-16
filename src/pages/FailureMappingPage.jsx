@@ -46,7 +46,6 @@ import {
 } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
-import tw from 'twin.macro';
 import { getAllFailureMappings, getFailureMappingById, deleteFailureMapping, FAILURE_TYPES, INCIDENT_EVENT_TYPES } from '../services/failureMappingService';
 import api from '../utils/axiosConfig';
 import ClientSelector from '../components/ClientSelector';
@@ -56,12 +55,13 @@ import PermissionGuard from '../components/PermissionGuard';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F, YES_NO_OPTIONS, toPlateOptions, toRouteOptions } from '../components/filters/filterFields';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
 import FailureMappingFormDialog from '../components/FailureMappingFormDialog';
 import { AuthContext } from '../context/AuthProvider';
 
 moment.tz.setDefault('America/Guatemala');
 
-const Container = tw.div`p-8 bg-gray-100 min-h-screen`;
 const NO_FAILURES_FILTER_VALUE = 'sin_fallas';
 
 const FAILURE_TYPE_OPTIONS = [
@@ -586,57 +586,21 @@ const FailureMappingPage = () => {
 
     return (
         <LocalizationProvider dateAdapter={AdapterMoment}>
-            <Container>
-                <Box mb={3}>
-                    <Typography variant="h4" gutterBottom>
-                        Mapeo de Fallas
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                        Depuración y registro de fallas reportadas por los supervisores
-                    </Typography>
-                    <Box
-                        mt={2}
-                        display="flex"
-                        flexWrap="wrap"
-                        alignItems="center"
-                        gap={1.5}
-                    >
-                        <Button
-                            variant="contained"
-                            onClick={handleOpenPdfModal}
-                            disabled={exportingPdf}
-                            startIcon={<PictureAsPdfIcon />}
-                            sx={{
-                                borderRadius: 999,
-                                px: 2.5,
-                                py: 1.1,
-                                textTransform: 'none',
-                                fontWeight: 800,
-                                letterSpacing: 0.2,
-                                background: 'linear-gradient(135deg, #1f4e79 0%, #2f6ea8 100%)',
-                                boxShadow: '0 10px 24px rgba(31, 78, 121, 0.28)',
-                                '&:hover': {
-                                    background: 'linear-gradient(135deg, #173c5d 0%, #255d8f 100%)',
-                                    boxShadow: '0 12px 28px rgba(31, 78, 121, 0.34)',
-                                },
-                                '&:disabled': {
-                                    background: 'linear-gradient(135deg, #93b2cb 0%, #b4c9db 100%)',
-                                    color: '#fff',
-                                }
-                            }}
-                        >
-                            {exportingPdf ? 'Generando PDF...' : 'Generar Reporte PDF'}
-                        </Button>
-                        <Typography variant="body2" color="textSecondary" sx={{ maxWidth: 460, lineHeight: 1.35 }}>
-                            Selecciona el cliente y el mes para generar el reporte mensual.
-                        </Typography>
-                    </Box>
-                </Box>
+            <PageContainer width="xl">
+                <PageHeader
+                    eyebrow="Gestión de Buses"
+                    title="Mapeo de Fallas"
+                    subtitle="Depuración y registro de fallas reportadas por los supervisores"
+                    actions={[
+                        { key: 'pdf', label: 'Generar reporte PDF', group: 'download', loading: exportingPdf, tooltip: 'Selecciona el cliente y el mes para generar el reporte mensual.', onClick: handleOpenPdfModal },
+                        isGestor && { key: 'create', label: 'Nuevo registro', icon: <AddIcon />, primary: true, permission: 'mapeo-fallas-crear', onClick: handleOpenCreateManual },
+                    ]}
+                />
 
                 {/* Estadísticas */}
                 <Grid container spacing={3} mb={3}>
                     <Grid item xs={12} sm={6} md={3}>
-                        <Card>
+                        <Card sx={{ height: '100%' }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
                                     Total Registros
@@ -651,7 +615,7 @@ const FailureMappingPage = () => {
                         </Card>
                     </Grid>
                     <Grid item xs={12} sm={6} md={3}>
-                        <Card>
+                        <Card sx={{ height: '100%' }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
                                     Accidentes
@@ -663,7 +627,7 @@ const FailureMappingPage = () => {
                         </Card>
                     </Grid>
                     <Grid item xs={12} sm={6} md={3}>
-                        <Card>
+                        <Card sx={{ height: '100%' }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
                                     Afectó Recorrido
@@ -675,7 +639,7 @@ const FailureMappingPage = () => {
                         </Card>
                     </Grid>
                     <Grid item xs={12} sm={6} md={3}>
-                        <Card>
+                        <Card sx={{ height: '100%' }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
                                     Días No Operacionales
@@ -687,17 +651,6 @@ const FailureMappingPage = () => {
                         </Card>
                     </Grid>
                 </Grid>
-
-                {/* Acciones de la página (fuera de la barra de filtros) */}
-                {isGestor && (
-                    <PermissionGuard permission="mapeo-fallas-crear">
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
-                            <Button onClick={handleOpenCreateManual} variant="contained" color="primary">
-                                Nuevo Registro
-                            </Button>
-                        </Box>
-                    </PermissionGuard>
-                )}
 
                 {/* Filtros */}
                 <FilterBar
@@ -1325,7 +1278,7 @@ const FailureMappingPage = () => {
                     onSaved={handleFormSaved}
                     record={formRecord}
                 />
-            </Container>
+            </PageContainer>
         </LocalizationProvider>
     );
 };

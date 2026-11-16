@@ -45,25 +45,10 @@ import api from '../utils/axiosConfig';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import styled from 'styled-components';
 import tw from 'twin.macro';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
 import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
-
-const PageContainer = styled.div`
-    ${tw`bg-gray-50 min-h-screen w-full`}
-    padding: 2rem;
-    max-width: 1400px;
-    margin: 0 auto;
-
-    @media (max-width: 640px) {
-        padding: 1rem;
-    }
-`;
-
-const HeaderCard = styled(Card)`
-    ${tw`mb-6 shadow-lg`}
-    background: linear-gradient(135deg, #1976d2 0%, #0d47a1 100%);
-    color: white;
-`;
 
 const CorporationCard = styled(Card)`
     ${tw`cursor-pointer transition-all duration-300`}
@@ -1064,22 +1049,14 @@ const CorporationsPage = () => {
 
     return (
         <PageContainer>
-            {/* Header */}
-            <HeaderCard>
-                <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <CalendarToday sx={{ fontSize: 40 }} />
-                        <Box>
-                            <Typography variant="h4" component="h1" gutterBottom>
-                                Gestión de Transportes Corporativos
-                            </Typography>
-                            <Typography variant="h6" sx={{ opacity: 0.9 }}>
-                                Selecciona el año fiscal y corporación para gestionar
-                            </Typography>
-                        </Box>
-                    </Box>
-                </CardContent>
-            </HeaderCard>
+            <PageHeader
+                variant="hero"
+                tone="corporate"
+                icon={CalendarToday}
+                title="Gestión de Transportes Corporativos"
+                subtitle="Selecciona el año fiscal y corporación para gestionar"
+                actions={[{ key: 'add', label: 'Añadir corporación', icon: <Add />, primary: true, permission: 'corporaciones-crear', onClick: handleOpenCreateDialog }]}
+            />
 
             {/* Selector de Año Fiscal */}
             <Card sx={{ mb: 4 }}>
@@ -1103,19 +1080,6 @@ const CorporationsPage = () => {
                                     ))}
                                 </Select>
                             </FormControl>
-
-                            <Box sx={{ display: 'flex', gap: 1 }}>
-                                <PermissionGuard permission="corporaciones-crear">    
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        onClick={handleOpenCreateDialog}
-                                        >
-                                        Añadir Corporación
-                                    </Button>
-                                </PermissionGuard>
-                                
-                            </Box>
                         </Box>
                     </Box>
                 </CardContent>

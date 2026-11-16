@@ -27,9 +27,10 @@ import {
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
 import { matchSearchTokens } from '../utils/clientFilter';
 import styled from 'styled-components';
-import tw from 'twin.macro';
 import { Visibility as VisibilityIcon } from '@mui/icons-material';
 import moment from 'moment-timezone';
 
@@ -40,8 +41,6 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 moment.tz.setDefault('America/Guatemala');
 
 // Contenedor principal
-const MonitorsContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
-
 // Helper para agrupar por colegio (school)
 const groupBySchool = (arr) => {
     const result = {};
@@ -237,10 +236,11 @@ const MonitorsManagementPage = () => {
     const schoolKeys = Object.keys(groupedData);
 
     return (
-        <MonitorsContainer>
-            <Typography variant="h4" gutterBottom>
-                Gestión de Monitores
-            </Typography>
+        <PageContainer width="xl">
+            <PageHeader
+                eyebrow="Gestión de Personal"
+                title="Gestión de Monitores"
+            />
 
             {/* Búsqueda */}
             <FilterBar {...pageFilters.barProps} loading={loading} />
@@ -509,7 +509,7 @@ const MonitorsManagementPage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
-        </MonitorsContainer>
+        </PageContainer>
     );
 };
 

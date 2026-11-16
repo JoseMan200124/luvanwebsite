@@ -19,10 +19,9 @@ import {
     TableHead,
     TableRow,
     TextField,
-    Tooltip,
-    Typography
+    Tooltip
 } from '@mui/material';
-import { Add, Edit, Star } from '@mui/icons-material';
+import { Add, CalendarToday, Edit, Star } from '@mui/icons-material';
 import PermissionGuard from '../components/PermissionGuard';
 import {
     createCicloEscolar,
@@ -32,6 +31,8 @@ import {
 } from '../services/cicloEscolarService';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { setSelectedCicloEscolarId } from '../utils/schoolContext';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
 
 const emptyForm = {
     anio: ''
@@ -149,26 +150,15 @@ const CiclosEscolaresPage = () => {
     };
 
     return (
-        <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1200, mx: 'auto' }}>
-            <Card sx={{ mb: 3, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
-                <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
-                        <Box>
-                            <Typography variant="h4" component="h1" gutterBottom>
-                                Ciclos Escolares
-                            </Typography>
-                            <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                                Administra ciclos habilitados por colegio. El predeterminado se usa como selección inicial.
-                            </Typography>
-                        </Box>
-                        <PermissionGuard permission="ciclos-escolares-crear">
-                            <Button variant="contained" color="inherit" startIcon={<Add />} onClick={handleOpenCreate} sx={{ color: '#4f46e5' }}>
-                                Nuevo Ciclo
-                            </Button>
-                        </PermissionGuard>
-                    </Box>
-                </CardContent>
-            </Card>
+        <PageContainer width="md">
+            <PageHeader
+                variant="hero"
+                tone="school"
+                icon={CalendarToday}
+                title="Ciclos Escolares"
+                subtitle="Administra ciclos habilitados por colegio. El predeterminado se usa como selección inicial."
+                actions={[{ key: 'add', label: 'Nuevo ciclo', icon: <Add />, primary: true, permission: 'ciclos-escolares-crear', onClick: handleOpenCreate }]}
+            />
 
             <Card>
                 <CardContent>
@@ -244,7 +234,7 @@ const CiclosEscolaresPage = () => {
                     {snackbar.message}
                 </Alert>
             </Snackbar>
-        </Box>
+        </PageContainer>
     );
 };
 

@@ -11,7 +11,6 @@ import {
     Snackbar,
     Alert,
     Grid,
-    Chip,
     Divider,
     List,
     ListItem,
@@ -31,11 +30,8 @@ import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F, WEEKDAY_OPTIONS } from '../components/filters/filterFields';
 import { 
-    School as SchoolIcon, 
-    CalendarToday,
     DirectionsBus,
     Group,
-    ArrowBack,
     People,
     Description as ContractIcon,
     Assignment as RequestsIcon,
@@ -58,23 +54,9 @@ import { generateRouteOccupancyPDF } from '../utils/pdfExport';
 import { DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool, getScheduleColor, getScheduleBgColor } from '../utils/scheduleConfig';
 import PermissionGuard from '../components/PermissionGuard';
 import { getCicloEscolarYear } from '../services/cicloEscolarService';
-
-const PageContainer = styled.div`
-    ${tw`bg-gray-50 min-h-screen w-full`}
-    padding: 2rem;
-    max-width: 1600px;
-    margin: 0 auto;
-
-    @media (max-width: 640px) {
-        padding: 1rem;
-    }
-`;
-
-const HeaderCard = styled(Card)`
-    ${tw`mb-6 shadow-lg`}
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-`;
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
+import useClientScope from '../hooks/useClientScope';
 
 const SummaryCard = styled(Card)`
     ${tw`h-full`}
@@ -354,9 +336,8 @@ const SchoolDashboardPage = () => {
         }
     }, [fetchSchoolData, fetchRouteOccupancy, fetchUserSummary, fetchStudentSummary, fetchServiceUsageSummary]);
 
-    const handleBackToSelection = () => {
-        navigate('/admin/escuelas');
-    };
+    // Antes del return anticipado de carga: los hooks no pueden quedar después.
+    const scope = useClientScope({ level: 'dashboard' });
 
     const handleViewUsers = () => {
         navigate(`/admin/escuelas/ciclo/${currentCicloEscolarId}/${schoolId}/usuarios`, {
@@ -503,7 +484,7 @@ const SchoolDashboardPage = () => {
 
     if (loading && !currentSchool) {
         return (
-            <PageContainer>
+            <PageContainer width="xl">
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
                     <CircularProgress size={60} />
                 </Box>
@@ -512,39 +493,15 @@ const SchoolDashboardPage = () => {
     }
 
     return (
-        <PageContainer>
-            {/* Header */}
-            <HeaderCard>
-                <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                        <Button
-                            startIcon={<ArrowBack />}
-                            onClick={handleBackToSelection}
-                            sx={{ color: 'white', '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
-                        >
-                            Volver
-                        </Button>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <SchoolIcon sx={{ fontSize: 40 }} />
-                        <Box>
-                            <Typography variant="h4" component="h1" gutterBottom>
-                                {currentSchool?.name || 'Cargando...'}
-                            </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                <Chip 
-                                    icon={<CalendarToday />}
-                                    label={`Ciclo Escolar ${currentCycleLabel || ''}`}
-                                    sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
-                                />
-                                <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                                    {currentSchool?.city}
-                                </Typography>
-                            </Box>
-                        </Box>
-                    </Box>
-                </CardContent>
-            </HeaderCard>
+        <PageContainer width="xl">
+            <PageHeader
+                variant="hero"
+                tone="school"
+                name={currentSchool?.name ?? null}
+                back={scope.back}
+                period={scope.periodLabel(currentCycleLabel)}
+                meta={[currentSchool?.city]}
+            />
 
             <Grid container spacing={3}>
                 {/* Sección A: Resumen de ocupación por ruta */}

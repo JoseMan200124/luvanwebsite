@@ -37,7 +37,6 @@ import {
 } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
-import tw from 'twin.macro';
 import { getAttendances, getAttendanceDetails } from '../services/attendanceService';
 import api from '../utils/axiosConfig';
 import { getScheduleLabel, getScheduleColor, DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool } from '../utils/scheduleConfig';
@@ -46,10 +45,10 @@ import { getClientSchoolId } from '../utils/clientValue';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F, toPlateOptions, toRouteOptions } from '../components/filters/filterFields';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
 
 moment.tz.setDefault('America/Guatemala');
-
-const Container = tw.div`p-8 bg-gray-100 min-h-screen`;
 
 const AttendanceManagementPage = () => {
     const [attendances, setAttendances] = useState([]);
@@ -310,20 +309,17 @@ const AttendanceManagementPage = () => {
     };
 
     return (
-            <Container>
-                <Box mb={3}>
-                    <Typography variant="h4" gutterBottom>
-                        Gestión de Asistencias
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                        Visualiza y analiza los registros de asistencia de las monitoras
-                    </Typography>
-                </Box>
+            <PageContainer width="xl">
+                <PageHeader
+                    eyebrow="Gestión de Monitoras"
+                    title="Gestión de Asistencias"
+                    subtitle="Visualiza y analiza los registros de asistencia de las monitoras"
+                />
 
                 {/* Estadísticas */}
                 <Grid container spacing={3} mb={3}>
                     <Grid item xs={12} sm={6} md={3}>
-                        <Card>
+                        <Card sx={{ height: '100%' }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
                                     Total Registros
@@ -335,7 +331,7 @@ const AttendanceManagementPage = () => {
                         </Card>
                     </Grid>
                     <Grid item xs={12} sm={6} md={3}>
-                        <Card>
+                        <Card sx={{ height: '100%' }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
                                     Promedio Asistencia
@@ -347,7 +343,7 @@ const AttendanceManagementPage = () => {
                         </Card>
                     </Grid>
                     <Grid item xs={12} sm={6} md={3}>
-                        <Card>
+                        <Card sx={{ height: '100%' }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
                                     Total Alumnos
@@ -359,7 +355,7 @@ const AttendanceManagementPage = () => {
                         </Card>
                     </Grid>
                     <Grid item xs={12} sm={6} md={3}>
-                        <Card>
+                        <Card sx={{ height: '100%' }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
                                     Alumnos Presentes
@@ -598,7 +594,7 @@ const AttendanceManagementPage = () => {
                         </Button>
                     </DialogActions>
                 </Dialog>
-            </Container>
+            </PageContainer>
     );
 };
 

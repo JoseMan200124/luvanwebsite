@@ -46,6 +46,7 @@ import {
     Autorenew as InProgressIcon,
     Cancel as CancelIcon,
     Edit as EditIcon,
+    Add as AddIcon,
 } from '@mui/icons-material';
 import tw from 'twin.macro';
 import styled from 'styled-components';
@@ -70,10 +71,8 @@ import PermissionGuard from '../components/PermissionGuard';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F, YES_NO_OPTIONS, toRouteOptions } from '../components/filters/filterFields';
-
-const PageContainer = styled.div`
-    ${tw`p-6`}
-`;
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
 
 const StatsCard = styled(Card)`
     ${tw`h-full`}
@@ -510,11 +509,12 @@ const MechanicRequestsPage = () => {
     };
 
     return (
-        <PageContainer>
-            <Typography variant="h4" gutterBottom>
-                <BuildIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                Solicitudes de Mecánica
-            </Typography>
+        <PageContainer width="xl">
+            <PageHeader
+                eyebrow="Gestión de Buses"
+                title="Solicitudes de Mecánica"
+                actions={[{ key: 'create', label: 'Nueva solicitud', icon: <AddIcon />, primary: true, permission: 'mecanica-crear-solicitud', onClick: handleOpenCreateModal }]}
+            />
 
             {/* Estadísticas */}
             {statistics && (
@@ -599,14 +599,6 @@ const MechanicRequestsPage = () => {
                     </Grid>
                 </Grid>
             )}
-
-            <PermissionGuard permission="mecanica-crear-solicitud">
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
-                    <Button variant="contained" color="primary" onClick={handleOpenCreateModal}>
-                        Nueva Solicitud
-                    </Button>
-                </Box>
-            </PermissionGuard>
 
             {/* Filtros */}
             <FilterBar

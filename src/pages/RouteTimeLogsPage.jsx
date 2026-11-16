@@ -30,7 +30,6 @@ import {
 } from '@mui/material';
 import { Delete as DeleteIcon } from '@mui/icons-material';
 import moment from 'moment-timezone';
-import tw from 'twin.macro';
 import { getRouteTimeLogs, getAllRouteTimeLogs, deleteRouteTimeLog } from '../services/routeTimeLogService';
 import ExcelJS from 'exceljs';
 import api from '../utils/axiosConfig';
@@ -40,20 +39,11 @@ import { getClientSchoolId } from '../utils/clientValue';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F, toPlateOptions, toRouteOptions } from '../components/filters/filterFields';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
 import PermissionGuard from '../components/PermissionGuard';
 
 moment.tz.setDefault('America/Guatemala');
-
-const Container = tw.div`p-8 bg-gray-100 min-h-screen`;
-
-// Simple inline Excel-like icon (green box with white X)
-const ExcelIcon = ({ size = 20 }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-        <rect x="2" y="2" width="20" height="20" rx="3" fill="#217346" />
-        <path d="M7.5 7.5 L16.5 16.5" stroke="#FFFFFF" strokeWidth="1.6" strokeLinecap="round" />
-        <path d="M16.5 7.5 L7.5 16.5" stroke="#FFFFFF" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-);
 
 const RouteTimeLogsPage = () => {
     const [timeLogs, setTimeLogs] = useState([]);
@@ -510,20 +500,18 @@ const RouteTimeLogsPage = () => {
     };
 
     return (
-            <Container>
-                <Box mb={3}>
-                    <Typography variant="h4" gutterBottom>
-                        Horarios de Monitoras en Ruta
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                        Visualiza y analiza los registros de tiempos de rutas
-                    </Typography>
-                </Box>
+            <PageContainer width="xl">
+                <PageHeader
+                    eyebrow="Gestión de Monitoras"
+                    title="Horarios de Monitoras en Ruta"
+                    subtitle="Visualiza y analiza los registros de tiempos de rutas"
+                    actions={[{ key: 'report', label: 'Generar reporte', group: 'download', loading: exporting, disabled: totalCount === 0, onClick: () => handleDownloadExcel() }]}
+                />
 
                 {/* Estadísticas */}
                 <Grid container spacing={3} mb={3}>
                     <Grid item xs={12} sm={6}>
-                        <Card>
+                        <Card sx={{ height: '100%' }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
                                     Total Registros
@@ -535,7 +523,7 @@ const RouteTimeLogsPage = () => {
                         </Card>
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                        <Card>
+                        <Card sx={{ height: '100%' }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
                                     Duración Promedio
@@ -562,24 +550,6 @@ const RouteTimeLogsPage = () => {
                         </Card>
                     </Grid>
                 </Grid>
-
-                {/* Acciones */}
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
-                    <Button
-                        variant="outlined"
-                        startIcon={<ExcelIcon size={18} />}
-                        onClick={() => handleDownloadExcel()}
-                        disabled={exporting || totalCount === 0}
-                        size="small"
-                        sx={{
-                            color: 'success.main',
-                            borderColor: 'success.main',
-                            '&:hover': { backgroundColor: 'rgba(33,115,70,0.08)', borderColor: 'success.dark' }
-                        }}
-                    >
-                        {exporting ? 'Generando...' : 'Generar reporte'}
-                    </Button>
-                </Box>
 
                 {/* Filtros */}
                 <FilterBar {...pageFilters.barProps} loading={loading} />
@@ -847,7 +817,7 @@ const RouteTimeLogsPage = () => {
                         </>
                     )}
                 </Paper>
-            </Container>
+            </PageContainer>
     );
 };
 

@@ -32,6 +32,8 @@ import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEsc
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -483,11 +485,11 @@ const BusAssignmentHistoryPage = () => {
     const handleChangeRowsPerPage = (event) => { setRowsPerPage(Number.parseInt(event.target.value, 10)); setPage(0); };
 
     return (
-        <Box sx={{ p: 3 }}>
-            {/* Título */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h4" component="h1">Historial de Asignaciones — Buses</Typography>
-            </Box>
+        <PageContainer width="xl">
+            <PageHeader
+                eyebrow="Gestión de Buses"
+                title="Historial de Asignaciones — Buses"
+            />
 
             {/* Barra de resumen */}
             {!loading && stats && (
@@ -640,7 +642,7 @@ const BusAssignmentHistoryPage = () => {
                     )}
                 </CardContent>
             </Card>
-        </Box>
+        </PageContainer>
     );
 };
 

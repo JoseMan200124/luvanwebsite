@@ -3,8 +3,6 @@ import {
   Alert,
   Box,
   Button,
-  Card,
-  CardContent,
   CircularProgress,
   Chip,
   Dialog,
@@ -32,7 +30,6 @@ import {
   Visibility as VisibilityIcon,
 } from '@mui/icons-material';
 import moment from 'moment-timezone';
-import tw from 'twin.macro';
 
 import ScheduledOriginChip from '../components/ScheduledOriginChip';
 import { getCicloEscolarOptionLabel } from '../services/cicloEscolarService';
@@ -41,10 +38,10 @@ import { getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
 
 moment.tz.setDefault('America/Guatemala');
-
-const Container = tw.div`p-8 bg-gray-100 min-h-screen`;
 
 const safeStr = (v) => (v == null ? '' : String(v)).trim();
 
@@ -276,19 +273,16 @@ const NotificationHistoryPage = () => {
   };
 
   return (
-    <Container>
-      <Card sx={{ mb: 2, borderRadius: 2 }}>
-        <CardContent>
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 800 }}>Historial de Notificaciones</Typography>
-            <Typography variant="body2" color="text.secondary">Notificaciones push enviadas manualmente desde el sistema</Typography>
-          </Box>
+    <PageContainer width="xl">
+      <PageHeader
+        eyebrow="Gestión de Clientes"
+        title="Historial de Notificaciones"
+        subtitle="Notificaciones push enviadas manualmente desde el sistema"
+      />
 
-          {error && (
-            <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
-          )}
-        </CardContent>
-      </Card>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+      )}
 
       <FilterBar {...pageFilters.barProps} loading={loading} />
 
@@ -582,7 +576,7 @@ const NotificationHistoryPage = () => {
           <Button onClick={closeDetail}>Cerrar</Button>
         </DialogActions>
       </Dialog>
-    </Container>
+    </PageContainer>
   );
 };
 

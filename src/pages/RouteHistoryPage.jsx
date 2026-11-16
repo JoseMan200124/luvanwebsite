@@ -52,6 +52,8 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F, toRouteOptions } from '../components/filters/filterFields';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, Cell, LabelList, CartesianGrid } from 'recharts';
 import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
 
@@ -813,13 +815,11 @@ const RouteHistoryPage = () => {
     }, [chartSteps]);
 
     return (
-        <Box sx={{ p: 4, backgroundColor: 'background.default', minHeight: '100vh' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <DirectionsBus />
-                    <Typography variant="h5">Historial de Recorridos de Rutas</Typography>
-                </Box>
-            </Box>
+        <PageContainer width="xl">
+            <PageHeader
+                eyebrow="Gestión de Buses"
+                title="Historial de Recorridos de Rutas"
+            />
 
             {/* Estadísticas: tarjetas resumen + controles */}
             <Paper sx={{ p: 2.5, mb: 3, borderRadius: 2, border: 1, borderColor: 'divider', backgroundColor: 'background.paper' }} elevation={0}>
@@ -1390,7 +1390,7 @@ const RouteHistoryPage = () => {
                     </Grid>
                 </Grid>
             </Paper>
-        </Box>
+        </PageContainer>
     );
 };
 

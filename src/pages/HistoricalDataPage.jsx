@@ -19,10 +19,10 @@ import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import { getCiclosEscolares, getCicloEscolarYear } from '../services/cicloEscolarService';
 import tw, { styled } from 'twin.macro';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
 
 // Contenedores y estilos básicos
-const PageContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
-const Title = styled(Typography)(() => [tw`text-3xl font-bold mb-6`, { color: '#1C3FAA' }]);
 const SectionPaper = styled(Paper)(() => [
     tw`p-4 mb-6`,
     { backgroundColor: '#FFFFFF', boxShadow: '0 3px 6px rgba(0,0,0,0.1)' }
@@ -117,8 +117,8 @@ const HistoricalDataPage = () => {
     };
 
     return (
-        <PageContainer>
-            <Title variant="h4">Historial de Ciclos Escolares</Title>
+        <PageContainer width="xl">
+            <PageHeader eyebrow="Historiales" title="Historial de Ciclos Escolares" />
 
             <SectionPaper>
                 <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>

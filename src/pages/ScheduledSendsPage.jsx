@@ -16,6 +16,8 @@ import api from '../utils/axiosConfig';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
 import PermissionGuard from '../components/PermissionGuard';
 import CircularMasivaModal from '../components/CircularMasivaModal';
 import SendNotificationModal from '../components/SendNotificationModal';
@@ -337,12 +339,13 @@ const ScheduledSendsPage = () => {
     };
 
     return (
-        <Box sx={{ p: { xs: 2, md: 3 } }}>
-            <Typography variant="h5" sx={{ mb: 1 }}>Envíos Programados</Typography>
-            <Alert severity="info" sx={{ mb: 2 }}>
-                Para programar un envío nuevo, usa "Enviar Circular Masiva" o "Enviar Notificación Push" y elige
-                "Programar envío". Aquí puedes revisar, editar o cancelar los programados. Horas de Guatemala.
-            </Alert>
+        <PageContainer width="xl">
+            <PageHeader eyebrow="Gestión de Clientes" title="Envíos Programados">
+                <Alert severity="info">
+                    Para programar un envío nuevo, usa "Enviar Circular Masiva" o "Enviar Notificación Push" y elige
+                    "Programar envío". Aquí puedes revisar, editar o cancelar los programados. Horas de Guatemala.
+                </Alert>
+            </PageHeader>
 
             <FilterBar {...pageFilters.barProps} />
 
@@ -485,7 +488,7 @@ const ScheduledSendsPage = () => {
                     {snackbar.message}
                 </Alert>
             </Snackbar>
-        </Box>
+        </PageContainer>
     );
 };
 
