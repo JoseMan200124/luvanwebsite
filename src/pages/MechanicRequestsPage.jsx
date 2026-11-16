@@ -73,6 +73,7 @@ import useFilters from '../hooks/useFilters';
 import { F, YES_NO_OPTIONS, toRouteOptions } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 
 const StatsCard = styled(Card)`
     ${tw`h-full`}
@@ -511,7 +512,7 @@ const MechanicRequestsPage = () => {
     return (
         <PageContainer width="xl">
             <PageHeader
-                eyebrow="Gestión de Buses"
+                eyebrow={MODULE_GROUPS.buses}
                 title="Solicitudes de Mecánica"
                 actions={[{ key: 'create', label: 'Nueva solicitud', icon: <AddIcon />, primary: true, permission: 'mecanica-crear-solicitud', onClick: handleOpenCreateModal }]}
             />

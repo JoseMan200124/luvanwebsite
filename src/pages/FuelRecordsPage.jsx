@@ -67,6 +67,7 @@ import useFilters from '../hooks/useFilters';
 import { F, toRouteOptions } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -991,7 +992,7 @@ const FuelRecordsPage = () => {
         <LocalizationProvider dateAdapter={AdapterMoment}>
             <PageContainer width="xl">
                 <PageHeader
-                    eyebrow="Gestión de Buses"
+                    eyebrow={MODULE_GROUPS.buses}
                     title="Registros de Combustible"
                     subtitle="Visualiza y gestiona los registros de abastecimiento de combustible"
                     actions={[

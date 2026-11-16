@@ -18,6 +18,7 @@ import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import PermissionGuard from '../components/PermissionGuard';
 import CircularMasivaModal from '../components/CircularMasivaModal';
 import SendNotificationModal from '../components/SendNotificationModal';
@@ -340,7 +341,7 @@ const ScheduledSendsPage = () => {
 
     return (
         <PageContainer width="xl">
-            <PageHeader eyebrow="Gestión de Clientes" title="Envíos Programados">
+            <PageHeader eyebrow={MODULE_GROUPS.clientes} title="Envíos Programados">
                 <Alert severity="info">
                     Para programar un envío nuevo, usa "Enviar Circular Masiva" o "Enviar Notificación Push" y elige
                     "Programar envío". Aquí puedes revisar, editar o cancelar los programados. Horas de Guatemala.

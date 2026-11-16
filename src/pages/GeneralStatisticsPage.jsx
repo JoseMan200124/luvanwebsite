@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Tab, Tabs, Typography } from '@mui/material';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import usePermissions from '../hooks/usePermissions';
 import UsageStatisticsTab from '../components/generalStatistics/UsageStatisticsTab';
 import RequestsStatisticsTab from '../components/generalStatistics/RequestsStatisticsTab';
@@ -27,7 +28,7 @@ const GeneralStatisticsPage = () => {
     return (
         <PageContainer width="xl">
             <PageHeader
-                eyebrow="Reportes y Estadísticas"
+                eyebrow={MODULE_GROUPS.reportes}
                 title="Estadísticas Generales"
                 tabs={active && (
                     <Tabs value={active.value} onChange={(e, value) => setTab(value)}>

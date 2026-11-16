@@ -29,7 +29,7 @@ const PageContainer = ({ width = 'lg', sx = {}, children }) => (
 );
 
 PageContainer.propTypes = {
-    width: PropTypes.oneOf(['md', 'lg', 'xl', 'full']),
+    width: PropTypes.oneOf(['md', 'lg', 'xl']),
     sx: PropTypes.object,
     children: PropTypes.node,
 };

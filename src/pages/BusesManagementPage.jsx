@@ -54,6 +54,7 @@ import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { matchSearchTokens } from '../utils/clientFilter';
 
 const AVAILABILITY_OPTIONS = [
@@ -744,7 +745,7 @@ const BusesManagementPage = () => {
     return (
         <PageContainer width="xl">
             <PageHeader
-                eyebrow="Gestión de Buses"
+                eyebrow={MODULE_GROUPS.buses}
                 title="Gestión de Buses"
                 actions={[
                     { key: 'bulk', label: 'Carga masiva', group: 'upload', permission: 'buses-carga-masiva', onClick: handleOpenBulkDialog },

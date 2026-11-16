@@ -1,8 +1,8 @@
 // src/utils/clientScope.js
 // Lógica pura del ámbito colegio/corporación de las pantallas hero (sin React, se puede testear).
 
-export const SCHOOLS_PATH = '/admin/escuelas';
-export const CORPORATIONS_PATH = '/admin/corporaciones';
+const SCHOOLS_PATH = '/admin/escuelas';
+const CORPORATIONS_PATH = '/admin/corporaciones';
 
 const SELECTION_LABELS = {
     school: 'Volver a Colegios',
@@ -23,7 +23,7 @@ export const formatPeriodLabel = (type, value) => {
 
 const getSelectionPath = (type) => (type === 'corporate' ? CORPORATIONS_PATH : SCHOOLS_PATH);
 
-export const buildHubPath = ({ type, cicloEscolarId, schoolId, fiscalYear, corporationId }) => {
+const buildHubPath = ({ type, cicloEscolarId, schoolId, fiscalYear, corporationId }) => {
     if (type === 'corporate') {
         return fiscalYear && corporationId ? `${CORPORATIONS_PATH}/${fiscalYear}/${corporationId}` : CORPORATIONS_PATH;
     }

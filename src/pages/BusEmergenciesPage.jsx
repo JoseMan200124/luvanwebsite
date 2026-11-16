@@ -45,6 +45,7 @@ import useFilters from '../hooks/useFilters';
 import { F, toPlateOptions, toRouteOptions } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -338,7 +339,7 @@ const BusEmergenciesPage = () => {
     return (
             <PageContainer width="xl">
                 <PageHeader
-                    eyebrow="Gestión de Buses"
+                    eyebrow={MODULE_GROUPS.buses}
                     title="Emergencias de Buses"
                     subtitle="Visualiza y analiza las emergencias reportadas por pilotos y monitoras"
                 />

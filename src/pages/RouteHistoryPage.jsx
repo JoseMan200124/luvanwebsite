@@ -54,6 +54,7 @@ import useFilters from '../hooks/useFilters';
 import { F, toRouteOptions } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, Cell, LabelList, CartesianGrid } from 'recharts';
 import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
 
@@ -817,7 +818,7 @@ const RouteHistoryPage = () => {
     return (
         <PageContainer width="xl">
             <PageHeader
-                eyebrow="Gestión de Buses"
+                eyebrow={MODULE_GROUPS.buses}
                 title="Historial de Recorridos de Rutas"
             />
 

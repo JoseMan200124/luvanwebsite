@@ -26,6 +26,7 @@ import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { matchSearchTokens } from '../utils/clientFilter';
 import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
 import styled from 'styled-components';
@@ -184,7 +185,7 @@ const SupervisorsManagementPage = () => {
     return (
         <PageContainer width="xl">
             <PageHeader
-                eyebrow="Gestión de Personal"
+                eyebrow={MODULE_GROUPS.personal}
                 title="Gestión de Supervisores"
             />
 

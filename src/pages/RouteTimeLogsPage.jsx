@@ -41,6 +41,7 @@ import useFilters from '../hooks/useFilters';
 import { F, toPlateOptions, toRouteOptions } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import PermissionGuard from '../components/PermissionGuard';
 
 moment.tz.setDefault('America/Guatemala');
@@ -502,7 +503,7 @@ const RouteTimeLogsPage = () => {
     return (
             <PageContainer width="xl">
                 <PageHeader
-                    eyebrow="Gestión de Monitoras"
+                    eyebrow={MODULE_GROUPS.monitoras}
                     title="Horarios de Monitoras en Ruta"
                     subtitle="Visualiza y analiza los registros de tiempos de rutas"
                     actions={[{ key: 'report', label: 'Generar reporte', group: 'download', loading: exporting, disabled: totalCount === 0, onClick: () => handleDownloadExcel() }]}

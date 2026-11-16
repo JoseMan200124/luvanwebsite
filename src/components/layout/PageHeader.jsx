@@ -15,17 +15,18 @@ import {
     SpaceDashboard,
 } from '@mui/icons-material';
 import PageHeaderActions from './PageHeaderActions';
+import { MODULE_GROUPS } from './moduleGroups';
 import { CLIENT_TONES, HEADER_TITLE_COLOR, HERO_SHADOW, LOGO_COLORS, LOGO_GRADIENT, SIMPLE_HEADER_SHADOW } from '../../theme/tokens';
 
 const TONE_ICONS = { school: School, corporate: Business };
 
 const MODULE_ICONS = {
-    'Gestión de Buses': DirectionsBus,
-    'Gestión de Personal': People,
-    'Gestión de Monitoras': Badge,
-    'Gestión de Clientes': Business,
-    Historiales: History,
-    'Reportes y Estadísticas': BarChart,
+    [MODULE_GROUPS.buses]: DirectionsBus,
+    [MODULE_GROUPS.personal]: People,
+    [MODULE_GROUPS.monitoras]: Badge,
+    [MODULE_GROUPS.clientes]: Business,
+    [MODULE_GROUPS.historiales]: History,
+    [MODULE_GROUPS.reportes]: BarChart,
 };
 const TITLE_FONT_SIZE = { xs: '1.6rem', sm: '2.125rem' };
 const HERO_CHIP_SX = {

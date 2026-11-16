@@ -43,16 +43,9 @@ const useClientScope = ({ level = 'section', entity = null, cicloEscolar = null 
 
     const back = useMemo(() => ({ label: target.label, onClick: goBack }), [target.label, goBack]);
 
-    return {
-        type,
-        tone: type,
-        schoolId,
-        corporationId,
-        cicloEscolarId,
-        fiscalYear,
-        periodLabel,
-        back,
-    };
+    // tone: 'school' | 'corporate' (según la ruta); periodLabel(valor): "Ciclo Escolar X" o "Año Fiscal X";
+    // back: { label, onClick } del botón Volver.
+    return { tone: type, periodLabel, back };
 };
 
 export default useClientScope;

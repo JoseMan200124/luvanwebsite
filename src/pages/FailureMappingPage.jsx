@@ -57,6 +57,7 @@ import useFilters from '../hooks/useFilters';
 import { F, YES_NO_OPTIONS, toPlateOptions, toRouteOptions } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import FailureMappingFormDialog from '../components/FailureMappingFormDialog';
 import { AuthContext } from '../context/AuthProvider';
 
@@ -588,7 +589,7 @@ const FailureMappingPage = () => {
         <LocalizationProvider dateAdapter={AdapterMoment}>
             <PageContainer width="xl">
                 <PageHeader
-                    eyebrow="Gestión de Buses"
+                    eyebrow={MODULE_GROUPS.buses}
                     title="Mapeo de Fallas"
                     subtitle="Depuración y registro de fallas reportadas por los supervisores"
                     actions={[

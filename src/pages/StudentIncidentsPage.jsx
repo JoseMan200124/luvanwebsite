@@ -38,6 +38,7 @@ import useFilters from '../hooks/useFilters';
 import { F, toPlateOptions, toRouteOptions } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -248,7 +249,7 @@ const StudentIncidentsPage = () => {
     return (
             <PageContainer width="xl">
                 <PageHeader
-                    eyebrow="Gestión de Monitoras"
+                    eyebrow={MODULE_GROUPS.monitoras}
                     title="Reportes de Conducta de Alumnos"
                     subtitle="Visualiza y analiza los incidentes reportados por las monitoras"
                 />

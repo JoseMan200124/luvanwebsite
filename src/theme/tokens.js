@@ -33,7 +33,6 @@ export const PAGE_WIDTHS = {
     md: 1200,
     lg: 1400,
     xl: 1600,
-    full: 'none',
 };
 
 export const PAGE_BG = '#f3f4f6';

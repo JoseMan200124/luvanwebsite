@@ -26,6 +26,7 @@ import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -417,7 +418,7 @@ const AssignmentHistoryPage = () => {
     return (
         <PageContainer width="xl">
             <PageHeader
-                eyebrow="Historiales"
+                eyebrow={MODULE_GROUPS.historiales}
                 title="Historial de Asignaciones"
                 actions={[{ key: 'reload', label: 'Recargar', group: 'other', onClick: fetchHistory }]}
             />

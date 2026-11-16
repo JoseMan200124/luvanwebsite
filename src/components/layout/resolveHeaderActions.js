@@ -18,7 +18,7 @@ export const resolveHeaderActions = (actions, hasAnyPermission) => (actions || [
     .filter((action) => !action.menu || action.menu.length > 0);
 
 // Tipos de acción, en el orden en que se muestran. La principal (Añadir/Crear/Nuevo) va siempre al final.
-export const HEADER_ACTION_GROUPS = [
+const HEADER_ACTION_GROUPS = [
     { group: 'download', label: 'Descargar' },
     { group: 'upload', label: 'Cargar' },
     { group: 'send', label: 'Enviar' },
@@ -46,11 +46,17 @@ const toMenuItems = (action) => {
  * - Un tipo con una sola acción se muestra tal cual, con su nombre específico ("Enviar circular").
  * - Un tipo con 2 o más pasa a un menú con el nombre genérico ("Enviar ▾").
  * - "Otras" es siempre un menú, aunque tenga una sola opción. Una acción sin `group` cuenta como "Otras".
+ * - Solo puede haber UNA acción principal por pantalla. Si se declaran varias, se usa la primera y las demás
+ *   se tratan como secundarias (en desarrollo se avisa por consola para que no pase inadvertido).
  */
 export const groupHeaderActions = (actions) => {
     const list = actions || [];
-    const primary = list.find((action) => action.primary);
-    const secondary = list.filter((action) => !action.primary);
+    const primaries = list.filter((action) => action.primary);
+    if (primaries.length > 1 && process.env.NODE_ENV !== 'production') {
+        console.warn(`[PageHeader] Hay ${primaries.length} acciones principales (${primaries.map((a) => a.key).join(', ')}); solo se usa la primera.`);
+    }
+    const primary = primaries[0];
+    const secondary = list.filter((action) => action !== primary);
     const groupOf = (action) => (HEADER_ACTION_GROUPS.some(({ group }) => group === action.group) ? action.group : 'other');
 
     const grouped = HEADER_ACTION_GROUPS.flatMap(({ group, label }) => {

@@ -21,6 +21,7 @@ import { getCiclosEscolares, getCicloEscolarYear } from '../services/cicloEscola
 import tw, { styled } from 'twin.macro';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 
 // Contenedores y estilos básicos
 const SectionPaper = styled(Paper)(() => [
@@ -118,7 +119,7 @@ const HistoricalDataPage = () => {
 
     return (
         <PageContainer width="xl">
-            <PageHeader eyebrow="Historiales" title="Historial de Ciclos Escolares" />
+            <PageHeader eyebrow={MODULE_GROUPS.historiales} title="Historial de Ciclos Escolares" />
 
             <SectionPaper>
                 <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>

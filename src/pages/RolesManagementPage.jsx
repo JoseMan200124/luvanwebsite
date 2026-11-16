@@ -38,6 +38,7 @@ import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { matchSearchTokens } from '../utils/clientFilter';
 import { Autocomplete } from '@mui/material';
 import { ListItemText } from '@mui/material';
@@ -1201,7 +1202,7 @@ const RolesManagementPage = () => {
     return (
         <PageContainer width="xl">
             <PageHeader
-                eyebrow="Gestión de Personal"
+                eyebrow={MODULE_GROUPS.personal}
                 title="Gestión de Usuarios y Roles"
                 actions={[
                     { key: 'download', label: 'Descargar todos', group: 'download', onClick: () => setDownloadAllDialogOpen(true) },
