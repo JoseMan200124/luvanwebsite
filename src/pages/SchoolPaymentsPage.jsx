@@ -186,6 +186,8 @@ const SchoolPaymentsPage = () => {
     // no cobra inscripción o el usuario no tiene el permiso para verlos.
     const [enrollmentByUser, setEnrollmentByUser] = useState({});
     const hasEnrollmentCharges = Object.keys(enrollmentByUser).length > 0;
+    // "Pendiente de inicio" solo existe mientras el colegio no está "En operaciones" (operationStatus ACTIVE)
+    const schoolInOperation = String(school?.operationStatus || 'ACTIVE').toUpperCase() === 'ACTIVE';
     // Toggle "Vista de inscripción": cambia las columnas de la tabla a las del cargo de inscripción
     const [enrollmentViewOn, setEnrollmentViewOn] = useState(false);
     const enrollmentView = enrollmentViewOn && hasEnrollmentCharges;
@@ -2788,6 +2790,10 @@ const SchoolPaymentsPage = () => {
     const [openExportByStateDialog, setOpenExportByStateDialog] = useState(false);
     const [exportByStateValue, setExportByStateValue] = useState('TODOS');
     const [exportByStateServiceStatus, setExportByStateServiceStatus] = useState('TODOS');
+    // Qué se exporta desde "Descargar por Estado": 'PAGOS' (cuotas) o 'INSCRIPCION' (cargos de inscripción)
+    const [exportByStateType, setExportByStateType] = useState('PAGOS');
+    const [exportByStateEnrollment, setExportByStateEnrollment] = useState('TODOS');
+    const exportEnrollmentMode = exportByStateType === 'INSCRIPCION' && hasEnrollmentCharges;
 
     // Download menu (unifies download actions to save space in the filters row)
     const [downloadMenuAnchorEl, setDownloadMenuAnchorEl] = useState(null);
@@ -3273,6 +3279,110 @@ const SchoolPaymentsPage = () => {
             setSnackbar({ open: true, message: 'Error generando exportación', severity: 'error' });
         }
     }, [paymentsAll, exportByStateServiceStatus, school, schoolId]);
+
+    // Exporta a Excel los cargos de inscripción del ciclo, filtrados por pago de inscripción y estado del servicio
+    // (mismo dataset de familias que "Descargar por Estado"; las familias eliminadas se ignoran).
+    const handleDownloadEnrollment = useCallback(async (enrollmentEstado) => {
+        try {
+            setOpenExportByStateDialog(false);
+            const estadoNorm = String(enrollmentEstado || 'TODOS').toUpperCase().trim();
+            const serviceFilter = String(exportByStateServiceStatus || 'TODOS').toUpperCase().trim();
+            const rows = (Array.isArray(paymentsAll) ? paymentsAll : [])
+                .filter((p) => {
+                    if (p.User?.FamilyDetail?.deleted) {
+                        return false;
+                    }
+                    const service = String(p.serviceStatus || p.User?.FamilyDetail?.serviceStatus || '').toUpperCase().trim();
+                    if (serviceFilter !== 'TODOS' && service !== serviceFilter) {
+                        return false;
+                    }
+                    const status = enrollmentByUser[p.User?.id || p.userId]?.status || 'SIN_CARGO';
+                    return estadoNorm === 'TODOS' || status === estadoNorm;
+                })
+                .sort((a, b) => String(a.User?.FamilyDetail?.familyLastName || '')
+                    .localeCompare(String(b.User?.FamilyDetail?.familyLastName || ''), 'es'));
+            if (rows.length === 0) {
+                setSnackbar({ open: true, message: 'No se encontraron registros para el estado seleccionado', severity: 'info' });
+                return;
+            }
+            setSnackbar({ open: true, message: 'Preparando descarga...', severity: 'info' });
+
+            const serviceText = {
+                ACTIVE: 'ACTIVO',
+                PAUSED: 'PAUSADO',
+                SUSPENDED: 'SUSPENDIDO',
+                PENDING_START: 'PENDIENTE DE INICIO',
+                INACTIVE: 'INACTIVO'
+            };
+            const headers = ['Estado del Servicio', 'Pago de Inscripción', 'Apellidos Familia', 'Cant. Estudiantes', 'Monto a pagar', 'Pagado', 'Saldo pendiente'];
+
+            const workbook = new ExcelJS.Workbook();
+            const sheet = workbook.addWorksheet('Inscripción');
+            sheet.addRow(headers);
+
+            rows.forEach((p) => {
+                const family = p.User?.FamilyDetail || {};
+                const charge = enrollmentByUser[p.User?.id || p.userId];
+                const service = String(p.serviceStatus || family.serviceStatus || '').toUpperCase().trim();
+                const studentsCount = Number(family.studentsCount || (Array.isArray(family.Students) ? family.Students.length : 0) || p.studentCount || 0);
+                sheet.addRow([
+                    serviceText[service] || service || 'NO ESPECIFICADO',
+                    charge ? charge.status : 'SIN CARGO',
+                    family.familyLastName || p.User?.familyLastName || '',
+                    Math.trunc(studentsCount) || 0,
+                    charge ? Number(charge.netAmount || 0) : '',
+                    charge ? Number(charge.amountPaid || 0) : '',
+                    charge ? Number(charge.amountDue || 0) : ''
+                ]);
+            });
+
+            sheet.getRow(1).eachCell((cell) => {
+                cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
+                cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+            });
+            sheet.eachRow((row, rowIndex) => {
+                if (rowIndex === 1) {
+                    return;
+                }
+                row.eachCell((cell, colNumber) => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowIndex % 2 === 0 ? 'FFF2F2F2' : 'FFFFFFFF' } };
+                    cell.alignment = { horizontal: colNumber === 3 ? 'left' : 'center', vertical: 'middle' };
+                    if (colNumber >= 5) {
+                        cell.numFmt = '0.00';
+                    }
+                });
+            });
+            sheet.autoFilter = 'A1:G1';
+            sheet.views = [{ state: 'frozen', xSplit: 1, ySplit: 1 }];
+            sheet.columns.forEach((column, index) => {
+                let maxLength = headers[index].length;
+                sheet.eachRow((row) => {
+                    const value = row.getCell(index + 1)?.value;
+                    maxLength = Math.max(maxLength, value ? String(value).length : 0);
+                });
+                column.width = Math.min(Math.max(maxLength + 2, 10), 60);
+            });
+
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const fileName = `Inscripcion_${estadoNorm}_servicio_${serviceFilter}_${school?.name ? school.name.replace(/[^a-z0-9]/gi, '_') : schoolId}.xlsx`;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            setSnackbar({ open: true, message: 'Descarga iniciada', severity: 'success' });
+        } catch (err) {
+            console.error('handleDownloadEnrollment', err);
+            setSnackbar({ open: true, message: 'Error generando exportación', severity: 'error' });
+        }
+    }, [paymentsAll, enrollmentByUser, exportByStateServiceStatus, school, schoolId]);
 
     // Derived values for the Register Payment dialog summary
     const formatCurrency = (v) => `Q ${Number(v || 0).toFixed(2)}`;
@@ -4328,7 +4438,7 @@ const SchoolPaymentsPage = () => {
                                             <MenuItem value="ACTIVE">ACTIVO</MenuItem>
                                             <MenuItem value="PAUSED">PAUSADO</MenuItem>
                                             <MenuItem value="SUSPENDED">SUSPENDIDO</MenuItem>
-                                            <MenuItem value="PENDING_START">PENDIENTE DE INICIO</MenuItem>
+                                            {!schoolInOperation && <MenuItem value="PENDING_START">PENDIENTE DE INICIO</MenuItem>}
                                             <MenuItem value="INACTIVE">INACTIVO</MenuItem>
                                         </Select>
                                     </FormControl>
@@ -4415,13 +4525,45 @@ const SchoolPaymentsPage = () => {
                                         Exportar pagos
                                     </Typography>
                                     <Typography variant="body2" color="text.secondary">
-                                        Selecciona el estado de pago y el estado del servicio.
+                                        {exportEnrollmentMode
+                                            ? 'Selecciona el estado del pago de inscripción y el estado del servicio.'
+                                            : 'Selecciona el estado de pago y el estado del servicio.'}
                                     </Typography>
                                 </Box>
                             </DialogTitle>
                             <DialogContent sx={{ pt: 2.5, overflow: 'visible' }}>
                                 <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
                                     <Box sx={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 2, mt: 0.5 }}>
+                                    {hasEnrollmentCharges && (
+                                        <FormControl fullWidth size="small">
+                                            <InputLabel id="export-by-state-type-label">Tipo de exportación</InputLabel>
+                                            <Select
+                                                labelId="export-by-state-type-label"
+                                                label="Tipo de exportación"
+                                                value={exportByStateType}
+                                                onChange={(e) => setExportByStateType(e.target.value)}
+                                            >
+                                                <MenuItem value="PAGOS">Pagos</MenuItem>
+                                                <MenuItem value="INSCRIPCION">Cargos de inscripción</MenuItem>
+                                            </Select>
+                                        </FormControl>
+                                    )}
+                                    {exportEnrollmentMode ? (
+                                        <FormControl fullWidth size="small">
+                                            <InputLabel id="export-by-state-enrollment-label">Pago de Inscripción</InputLabel>
+                                            <Select
+                                                labelId="export-by-state-enrollment-label"
+                                                label="Pago de Inscripción"
+                                                value={exportByStateEnrollment}
+                                                onChange={(e) => setExportByStateEnrollment(e.target.value)}
+                                            >
+                                                <MenuItem value="TODOS">Todos los estados</MenuItem>
+                                                {ENROLLMENT_FILTER_OPTIONS.map((opt) => (
+                                                    <MenuItem key={opt.value} value={opt.value}>{opt.label.toUpperCase()}</MenuItem>
+                                                ))}
+                                            </Select>
+                                        </FormControl>
+                                    ) : (
                                     <FormControl fullWidth size="small">
                                         <InputLabel id="export-by-state-label">Estado de Pago</InputLabel>
                                         <Select
@@ -4437,6 +4579,7 @@ const SchoolPaymentsPage = () => {
                                             <MenuItem value="ELIMINADO">ELIMINADO</MenuItem>
                                         </Select>
                                     </FormControl>
+                                    )}
 
                                     <FormControl fullWidth size="small">
                                         <InputLabel id="export-by-state-servicestatus-label">Estado del Servicio</InputLabel>
@@ -4450,8 +4593,8 @@ const SchoolPaymentsPage = () => {
                                             <MenuItem value="ACTIVE">ACTIVO</MenuItem>
                                             <MenuItem value="PAUSED">PAUSADO</MenuItem>
                                             <MenuItem value="SUSPENDED">SUSPENDIDO</MenuItem>
-                                            <MenuItem value="PENDING_START">PENDIENTE DE INICIO</MenuItem>
                                             <MenuItem value="INACTIVE">INACTIVO</MenuItem>
+                                            {!schoolInOperation && <MenuItem value="PENDING_START">PENDIENTE DE INICIO</MenuItem>}
                                         </Select>
                                     </FormControl>
                                     </Box>
@@ -4461,7 +4604,12 @@ const SchoolPaymentsPage = () => {
                                 <Button onClick={() => setOpenExportByStateDialog(false)}>
                                     Cancelar
                                 </Button>
-                                <Button variant="contained" onClick={() => handleDownloadByState(exportByStateValue)}>
+                                <Button
+                                    variant="contained"
+                                    onClick={() => (exportEnrollmentMode
+                                        ? handleDownloadEnrollment(exportByStateEnrollment)
+                                        : handleDownloadByState(exportByStateValue))}
+                                >
                                     Descargar
                                 </Button>
                             </DialogActions>
