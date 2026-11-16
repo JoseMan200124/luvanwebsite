@@ -190,6 +190,66 @@ PaymentActions.propTypes = {
     onManagePeriodsClick: PropTypes.func,
 };
 
+const ENROLLMENT_CHIP = {
+    PENDIENTE: { label: 'Pendiente', color: 'warning' },
+    PARCIAL: { label: 'Parcial', color: 'info' },
+    PAGADO: { label: 'Pagado', color: 'success' },
+};
+
+const EnrollmentCell = ({ charge }) => {
+    const chip = charge ? ENROLLMENT_CHIP[charge.status] : null;
+    if (!chip) {
+        return <span>—</span>;
+    }
+    const pending = charge.status === 'PAGADO' ? '' : `Saldo: Q ${Number(charge.amountDue || 0).toFixed(2)}`;
+    return <Chip label={chip.label} size="small" color={chip.color} title={pending} />;
+};
+
+EnrollmentCell.propTypes = {
+    charge: PropTypes.shape({ status: PropTypes.string, amountDue: PropTypes.oneOfType([PropTypes.string, PropTypes.number]) }),
+};
+
+const formatMoney = (value) => `Q ${Number(value || 0).toFixed(2)}`;
+
+// Fila de la "vista de inscripción": solo lo relacionado con el cargo de inscripción del ciclo
+const EnrollmentRow = React.memo(({ payment, charge, onRegisterClick }) => {
+    const view = getPaymentViewModel(payment);
+    return (
+        <TableRow hover>
+            <TableCell align="center" sx={{ borderLeft: '3px solid #2196F3', borderRight: '3px solid #E0E0E0' }}>
+                <ServiceStatusChip serviceStatus={view.serviceStatus} isDeleted={view.isDeleted} />
+            </TableCell>
+            <TableCell align="center" sx={{ borderLeft: '3px solid #E0E0E0', borderRight: '3px solid #4CAF50' }}>
+                <EnrollmentCell charge={charge} />
+            </TableCell>
+            <TableCell align="center">{view.lastName}</TableCell>
+            <TableCell align="center">{view.studentsCount}</TableCell>
+            <TableCell align="center">{charge ? formatMoney(charge.netAmount) : '—'}</TableCell>
+            <TableCell align="center">{charge ? formatMoney(charge.amountPaid) : '—'}</TableCell>
+            <TableCell align="center" sx={{ fontWeight: 700 }}>{charge ? formatMoney(charge.amountDue) : '—'}</TableCell>
+            <TableCell align="center">
+                {onRegisterClick && charge && (
+                    <IconButton
+                        title={view.isDeleted ? 'Acción no disponible (familia eliminada)' : 'Registrar pago de inscripción'}
+                        onClick={() => { if (!view.isDeleted) {
+                            onRegisterClick(payment);
+                        } }}
+                        disabled={view.isDeleted}
+                    >
+                        <PaymentIcon />
+                    </IconButton>
+                )}
+            </TableCell>
+        </TableRow>
+    );
+});
+
+EnrollmentRow.propTypes = {
+    payment: paymentShape,
+    charge: PropTypes.object,
+    onRegisterClick: PropTypes.func,
+};
+
 const PaymentRow = React.memo(({ payment, onRegisterClick, onReceiptClick, onEmailClick, onManageClick, onNotesClick, onDownloadHistory, onManagePeriodsClick }) => {
     const view = getPaymentViewModel(payment);
 
@@ -242,8 +302,53 @@ PaymentRow.propTypes = {
     onManagePeriodsClick: PropTypes.func,
 };
 
-const PaymentTable = ({ payments, onRegisterClick, onReceiptClick, onEmailClick, onManageClick, onNotesClick, onDownloadHistory, onManagePeriodsClick, order, orderBy, onRequestSort }) => {
+const sortHeader = (label, key, orderBy, order, onRequestSort) => (
+    <TableSortLabel
+        active={orderBy === key}
+        direction={orderBy === key ? order : 'asc'}
+        onClick={() => onRequestSort?.(key)}
+    >
+        {label}
+    </TableSortLabel>
+);
+
+const PaymentTable = ({ payments, enrollmentView, enrollmentByUser, onRegisterClick, onReceiptClick, onEmailClick, onManageClick, onNotesClick, onDownloadHistory, onManagePeriodsClick, order, orderBy, onRequestSort }) => {
     const paymentRows = Array.isArray(payments) ? payments : [];
+
+    if (enrollmentView && enrollmentByUser) {
+        return (
+            <TableContainer component={Paper} sx={{ borderRadius: 2, overflowX: 'auto' }}>
+                <Table size="small" sx={{ minWidth: 900 }}>
+                    <TableHead>
+                        <TableRow>
+                            <TableCell align="center" sx={{ borderLeft: '3px solid #2196F3', borderRight: '3px solid #E0E0E0', fontWeight: 'bold' }}>
+                                {sortHeader('Estado del Servicio', 'serviceStatus', orderBy, order, onRequestSort)}
+                            </TableCell>
+                            <TableCell align="center" sx={{ borderLeft: '3px solid #E0E0E0', borderRight: '3px solid #4CAF50', fontWeight: 'bold' }}>
+                                {sortHeader('Pago de Inscripción', 'enrollmentStatus', orderBy, order, onRequestSort)}
+                            </TableCell>
+                            <TableCell align="center">{sortHeader('Apellidos Familia', 'familyLastName', orderBy, order, onRequestSort)}</TableCell>
+                            <TableCell align="center">{sortHeader('Cant. Estudiantes', 'students', orderBy, order, onRequestSort)}</TableCell>
+                            <TableCell align="center">Monto a pagar</TableCell>
+                            <TableCell align="center">Pagado</TableCell>
+                            <TableCell align="center">{sortHeader('Saldo pendiente', 'enrollmentDue', orderBy, order, onRequestSort)}</TableCell>
+                            <TableCell align="center">Acciones</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {paymentRows.map(payment => (
+                            <EnrollmentRow
+                                key={payment.id}
+                                payment={payment}
+                                charge={enrollmentByUser[payment.User?.id || payment.userId]}
+                                onRegisterClick={onRegisterClick}
+                            />
+                        ))}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        );
+    }
 
     return (
         <TableContainer component={Paper} sx={{ borderRadius: 2, overflowX: 'auto' }}>
@@ -347,6 +452,8 @@ const PaymentTable = ({ payments, onRegisterClick, onReceiptClick, onEmailClick,
 
 PaymentTable.propTypes = {
     payments: PropTypes.array,
+    enrollmentView: PropTypes.bool,
+    enrollmentByUser: PropTypes.object,
     onRegisterClick: PropTypes.func,
     onReceiptClick: PropTypes.func,
     onEmailClick: PropTypes.func,

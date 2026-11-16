@@ -136,6 +136,13 @@ const PAYMENT_STATUS_OPTIONS = [
     { value: 'MORA', label: 'En mora' },
     { value: 'PARCIAL', label: 'Pago parcial' },
 ];
+// Reemplaza al filtro "Estado de pago" cuando la vista de inscripción está encendida
+const ENROLLMENT_FILTER_OPTIONS = [
+    { value: 'PAGADO', label: 'Pagado' },
+    { value: 'PENDIENTE', label: 'Pendiente' },
+    { value: 'PARCIAL', label: 'Parcial' },
+    { value: 'SIN_CARGO', label: 'Sin cargo de inscripción' },
+];
 const PAYMENT_SERVICE_OPTIONS = [...SERVICE_STATUS_OPTIONS, { value: 'ELIMINADO', label: 'Eliminado' }];
 const YES_NO_AUTO_DEBIT_OPTIONS = [
     { value: 'yes', label: 'Sí' },
@@ -175,11 +182,21 @@ const SchoolPaymentsPage = () => {
     const [page, setPage] = useState(0); 
     const [rowsPerPage, setRowsPerPage] = useState(25);
 
+    // Cargos de inscripción del ciclo indexados por userId ({ status, amountDue }). Vacío si el colegio
+    // no cobra inscripción o el usuario no tiene el permiso para verlos.
+    const [enrollmentByUser, setEnrollmentByUser] = useState({});
+    const hasEnrollmentCharges = Object.keys(enrollmentByUser).length > 0;
+    // Toggle "Vista de inscripción": cambia las columnas de la tabla a las del cargo de inscripción
+    const [enrollmentViewOn, setEnrollmentViewOn] = useState(false);
+    const enrollmentView = enrollmentViewOn && hasEnrollmentCharges;
+
     // Filtros (se aplican en el navegador sobre todas las familias del colegio)
     const pageFilters = useFilters({
         fields: [
             F.search('search', { label: 'Buscar apellido', width: 'md' }),
-            F.select('status', { label: 'Estado de pago', options: PAYMENT_STATUS_OPTIONS }),
+            enrollmentView
+                ? F.select('enrollment', { label: 'Pago de Inscripción', options: ENROLLMENT_FILTER_OPTIONS })
+                : F.select('status', { label: 'Estado de pago', options: PAYMENT_STATUS_OPTIONS }),
             F.serviceStatus({ options: PAYMENT_SERVICE_OPTIONS }),
             F.select('autoDebit', { label: 'Débito automático', options: YES_NO_AUTO_DEBIT_OPTIONS }),
             F.switch('showInactive', { label: 'Mostrar inactivas', disabled: isServiceInactiveDraft }),
@@ -190,6 +207,7 @@ const SchoolPaymentsPage = () => {
     const {
         search,
         status: statusFilter,
+        enrollment: enrollmentFilter,
         autoDebit: autoDebitFilter,
         serviceStatus: serviceStatusFilter,
         showInactive,
@@ -292,6 +310,7 @@ const SchoolPaymentsPage = () => {
             }
             // load all payments once (client-side pagination/filtering)
             await fetchAllPayments();
+            await fetchEnrollmentCharges();
             // fetch analysis after payments loaded
             await fetchPaymentsAnalysis(schoolId);
             setLoading(false);
@@ -386,6 +405,36 @@ const SchoolPaymentsPage = () => {
             return fetched;
         } catch (err) {
             console.error('fetchSchool', err);
+        }
+    };
+
+    // Cargos de inscripción del colegio en el ciclo, para filtrar/mostrar quién no ha pagado.
+    // Falla en silencio (sin permiso o sin cargos): la pantalla funciona igual sin el filtro.
+    const fetchEnrollmentCharges = async () => {
+        if (!schoolId || !hasPermission('pagos-v2-ver-inscripcion')) {
+            setEnrollmentByUser({});
+            return;
+        }
+        try {
+            const res = await api.get(`/enrollment-payments/schools/${schoolId}`, {
+                params: currentCicloEscolarId ? { cicloEscolarId: currentCicloEscolarId } : {}
+            });
+            const map = {};
+            // El listado viene del más reciente al más antiguo: se conserva el primero de cada usuario
+            (res.data?.enrollmentPayments || []).forEach((charge) => {
+                if (!map[charge.userId]) {
+                    map[charge.userId] = {
+                        status: charge.status,
+                        netAmount: charge.netAmount,
+                        amountPaid: charge.amountPaid,
+                        amountDue: charge.amountDue
+                    };
+                }
+            });
+            setEnrollmentByUser(map);
+        } catch (err) {
+            console.debug('fetchEnrollmentCharges: sin cargos de inscripción disponibles', err);
+            setEnrollmentByUser({});
         }
     };
 
@@ -693,6 +742,13 @@ const SchoolPaymentsPage = () => {
                         return false;
                     }
                 }
+                // Filtrado por pago de inscripción (solo con la vista de inscripción encendida)
+                if (enrollmentFilter) {
+                    const enrollmentStatus = enrollmentByUser[p.User?.id || p.userId]?.status || 'SIN_CARGO';
+                    if (enrollmentStatus !== enrollmentFilter) {
+                        return false;
+                    }
+                }
                 // Filtrado por estado del servicio
                 if (serviceStatusFilter) {
                     const paymentServiceStatusRaw = p.serviceStatus || p.User?.FamilyDetail?.serviceStatus || '';
@@ -720,7 +776,7 @@ const SchoolPaymentsPage = () => {
             console.error('filtering error', e);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [search, statusFilter, paymentsAll, autoDebitFilter, showDeleted, showInactive, serviceStatusFilter, rowsPerPage]);
+    }, [search, statusFilter, paymentsAll, autoDebitFilter, showDeleted, showInactive, serviceStatusFilter, rowsPerPage, enrollmentFilter, enrollmentByUser]);
 
     const handleBack = () => {
         if (!currentCicloEscolarId) {
@@ -775,6 +831,12 @@ const SchoolPaymentsPage = () => {
             if (key === 'serviceStatus') {
                 return (p.serviceStatus || p.User?.FamilyDetail?.serviceStatus || '').toString().toLowerCase();
             }
+            if (key === 'enrollmentStatus') {
+                return enrollmentByUser[p.User?.id || p.userId]?.status || '';
+            }
+            if (key === 'enrollmentDue') {
+                return Number(enrollmentByUser[p.User?.id || p.userId]?.amountDue || 0);
+            }
         } catch (e) {
             console.log('[SchoolPaymentsPage getValueKey]',e);
             return '';
@@ -810,7 +872,8 @@ const SchoolPaymentsPage = () => {
             return 0;
         };
         return stableSort(filtered.slice(), comparator);
-    }, [filtered, order, orderBy]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filtered, order, orderBy, enrollmentByUser]);
 
     // Keep pagination count tied to the current filtered dataset (toggles included)
     const paginationCount = Array.isArray(sortedFiltered) ? sortedFiltered.length : 0;
@@ -4124,9 +4187,35 @@ const SchoolPaymentsPage = () => {
                         {/* Filtros */}
                         <FilterBar {...pageFilters.barProps} loading={loading} />
 
+                        {hasEnrollmentCharges && (
+                            <FormControlLabel
+                                sx={{ mb: 1 }}
+                                control={(
+                                    <Switch
+                                        checked={enrollmentView}
+                                        onChange={(e) => {
+                                            setEnrollmentViewOn(e.target.checked);
+                                            // Cada vista tiene su propio filtro de pago: limpiar ambos para no dejar uno aplicado y oculto
+                                            pageFilters.applyValues({ status: '', enrollment: '' });
+                                            // El orden actual puede no existir en la otra vista: volver al orden por apellido
+                                            setOrderBy('familyLastName');
+                                            setOrder('asc');
+                                        }}
+                                    />
+                                )}
+                                label="Vista de pagos de inscripción"
+                            />
+                        )}
+
                         <PaymentTable
                             payments={pageSlice}
-                            onRegisterClick={hasPermission('pagos-pagar-tarifa') ? handleOpenRegister : undefined}
+                            enrollmentView={enrollmentView}
+                            enrollmentByUser={hasEnrollmentCharges ? enrollmentByUser : null}
+                            onRegisterClick={enrollmentView
+                                ? (hasPermission('pagos-v2-pagar-inscripcion')
+                                    ? (payment) => { handleOpenRegister(payment); setPaymentTab(2); }
+                                    : undefined)
+                                : (hasPermission('pagos-pagar-tarifa') ? handleOpenRegister : undefined)}
                             onManageClick={hasPermission('pagos-ver-detalle') ? handleManagePayments : undefined}
                             onManagePeriodsClick={hasPermission('pagos-ver-detalle') ? handleManagePeriods : undefined}
                             onNotesClick={hasPermission('pagos-ver-detalle') ? handleOpenNotes : undefined}
@@ -5533,6 +5622,7 @@ const SchoolPaymentsPage = () => {
                                                 setOpenRegisterDialog(false);
                                                 setPaymentTab(0);
                                                 await fetchAllPayments();
+                                                await fetchEnrollmentCharges();
                                             } catch (err) {
                                                 setSnackbar({
                                                     open: true,
