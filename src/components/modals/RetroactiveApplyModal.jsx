@@ -11,12 +11,11 @@ import {
     Checkbox,
     Paper,
     Switch,
-    FormControlLabel,
-    Snackbar,
-    Alert
+    FormControlLabel
 } from '@mui/material';
 import api from '../../utils/axiosConfig';
 import moment from 'moment';
+import useNotify from '../../hooks/useNotify';
 
 /**
  * Modal genérico para aplicar cambios de forma retroactiva con alcance por períodos.
@@ -46,7 +45,7 @@ const RetroactiveApplyModal = ({
     const [selectedPeriods, setSelectedPeriods] = useState([]);
     const [selectAll, setSelectAll] = useState(false);
     const [applying, setApplying] = useState(false);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
+    const notify = useNotify();
 
     // allow fetching full payment details if the provided `payment` prop is partial
     const [payment, setPayment] = useState(null);
@@ -83,7 +82,6 @@ const RetroactiveApplyModal = ({
         setSelectedPeriods([]);
         setSelectAll(false);
         setApplying(false);
-        setSnackbar({ open: false, message: '', severity: 'info' });
         setPayment(null);
         setFullPayment(null);
     }, [open]);
@@ -106,11 +104,11 @@ const RetroactiveApplyModal = ({
                 setPayment(p);
             } catch (err) {
                 console.error('Error fetching payment by user for modal:', err?.response?.data || err.message);
-                setSnackbar({ open: true, message: 'No se pudo cargar el pago de la familia.', severity: 'error' });
+                notify.error('No se pudo cargar el pago de la familia');
             }
         };
         fetchPaymentByUser();
-    }, [open, userId, paymentProp?.id]);
+    }, [open, userId, paymentProp?.id, notify]);
 
     useEffect(() => {
         // If modal opens and the effective payment lacks FamilyDetail, fetch full payment
@@ -192,12 +190,12 @@ const RetroactiveApplyModal = ({
     const handleApply = async () => {
         const paymentId = effectivePayment?.id || paymentProp?.id;
         if (!paymentId) {
-            setSnackbar({ open: true, message: 'No se encontró un pago asociado.', severity: 'warning' });
+            notify.warning('No se encontró un pago asociado');
             return;
         }
 
         if (!option) {
-            setSnackbar({ open: true, message: 'Por favor selecciona una opción antes de aplicar.', severity: 'warning' });
+            notify.warning('Por favor selecciona una opción antes de aplicar');
             return;
         }
 
@@ -205,7 +203,7 @@ const RetroactiveApplyModal = ({
         if (normalizedMode === 'ROUTE_TYPE') {
             const newRouteType = String(routeType || '').trim();
             if (!newRouteType) {
-                setSnackbar({ open: true, message: 'Selecciona un tipo de ruta antes de aplicar.', severity: 'warning' });
+                notify.warning('Selecciona un tipo de ruta antes de aplicar');
                 return;
             }
         } else {
@@ -213,7 +211,7 @@ const RetroactiveApplyModal = ({
             if (percentMode) {
                 const pct = Number(currentPercent);
                 if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
-                    setSnackbar({ open: true, message: 'Ingresa un porcentaje válido (0-100) antes de aplicar.', severity: 'warning' });
+                    notify.warning('Ingresa un porcentaje válido (0-100) antes de aplicar');
                     return;
                 }
             } else {
@@ -226,7 +224,7 @@ const RetroactiveApplyModal = ({
                 const familySpecial = typedIsValid ? typedDiscount : (configuredIsValid ? configuredDiscount : 0);
 
                 if (!Number.isFinite(familySpecial) || familySpecial < 0) {
-                    setSnackbar({ open: true, message: 'Ingresa un descuento familiar válido (0 o mayor) antes de aplicar.', severity: 'warning' });
+                    notify.warning('Ingresa un descuento familiar válido (0 o mayor) antes de aplicar');
                     return;
                 }
             }
@@ -234,7 +232,7 @@ const RetroactiveApplyModal = ({
 
         const requiresPeriodsSelection = option === 'CURRENT_OR_PENDING';
         if (requiresPeriodsSelection && !selectAll && (!Array.isArray(selectedPeriods) || selectedPeriods.length === 0)) {
-            setSnackbar({ open: true, message: 'Selecciona al menos un período antes de aplicar.', severity: 'warning' });
+            notify.warning('Selecciona al menos un período antes de aplicar');
             return;
         }
 
@@ -303,11 +301,7 @@ const RetroactiveApplyModal = ({
                 ? 'Error aplicando cambio de tipo de ruta: '
                 : 'Error aplicando descuento: ';
 
-            setSnackbar({
-                open: true,
-                message: prefix + (err.response?.data?.error || err.message),
-                severity: 'error'
-            });
+            notify.error(prefix + (err.response?.data?.error || err.message));
         } finally {
             setApplying(false);
         }
@@ -532,20 +526,6 @@ const RetroactiveApplyModal = ({
                 </Button>
             </DialogActions>
 
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={4000}
-                onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert
-                    severity={snackbar.severity}
-                    onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
-                    sx={{ width: '100%' }}
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </Dialog>
     );
 };

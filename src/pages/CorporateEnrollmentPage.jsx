@@ -9,8 +9,6 @@ import {
     Select,
     FormControl,
     InputLabel,
-    Alert,
-    Snackbar,
     Box,
     Divider,
     CircularProgress
@@ -19,6 +17,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/axiosConfig';
 import { PASSWORD_MIN_LENGTH, getPasswordLengthError } from '../utils/passwordPolicy';
 import logoLuvan from '../assets/img/logo-sin-fondo.png';
+import useNotify from '../hooks/useNotify';
 
 // Función para convertir tiempo de 24h a 12h con AM/PM
 const formatTime12Hour = (time24) => {
@@ -60,11 +59,7 @@ const CorporateEnrollmentPage = () => {
     const [accountEmail, setAccountEmail] = useState('');
     const [accountPassword, setAccountPassword] = useState('');
 
-    const [snackbar, setSnackbar] = useState({
-        open: false,
-        message: '',
-        severity: 'success'
-    });
+    const notify = useNotify();
 
     // Campos dinámicos definidos por la corporación
     const [extraFieldsValues, setExtraFieldsValues] = useState({});
@@ -74,7 +69,7 @@ const CorporateEnrollmentPage = () => {
 
         const passwordError = getPasswordLengthError(accountPassword);
         if (passwordError) {
-            setSnackbar({ open: true, message: passwordError, severity: 'error' });
+            notify.error(passwordError);
             return;
         }
 
@@ -114,11 +109,7 @@ const CorporateEnrollmentPage = () => {
                 });
             }, 2000);
             
-            setSnackbar({
-                open: true,
-                message: '¡Registro enviado correctamente!',
-                severity: 'success'
-            });
+            notify.success('¡Registro enviado correctamente!');
 
             // Limpiar formulario
             setLastName('');
@@ -139,11 +130,7 @@ const CorporateEnrollmentPage = () => {
             console.error('Error al enviar formulario:', error);
 
             const messageToShow = 'Ocurrió un error al enviar tu registro. Intenta de nuevo.';
-            setSnackbar({
-                open: true,
-                message: error?.response?.data?.message || messageToShow,
-                severity: 'error'
-            });
+            notify.error(error?.response?.data?.message || messageToShow);
         }
     };
 
@@ -209,18 +196,14 @@ const CorporateEnrollmentPage = () => {
                 }
             } catch (error) {
                 console.error('Error al obtener info de la corporación:', error);
-                setSnackbar({
-                    open: true,
-                    message: 'No se pudieron obtener los datos de la corporación.',
-                    severity: 'error'
-                });
+                notify.error('No se pudieron obtener los datos de la corporación');
             } finally {
                 setLoading(false);
             }
         };
 
         fetchCorporationData();
-    }, [corporationId]);
+    }, [corporationId, notify]);
 
     if (loading) {
         return (
@@ -591,20 +574,6 @@ const CorporateEnrollmentPage = () => {
                         </Typography>
                     </Box>
 
-                    <Snackbar
-                        open={snackbar.open}
-                        autoHideDuration={6000}
-                        onClose={() => setSnackbar({ ...snackbar, open: false })}
-                        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-                    >
-                        <Alert
-                            onClose={() => setSnackbar({ ...snackbar, open: false })}
-                            severity={snackbar.severity}
-                            sx={{ width: '100%' }}
-                        >
-                            {snackbar.message}
-                        </Alert>
-                    </Snackbar>
                 </Box>
             </Box>
     );

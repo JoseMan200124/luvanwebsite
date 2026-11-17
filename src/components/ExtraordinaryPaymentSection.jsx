@@ -15,8 +15,6 @@ import {
     TableRow,
     TableCell,
     TableBody,
-    Snackbar,
-    Alert,
     Box,
     TablePagination,
     Dialog,
@@ -28,6 +26,7 @@ import Autocomplete from '@mui/material/Autocomplete';
 import api from '../utils/axiosConfig';
 import usePermissions from '../hooks/usePermissions';
 import moment from 'moment';
+import useNotify from '../hooks/useNotify';
 
 const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', hideSchoolSelect = false, noWrapper = false }) => {
     const { hasPermission } = usePermissions();
@@ -67,7 +66,7 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
     const [totalExtraPayments, setTotalExtraPayments] = useState(0);
 
     // Snackbar para mensajes
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
 
     // Estados para la gestión de usuarios en el formulario
     const [userListArray, setUserListArray] = useState([]);
@@ -152,12 +151,12 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
     // Envío del formulario para crear un pago extraordinario
     const handleSubmit = async () => {
         if (!formData.schoolId || !formData.amount) {
-            alert('Por favor complete los campos obligatorios: Colegio y Monto.');
+            notify.warning('Complete los campos obligatorios: Colegio y Monto');
             return;
         }
         try {
             const response = await api.post('/payments/extraordinary', formData);
-            setSnackbar({ open: true, message: response.data.message, severity: 'success' });
+            notify.success(response.data.message);
             onPaymentCreated?.(response.data.extraordinaryPayment);
             // Reiniciar formulario
             setFormData({
@@ -182,7 +181,7 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
             fetchExtraordinaryPayments(filterStartDate, filterEndDate, 0, rowsPerPage);
         } catch (error) {
             console.error('Error al crear pago extraordinario:', error);
-            setSnackbar({ open: true, message: 'Error al crear pago extraordinario', severity: 'error' });
+            notify.error('Error al crear pago extraordinario');
         }
     };
 
@@ -201,7 +200,7 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
             setTotalExtraPayments(res.data.total || 0);
         } catch (error) {
             console.error('Error al obtener pagos extraordinarios:', error);
-            setSnackbar({ open: true, message: 'Error al obtener pagos extraordinarios', severity: 'error' });
+            notify.error('Error al obtener pagos extraordinarios');
         }
     };
 
@@ -558,16 +557,6 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
                 />
             </Box>
 
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} severity={snackbar.severity} sx={{ width: '100%' }}>
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
 
             {/* Diálogo para agregar usuario */}
             <Dialog open={userDialogOpen} onClose={handleCloseUserDialog}>

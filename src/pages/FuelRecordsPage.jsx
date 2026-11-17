@@ -34,8 +34,6 @@ import {
     DialogContent,
     DialogActions,
     Button,
-    Snackbar,
-    Alert,
 } from '@mui/material';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
@@ -68,6 +66,14 @@ import { F, toRouteOptions } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
+
+const failedResponse = (response, fallback) => {
+    const error = new Error(response?.message || fallback);
+    error.response = { data: { message: response?.message || fallback } };
+    return error;
+};
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -90,6 +96,8 @@ const cardMd = SHOW_NEW_FUEL_METRIC ? 2.4 : 3;
 
 const FuelRecordsPage = () => {
     const { hasPermission } = usePermissions();
+    const notify = useNotify();
+    const confirm = useConfirm();
     const [fuelRecords, setFuelRecords] = useState([]);
     const [loading, setLoading] = useState(false);
     const [exporting, setExporting] = useState(false);
@@ -159,12 +167,6 @@ const FuelRecordsPage = () => {
     // Editar registro
     const [editOpen, setEditOpen] = useState(false);
     const [updating, setUpdating] = useState(false);
-    const [editSnackbar, setEditSnackbar] = useState({ open: false, message: '', severity: 'success' });
-
-    // Eliminar registro
-    const [deleteOpen, setDeleteOpen] = useState(false);
-    const [deleteId, setDeleteId] = useState(null);
-    const [deleting, setDeleting] = useState(false);
     const [editSchools, setEditSchools] = useState([]);
     const [editCorporations, setEditCorporations] = useState([]);
     const [editBuses, setEditBuses] = useState([]);
@@ -446,6 +448,7 @@ const FuelRecordsPage = () => {
             }
         } catch (error) {
             console.error('Error al cargar registros de combustible:', error);
+            notify.fromError(error, 'Error al cargar los registros de combustible');
             setFuelRecords([]);
             setTotalCount(0);
         } finally {
@@ -578,7 +581,7 @@ const FuelRecordsPage = () => {
 
     const handleDownloadExcel = async () => {
         if (!totalCount || totalCount === 0) {
-            window.alert('No hay registros para exportar con los filtros seleccionados.');
+            notify.warning('No hay registros para exportar con los filtros seleccionados');
             return;
         }
         try {
@@ -628,7 +631,7 @@ const FuelRecordsPage = () => {
             window.URL.revokeObjectURL(url);
         } catch (error) {
             console.error('Error al generar el reporte de combustible:', error);
-            window.alert('Error al generar el reporte. Revise la consola.');
+            notify.fromError(error, 'Error al generar el reporte');
         } finally {
             setExporting(false);
         }
@@ -649,6 +652,7 @@ const FuelRecordsPage = () => {
             }
         } catch (error) {
             console.error('Error al cargar detalles del registro:', error);
+            notify.fromError(error, 'Error al cargar los detalles del registro');
         }
     };
 
@@ -755,14 +759,14 @@ const FuelRecordsPage = () => {
 
     const handleEditSubmit = async () => {
         if (!selectedRecord) {
-            setEditSnackbar({ open: true, message: 'No se pudo cargar el registro a editar.', severity: 'error' });
+            notify.error('No se pudo cargar el registro a editar');
             return;
         }
 
         const required = ['client', 'busId', 'routeNumber', 'fuelingReason', 'fuelType', 'pricePerGallon', 'gallonage'];
         for (const key of required) {
             if (editForm[key] === '' || editForm[key] === null || editForm[key] === undefined) {
-                setEditSnackbar({ open: true, message: 'Por favor complete los campos requeridos.', severity: 'error' });
+                notify.warning('Por favor complete los campos requeridos');
                 return;
             }
         }
@@ -800,65 +804,36 @@ const FuelRecordsPage = () => {
                 handleCloseEdit();
                 handleCloseDetails();
                 await Promise.all([fetchFuelRecords(), fetchStatistics()]);
-                setEditSnackbar({ open: true, message: 'Registro actualizado exitosamente', severity: 'success' });
+                notify.success('Registro actualizado');
             } else {
-                setEditSnackbar({
-                    open: true,
-                    message: response?.message || 'No se pudo actualizar el registro.',
-                    severity: 'error'
-                });
+                notify.error(response?.message || 'No se pudo actualizar el registro');
             }
         } catch (error) {
             console.error('Error al actualizar registro:', error);
-            setEditSnackbar({
-                open: true,
-                message: 'Error al actualizar el registro. Revise la consola.',
-                severity: 'error'
-            });
+            notify.fromError(error, 'Error al actualizar el registro');
         } finally {
             setUpdating(false);
         }
     };
 
-    const handleOpenDelete = (id) => {
-        setDeleteId(id);
-        setDeleteOpen(true);
-    };
-
-    const handleCancelDelete = () => {
-        setDeleteId(null);
-        setDeleteOpen(false);
-    };
-
-    const handleConfirmDelete = async () => {
-        if (!deleteId) {
-            return;
-        }
-        try {
-            setDeleting(true);
-            const response = await deleteFuelRecord(deleteId);
-            if (response?.success) {
-                setDeleteOpen(false);
-                setDeleteId(null);
-                handleCloseDetails();
-                await Promise.all([fetchFuelRecords(), fetchStatistics()]);
-                setEditSnackbar({ open: true, message: 'Registro eliminado exitosamente', severity: 'success' });
-            } else {
-                setEditSnackbar({
-                    open: true,
-                    message: response?.message || 'No se pudo eliminar el registro.',
-                    severity: 'error'
-                });
-            }
-        } catch (error) {
-            console.error('Error al eliminar registro:', error);
-            setEditSnackbar({
-                open: true,
-                message: 'Error al eliminar el registro. Revise la consola.',
-                severity: 'error'
-            });
-        } finally {
-            setDeleting(false);
+    const handleDelete = async (id) => {
+        const ok = await confirm({
+            title: 'Eliminar registro de combustible',
+            message: 'Se eliminará el registro de combustible. Esta acción no se puede deshacer.',
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: async () => {
+                const response = await deleteFuelRecord(id);
+                if (!response?.success) {
+                    throw failedResponse(response, 'No se pudo eliminar el registro');
+                }
+            },
+            errorMessage: 'Error al eliminar el registro',
+        });
+        if (ok) {
+            handleCloseDetails();
+            await Promise.all([fetchFuelRecords(), fetchStatistics()]);
+            notify.success('Registro eliminado');
         }
     };
 
@@ -926,7 +901,7 @@ const FuelRecordsPage = () => {
         const required = ['fuelingReason', 'fuelType', 'client', 'busId', 'pricePerGallon', 'gallonage'];
         for (const key of required) {
             if (createForm[key] === '' || createForm[key] === null || createForm[key] === undefined) {
-                window.alert('Por favor complete los campos requeridos.');
+                notify.warning('Por favor complete los campos requeridos');
                 return;
             }
         }
@@ -976,13 +951,13 @@ const FuelRecordsPage = () => {
                 setPage(0);
                 fetchFuelRecords();
                 fetchStatistics();
-                window.alert('Registro creado exitosamente');
+                notify.success('Registro creado');
             } else {
-                window.alert('No se pudo crear el registro.');
+                notify.error(response?.message || 'No se pudo crear el registro');
             }
         } catch (error) {
             console.error('Error al crear registro:', error);
-            window.alert('Error al crear registro. Revise la consola.');
+            notify.fromError(error, 'Error al crear el registro');
         } finally {
             setCreating(false);
         }
@@ -1283,7 +1258,7 @@ const FuelRecordsPage = () => {
                                                         <Tooltip title="Eliminar registro">
                                                             <IconButton
                                                                 size="small"
-                                                                onClick={() => handleOpenDelete(record.id)}
+                                                                onClick={() => handleDelete(record.id)}
                                                                 color="error"
                                                             >
                                                                 <DeleteIcon />
@@ -1750,37 +1725,6 @@ const FuelRecordsPage = () => {
                         )}
                     </DialogActions>
                 </Dialog>
-
-                <Dialog open={deleteOpen} onClose={handleCancelDelete} aria-labelledby="delete-fuel-record-dialog-title">
-                    <DialogTitle id="delete-fuel-record-dialog-title">Confirmar eliminación</DialogTitle>
-                    <DialogContent>
-                        <Typography>
-                            ¿Estás seguro que deseas eliminar este registro de combustible? Esta acción no se puede deshacer.
-                        </Typography>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCancelDelete} disabled={deleting}>Cancelar</Button>
-                        <Button onClick={handleConfirmDelete} variant="contained" color="error" disabled={deleting}>
-                            {deleting ? 'Eliminando...' : 'Eliminar'}
-                        </Button>
-                    </DialogActions>
-                </Dialog>
-
-                <Snackbar
-                    open={editSnackbar.open}
-                    autoHideDuration={3500}
-                    onClose={() => setEditSnackbar((prev) => ({ ...prev, open: false }))}
-                    anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-                >
-                    <Alert
-                        onClose={() => setEditSnackbar((prev) => ({ ...prev, open: false }))}
-                        severity={editSnackbar.severity}
-                        variant="filled"
-                        sx={{ width: '100%' }}
-                    >
-                        {editSnackbar.message}
-                    </Alert>
-                </Snackbar>
 
                 {SHOW_NEW_FUEL_METRIC && (
                     /* ── Modal: Explicación del cálculo de eficiencia ── */

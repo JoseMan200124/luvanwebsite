@@ -19,7 +19,6 @@ import {
     DialogActions,
     DialogContent,
     DialogTitle,
-    Snackbar,
     Alert,
     CircularProgress,
     List,
@@ -56,6 +55,8 @@ import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { matchSearchTokens } from '../utils/clientFilter';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
 
 const AVAILABILITY_OPTIONS = [
     { value: 'assigned', label: 'Asignados' },
@@ -210,6 +211,8 @@ const BusesManagementPage = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const { hasPermission } = usePermissions();
+    const notify = useNotify();
+    const confirm = useConfirm();
 
     const { auth } = useContext(AuthContext);
 
@@ -217,11 +220,6 @@ const BusesManagementPage = () => {
     const [selectedBus, setSelectedBus] = useState(null);
     const [openDialog, setOpenDialog] = useState(false);
 
-    const [snackbar, setSnackbar] = useState({
-        open: false,
-        message: '',
-        severity: 'success'
-    });
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [loading, setLoading] = useState(false);
@@ -238,12 +236,7 @@ const BusesManagementPage = () => {
     // Ordenamiento
     const [order, setOrder] = useState('asc');
     const [orderBy, setOrderBy] = useState('');
-    // Delete file dialog state
-    const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
-    const [deleteTarget, setDeleteTarget] = useState(null);
-    const [deleteTargetIndex, setDeleteTargetIndex] = useState(null);
-    const [deleteLoading, setDeleteLoading] = useState(false);
-    
+
 
     // =================== Efectos y funciones ===================
     const handleRequestSort = (property) => {
@@ -264,12 +257,7 @@ const BusesManagementPage = () => {
             setLoading(false);
         } catch (err) {
             console.error('Error fetching buses:', err);
-            const errorMessage = err.response?.data?.message || 'Error al obtener los buses';
-            setSnackbar({
-                open: true,
-                message: errorMessage,
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error al obtener los buses');
             setLoading(false);
         }
     };
@@ -316,27 +304,20 @@ const BusesManagementPage = () => {
         setOpenDialog(true);
     };
 
-    const handleDeleteClick = async (busId) => {
-        if (window.confirm('¿Estás seguro de que deseas eliminar este bus?')) {
-            try {
-                await api.delete(`/buses/${busId}`, {
-                    headers: { Authorization: `Bearer ${auth.token}` }
-                });
-                setSnackbar({
-                    open: true,
-                    message: 'Bus eliminado exitosamente',
-                    severity: 'success'
-                });
-                fetchBuses();
-            } catch (err) {
-                console.error('Error deleting bus:', err);
-                const errorMessage = err.response?.data?.message || 'Error al eliminar el bus';
-                setSnackbar({
-                    open: true,
-                    message: errorMessage,
-                    severity: 'error'
-                });
-            }
+    const handleDeleteClick = async (bus) => {
+        const ok = await confirm({
+            title: 'Eliminar bus',
+            message: `Se eliminará el bus ${bus.plate}. Esta acción no se puede deshacer.`,
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: () => api.delete(`/buses/${bus.id}`, {
+                headers: { Authorization: `Bearer ${auth.token}` }
+            }),
+            errorMessage: 'Error al eliminar el bus',
+        });
+        if (ok) {
+            notify.success('Bus eliminado');
+            fetchBuses();
         }
     };
 
@@ -363,11 +344,7 @@ const BusesManagementPage = () => {
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 if (file.size > maxSize) {
-                    setSnackbar({
-                        open: true,
-                        message: `El archivo ${file.name} supera los 5 MB, por favor selecciona uno más pequeño.`,
-                        severity: 'error'
-                    });
+                    notify.error(`El archivo ${file.name} supera los 5 MB, por favor selecciona uno más pequeño.`);
                     // reset input and stop
                     e.target.value = null;
                     return;
@@ -392,49 +369,41 @@ const BusesManagementPage = () => {
         e.target.value = null;
     };
 
-    // Open confirm dialog to remove a file (local or server). The actual deletion runs in confirmRemoveFile.
-    const handleRemoveFile = (file, index) => {
-        setDeleteTarget(file);
-        setDeleteTargetIndex(index);
-        setOpenDeleteDialog(true);
-    };
-
-    // Perform the actual removal after confirmation
-    const confirmRemoveFile = async () => {
-        const file = deleteTarget;
-        const index = deleteTargetIndex;
+    // Pide confirmación y quita un archivo del bus. Si ya está en el servidor, lo elimina primero de ahí.
+    const handleRemoveFile = async (file, index) => {
         if (!file) {
             return;
         }
-        setDeleteLoading(true);
-
-        // If file has an id, it's already on the server
-        if (file?.id) {
-            // backend expects a busId in the route: DELETE /buses/:busId/files/:fileId
-            if (!selectedBus?.id) {
-                setSnackbar({ open: true, message: 'No se pudo determinar el bus para eliminar el archivo.', severity: 'error' });
-                setDeleteLoading(false);
-                setOpenDeleteDialog(false);
-                setDeleteTarget(null);
-                setDeleteTargetIndex(null);
-                return;
-            }
-            try {
-                await api.delete(`/buses/${selectedBus.id}/files/${file.id}`, {
+        const onServer = Boolean(file.id);
+        if (onServer && !hasPermission('buses-eliminar-archivo')) {
+            notify.warning('No tiene permiso para eliminar archivos del bus');
+            return;
+        }
+        // backend expects a busId in the route: DELETE /buses/:busId/files/:fileId
+        if (onServer && !selectedBus?.id) {
+            notify.error('No se pudo determinar el bus para eliminar el archivo');
+            return;
+        }
+        const fileLabel = file.fileName ? file.fileName.split('/').pop() : file.name;
+        const ok = await confirm({
+            title: 'Eliminar archivo',
+            message: `Se eliminará el archivo ${fileLabel}.${onServer ? ' Esta acción no se puede deshacer.' : ''}`,
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: onServer
+                ? () => api.delete(`/buses/${selectedBus.id}/files/${file.id}`, {
                     headers: { Authorization: `Bearer ${auth.token}` }
-                });
-                setSnackbar({ open: true, message: 'Archivo eliminado', severity: 'success' });
-                // refresh the buses list so outer view stays in sync
-                fetchBuses();
-            } catch (err) {
-                console.error('Error deleting file on server:', err);
-                setSnackbar({ open: true, message: 'No se pudo eliminar el archivo en el servidor', severity: 'error' });
-                setDeleteLoading(false);
-                setOpenDeleteDialog(false);
-                setDeleteTarget(null);
-                setDeleteTargetIndex(null);
-                return;
-            }
+                })
+                : undefined,
+            errorMessage: 'No se pudo eliminar el archivo en el servidor',
+        });
+        if (!ok) {
+            return;
+        }
+        if (onServer) {
+            notify.success('Archivo eliminado');
+            // refresh the buses list so outer view stays in sync
+            fetchBuses();
         }
 
         // Remove locally (works for both existing and newly added files)
@@ -453,11 +422,6 @@ const BusesManagementPage = () => {
             }
             return { ...prev, files: filesArr };
         });
-
-        setDeleteLoading(false);
-        setOpenDeleteDialog(false);
-        setDeleteTarget(null);
-        setDeleteTargetIndex(null);
     };
 
     const handleSave = async () => {
@@ -484,11 +448,7 @@ const BusesManagementPage = () => {
                         Authorization: `Bearer ${auth.token}`
                     }
                 });
-                setSnackbar({
-                    open: true,
-                    message: 'Bus actualizado exitosamente',
-                    severity: 'success'
-                });
+                notify.success('Bus actualizado');
             } else {
                 await api.post('/buses', formData, {
                     headers: {
@@ -496,31 +456,18 @@ const BusesManagementPage = () => {
                         Authorization: `Bearer ${auth.token}`
                     }
                 });
-                setSnackbar({
-                    open: true,
-                    message: 'Bus creado exitosamente',
-                    severity: 'success'
-                });
+                notify.success('Bus creado');
             }
 
             fetchBuses();
             handleDialogClose();
         } catch (err) {
             console.error('Error saving bus:', err);
-            const errorMessage = err.response?.data?.message || 'Ocurrió un error al guardar el bus';
-            setSnackbar({
-                open: true,
-                message: errorMessage,
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error al guardar el bus');
         }
     };
 
     // file delete endpoint left intentionally out of UI for now (server API exists). Use bus file deletion via server routes if needed.
-
-    const handleSnackbarClose = () => {
-        setSnackbar({ ...snackbar, open: false });
-    };
 
     // =================== Búsqueda y filtros ===================
     const [clientSchools, setClientSchools] = useState([]);
@@ -652,11 +599,7 @@ const BusesManagementPage = () => {
         const maxSize = 5 * 1024 * 1024; // 5 MB
 
         if (file && file.size > maxSize) {
-            setSnackbar({
-                open: true,
-                message: `El archivo ${file.name} supera los 5 MB, por favor selecciona uno más pequeño.`,
-                severity: 'error'
-            });
+            notify.error(`El archivo ${file.name} supera los 5 MB, por favor selecciona uno más pequeño.`);
             e.target.value = null;
             return;
         }
@@ -685,12 +628,7 @@ const BusesManagementPage = () => {
             fetchBuses();
         } catch (error) {
             console.error('Error al subir buses masivamente:', error);
-            const errorMessage = error.response?.data?.message || 'Ocurrió un error al procesar la carga masiva';
-            setSnackbar({
-                open: true,
-                message: errorMessage,
-                severity: 'error'
-            });
+            notify.fromError(error, 'Error al procesar la carga masiva');
         }
         setBulkLoading(false);
     };
@@ -854,7 +792,7 @@ const BusesManagementPage = () => {
                                             </PermissionGuard>
                                             <PermissionGuard permission="buses-eliminar">
                                                 <Tooltip title="Eliminar">
-                                                    <IconButton onClick={() => handleDeleteClick(bus.id)}>
+                                                    <IconButton onClick={() => handleDeleteClick(bus)}>
                                                         <Delete />
                                                     </IconButton>
                                                 </Tooltip>
@@ -1023,7 +961,7 @@ const BusesManagementPage = () => {
                                                         </PermissionGuard>
                                                         <PermissionGuard permission="buses-eliminar">
                                                             <Tooltip title="Eliminar">
-                                                                <IconButton onClick={() => handleDeleteClick(bus.id)}>
+                                                                <IconButton onClick={() => handleDeleteClick(bus)}>
                                                                     <Delete />
                                                                 </IconButton>
                                                             </Tooltip>
@@ -1287,41 +1225,6 @@ const BusesManagementPage = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Confirmar eliminación de archivo */}
-            <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)} maxWidth="xs" fullWidth>
-                <DialogTitle>Confirmar eliminación</DialogTitle>
-                <DialogContent>
-                    <Typography>
-                        ¿Estás seguro de que deseas eliminar este archivo? Esta acción no se puede deshacer.
-                    </Typography>
-                    {deleteTarget && (
-                        <Box sx={{ mt: 2 }}>
-                            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                                {deleteTarget.fileName ? deleteTarget.fileName.split('/').pop() : deleteTarget.name}
-                            </Typography>
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setOpenDeleteDialog(false)} disabled={deleteLoading}>Cancelar</Button>
-                    {(!deleteTarget?.id || hasPermission('buses-eliminar-archivo')) && (
-                        <Button onClick={confirmRemoveFile} variant="contained" color="error" disabled={deleteLoading}>
-                            {deleteLoading ? 'Eliminando...' : 'Eliminar'}
-                        </Button>
-                    )}
-                </DialogActions>
-            </Dialog>
-
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={handleSnackbarClose}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert onClose={handleSnackbarClose} severity={snackbar.severity} sx={{ width: '100%' }}>
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
             {/* RouteHistoryModal removed */}
         </PageContainer>
     );

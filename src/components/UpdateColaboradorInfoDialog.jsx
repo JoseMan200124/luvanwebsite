@@ -14,8 +14,6 @@ import {
     InputLabel,
     Checkbox,
     FormControlLabel,
-    Alert,
-    Snackbar,
     Box,
     Divider,
     CircularProgress
@@ -23,6 +21,7 @@ import {
 import api from '../utils/axiosConfig';
 import { AuthContext } from '../context/AuthProvider';
 import { getPasswordChangeError } from '../utils/passwordPolicy';
+import useNotify from '../hooks/useNotify';
 
 const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved }) => {
     const { logout } = useContext(AuthContext);
@@ -73,7 +72,7 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
     const [changePassword, setChangePassword] = useState(false);
     const [employeeNumber, setEmployeeNumber] = useState('');
 
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
 
     // Formato 24h -> 12h con AM/PM (ej: "14:30" -> "2:30 PM")
     const formatTime12Hour = (time24) => {
@@ -203,7 +202,7 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
             }
         } catch (error) {
             console.error('Error al obtener info de la corporación:', error);
-            setSnackbar({ open: true, message: 'No se pudieron obtener los datos de la corporación.', severity: 'error' });
+            notify.error('No se pudieron obtener los datos de la corporación');
         } finally {
             setLoading(false);
         }
@@ -231,7 +230,7 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
         if (isChangingPassword) {
             const passwordError = getPasswordChangeError({ currentPassword, newPassword: accountPassword });
             if (passwordError) {
-                setSnackbar({ open: true, message: passwordError, severity: 'error' });
+                notify.error(passwordError);
                 return;
             }
             payload.accountPassword = accountPassword;
@@ -242,19 +241,19 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
             await api.put(`/update-colaborador-info/${corporationId}`, payload);
 
             if (isChangingPassword) {
-                setSnackbar({ open: true, message: 'Contraseña actualizada. Inicia sesión con tu nueva contraseña.', severity: 'success' });
+                notify.success('Contraseña actualizada. Inicia sesión con tu nueva contraseña.');
                 setTimeout(() => logout(), 2000);
                 return;
             }
 
-            setSnackbar({ open: true, message: '¡Registro actualizado correctamente!', severity: 'success' });
+            notify.success('¡Registro actualizado correctamente!');
             onSaved?.();
             // close dialog after brief delay
             setTimeout(() => onClose?.(), 1000);
         } catch (error) {
             console.error('Error al enviar formulario:', error);
             const messageToShow = 'Ocurrió un error al enviar tu registro. Intenta de nuevo.';
-            setSnackbar({ open: true, message: error?.response?.data?.message || messageToShow, severity: 'error' });
+            notify.error(error?.response?.data?.message || messageToShow);
         }
     };
 
@@ -372,9 +371,6 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
                 <Button variant="contained" onClick={handleSubmit} color="primary">Actualizar Datos</Button>
             </DialogActions>
 
-            <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={() => setSnackbar({ ...snackbar, open: false })} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-                <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>{snackbar.message}</Alert>
-            </Snackbar>
         </Dialog>
     );
 };

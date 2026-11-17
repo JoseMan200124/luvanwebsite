@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton,
-    Paper, Snackbar, Alert, Stack, TextField, Typography, CircularProgress,
+    Paper, Alert, Stack, TextField, Typography, CircularProgress,
 } from '@mui/material';
 import { Add, Edit, Delete, DragIndicator } from '@mui/icons-material';
 import {
@@ -11,6 +11,7 @@ import {
 } from '../../services/educationLevelsService';
 import PermissionGuard from '../PermissionGuard';
 import usePermissions from '../../hooks/usePermissions';
+import useNotify from '../../hooks/useNotify';
 
 /**
  * Gestión del catálogo de niveles educativos del sistema. Se abre desde el
@@ -31,7 +32,7 @@ const NivelesEducativosModal = ({ open, onClose }) => {
     const [dragIndex, setDragIndex] = useState(null);
     const [dragOverIndex, setDragOverIndex] = useState(null);
     const dragFromRef = useRef(null);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -39,11 +40,11 @@ const NivelesEducativosModal = ({ open, onClose }) => {
             setLevels(await listEducationLevels());
         } catch (err) {
             console.error('[NivelesEducativos] Error cargando niveles:', err);
-            setSnackbar({ open: true, message: 'No se pudieron cargar los niveles.', severity: 'error' });
+            notify.error('No se pudieron cargar los niveles');
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [notify]);
 
     useEffect(() => {
         if (open) {
@@ -54,7 +55,7 @@ const NivelesEducativosModal = ({ open, onClose }) => {
     const handleSaveLevel = async () => {
         const name = String(editing?.name || '').trim();
         if (!name) {
-            setSnackbar({ open: true, message: 'El nombre es requerido.', severity: 'error' });
+            notify.error('El nombre es requerido');
             return;
         }
         try {
@@ -66,13 +67,9 @@ const NivelesEducativosModal = ({ open, onClose }) => {
             }
             setEditing(null);
             await load();
-            setSnackbar({ open: true, message: 'Nivel guardado.', severity: 'success' });
+            notify.success('Nivel guardado');
         } catch (err) {
-            setSnackbar({
-                open: true,
-                message: err?.response?.data?.message || 'Error al guardar el nivel.',
-                severity: 'error',
-            });
+            notify.fromError(err, 'Error al guardar el nivel.');
         }
     };
 
@@ -106,7 +103,7 @@ const NivelesEducativosModal = ({ open, onClose }) => {
             const changed = withOrder.filter((level, i) => before[i]?.id !== level.id);
             await Promise.all(changed.map((level) => updateEducationLevel(level.id, { order: level.order })));
         } catch (err) {
-            setSnackbar({ open: true, message: 'No se pudo guardar el nuevo orden.', severity: 'error' });
+            notify.error('No se pudo guardar el nuevo orden');
             await load();
         } finally {
             setReordering(false);
@@ -128,9 +125,9 @@ const NivelesEducativosModal = ({ open, onClose }) => {
             await deleteEducationLevel(deleting.level.id);
             setDeleting(null);
             await load();
-            setSnackbar({ open: true, message: 'Nivel eliminado.', severity: 'success' });
+            notify.success('Nivel eliminado');
         } catch (err) {
-            setSnackbar({ open: true, message: 'Error al eliminar el nivel.', severity: 'error' });
+            notify.error('Error al eliminar el nivel');
         }
     };
 
@@ -274,20 +271,6 @@ const NivelesEducativosModal = ({ open, onClose }) => {
                 </DialogActions>
             </Dialog>
 
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert
-                    onClose={() => setSnackbar({ ...snackbar, open: false })}
-                    severity={snackbar.severity}
-                    sx={{ width: '100%' }}
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </>
     );
 };

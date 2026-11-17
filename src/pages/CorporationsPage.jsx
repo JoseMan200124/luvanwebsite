@@ -8,8 +8,6 @@ import {
     CardContent,
     Button,
     CircularProgress,
-    Snackbar,
-    Alert,
     Grid,
     IconButton,
     Tooltip,
@@ -17,7 +15,6 @@ import {
     DialogTitle,
     DialogContent,
     DialogActions,
-    DialogContentText,
     TextField,
     Paper,
     Accordion,
@@ -49,6 +46,8 @@ import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
 
 const CorporationCard = styled(Card)`
     ${tw`cursor-pointer transition-all duration-300`}
@@ -135,12 +134,12 @@ const CorporationsPage = () => {
     const [corporations, setCorporations] = useState([]);
     const [selectedFiscalYear, setSelectedFiscalYear] = useState(new Date().getFullYear().toString());
     const [loading, setLoading] = useState(false);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
+    const confirm = useConfirm();
     
     // Estados para diálogos
     const [openCreateDialog, setOpenCreateDialog] = useState(false);
     const [openEditDialog, setOpenEditDialog] = useState(false);
-    const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
     const [selectedCorporation, setSelectedCorporation] = useState(null);
     
     // Estados para formulario
@@ -263,15 +262,11 @@ const CorporationsPage = () => {
             setCorporations(processedCorporations);
         } catch (err) {
             console.error('Error fetching corporations:', err);
-            setSnackbar({ 
-                open: true, 
-                message: 'Error al obtener las corporaciones', 
-                severity: 'error' 
-            });
+            notify.error('Error al obtener las corporaciones');
         } finally {
             setLoading(false);
         }
-    }, [auth.token, selectedFiscalYear]);
+    }, [auth.token, selectedFiscalYear, notify]);
 
     useEffect(() => {
         if (auth.token && selectedFiscalYear) {
@@ -303,18 +298,10 @@ const CorporationsPage = () => {
         const link = `${baseUrl}/corporations/enroll/${corporationId}`;
         navigator.clipboard.writeText(link)
             .then(() => {
-                setSnackbar({
-                    open: true,
-                    message: 'Enlace de inscripción copiado al portapapeles',
-                    severity: 'success'
-                });
+                notify.success('Enlace de inscripción copiado al portapapeles');
             })
             .catch(() => {
-                setSnackbar({
-                    open: true,
-                    message: 'Error al copiar enlace',
-                    severity: 'error'
-                });
+                notify.error('Error al copiar enlace');
             });
     };
 
@@ -422,15 +409,9 @@ const CorporationsPage = () => {
         setOpenEditDialog(true);
     };
 
-    const handleOpenDeleteDialog = (corporation) => {
-        setSelectedCorporation(corporation);
-        setOpenDeleteDialog(true);
-    };
-
     const handleCloseDialogs = () => {
         setOpenCreateDialog(false);
         setOpenEditDialog(false);
-        setOpenDeleteDialog(false);
         setSelectedCorporation(null);
     };
 
@@ -553,21 +534,13 @@ const CorporationsPage = () => {
                 }
             });
             
-            setSnackbar({
-                open: true,
-                message: 'Corporación creada exitosamente',
-                severity: 'success'
-            });
+            notify.success('Corporación creada');
             
             handleCloseDialogs();
             fetchCorporations();
         } catch (err) {
             console.error('Error creating corporation:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.error || 'Error al crear corporación',
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error al crear corporación');
         }
     };
 
@@ -598,51 +571,32 @@ const CorporationsPage = () => {
                 }
             });
             
-            setSnackbar({
-                open: true,
-                message: 'Corporación actualizada exitosamente',
-                severity: 'success'
-            });
+            notify.success('Corporación actualizada');
             
             handleCloseDialogs();
             fetchCorporations();
         } catch (err) {
             console.error('Error updating corporation:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.error || 'Error al actualizar corporación',
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error al actualizar corporación');
         }
     };
 
-    const handleDeleteCorporation = async () => {
-        if (!selectedCorporation) {
-            return;
-        }
-        
-        try {
-            await api.delete(`/corporations/${selectedCorporation.id}`, {
+    const handleDeleteCorporation = async (corporation) => {
+        const ok = await confirm({
+            title: 'Eliminar corporación',
+            message: `Se eliminará la corporación "${corporation.name}". Esta acción no se puede deshacer.`,
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: () => api.delete(`/corporations/${corporation.id}`, {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 }
-            });
-            
-            setSnackbar({
-                open: true,
-                message: 'Corporación eliminada exitosamente',
-                severity: 'success'
-            });
-            
-            handleCloseDialogs();
+            }),
+            errorMessage: 'Error al eliminar la corporación',
+        });
+        if (ok) {
+            notify.success('Corporación eliminada');
             fetchCorporations();
-        } catch (err) {
-            console.error('Error deleting corporation:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.error || 'Error al eliminar corporación',
-                severity: 'error'
-            });
         }
     };
 
@@ -1194,7 +1148,7 @@ const CorporationsPage = () => {
                                                             color="error"
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                handleOpenDeleteDialog(corporation);
+                                                                handleDeleteCorporation(corporation);
                                                             }}
                                                         >
                                                             <Delete fontSize="small" />
@@ -1215,38 +1169,6 @@ const CorporationsPage = () => {
             {renderCorporationDialog(false)}
             {renderCorporationDialog(true)}
 
-            {/* Diálogo de Eliminar */}
-            <Dialog open={openDeleteDialog} onClose={handleCloseDialogs}>
-                <DialogTitle>Confirmar Eliminación</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        ¿Está seguro que desea eliminar la corporación "{selectedCorporation?.name}"?
-                        Esta acción no se puede deshacer.
-                    </DialogContentText>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseDialogs}>Cancelar</Button>
-                    <Button onClick={handleDeleteCorporation} color="error" variant="contained">
-                        Eliminar
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Snackbar de notificaciones */}
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-            >
-                <Alert 
-                    onClose={() => setSnackbar({ ...snackbar, open: false })} 
-                    severity={snackbar.severity}
-                    variant="filled"
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </PageContainer>
     );
 };

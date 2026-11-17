@@ -20,8 +20,6 @@ import {
     DialogContent,
     DialogActions,
     Button,
-    Snackbar,
-    Alert,
     AccordionActions,
     Divider,
     TextField,
@@ -65,6 +63,7 @@ import {
 import tw, { styled } from 'twin.macro';
 import api from '../utils/axiosConfig';
 import usePermissions from '../hooks/usePermissions';
+import useNotify from '../hooks/useNotify';
 import moment from 'moment-timezone';
 
 moment.tz.setDefault('America/Guatemala');
@@ -290,11 +289,7 @@ const ActivityLogPage = () => {
     const [loadingPayments, setLoadingPayments] = useState(false);
     const [loadingBoletas, setLoadingBoletas] = useState(false);
 
-    const [snackbar, setSnackbar] = useState({
-        open: false,
-        message: '',
-        severity: 'info'
-    });
+    const notify = useNotify();
 
     const [openBoletasDialog, setOpenBoletasDialog] = useState(false);
     const [currentBoletas, setCurrentBoletas] = useState([]);
@@ -405,11 +400,7 @@ const ActivityLogPage = () => {
             }
         } catch (error) {
             console.error('Error fetchAllData =>', error);
-            setSnackbar({
-                open: true,
-                message: 'Error al obtener datos para registro de actividades',
-                severity: 'error'
-            });
+            notify.error('Error al obtener datos para registro de actividades');
         } finally {
             setLoading(false);
         }
@@ -431,7 +422,7 @@ const ActivityLogPage = () => {
             setPayments(res.data.payments || []);
             setTotalPaymentsCount(res.data.totalCount || 0);
         } catch (error) {
-            setSnackbar({ open: true, message: 'Error al obtener pagos', severity: 'error' });
+            notify.error('Error al obtener pagos');
         } finally {
             setLoadingPayments(false);
         }
@@ -459,11 +450,7 @@ const ActivityLogPage = () => {
             setOpenBoletasDialog(true);
         } catch (error) {
             console.error('Error handleViewBoletas =>', error);
-            setSnackbar({
-                open: true,
-                message: 'Error al obtener boletas del padre',
-                severity: 'error'
-            });
+            notify.error('Error al obtener boletas del padre');
         } finally {
             setLoadingBoletas(false); // Solo para boletas
         }
@@ -487,21 +474,11 @@ const ActivityLogPage = () => {
         try {
             setLoading(true);
             await api.put(`/buses/${bus.id}/taller`, { inWorkshop: newValue });
-            setSnackbar({
-                open: true,
-                message: newValue
-                    ? 'Bus marcado como "En Taller".'
-                    : 'Bus marcado como disponible.',
-                severity: 'success'
-            });
+            notify.success(newValue ? 'Bus marcado como "En Taller".' : 'Bus marcado como disponible.');
             fetchAllData();
         } catch (error) {
             console.error('Error handleToggleBusTaller =>', error);
-            setSnackbar({
-                open: true,
-                message: 'No se pudo actualizar el estado del bus',
-                severity: 'error'
-            });
+            notify.error('No se pudo actualizar el estado del bus');
         } finally {
             setLoading(false);
         }
@@ -533,19 +510,11 @@ const ActivityLogPage = () => {
 
     const handleSubmitIncident = async () => {
         if (!incidentForm.descripcion) {
-            setSnackbar({
-                open: true,
-                message: 'La descripción es obligatoria para el incidente',
-                severity: 'warning'
-            });
+            notify.warning('La descripción es obligatoria para el incidente');
             return;
         }
         if (!incidentForm.busId) {
-            setSnackbar({
-                open: true,
-                message: 'No se encontró el bus para el incidente.',
-                severity: 'error'
-            });
+            notify.error('No se encontró el bus para el incidente');
             return;
         }
 
@@ -563,22 +532,14 @@ const ActivityLogPage = () => {
                         ? incidentForm.otroFallaDetalle
                         : ''
             });
-            setSnackbar({
-                open: true,
-                message: 'Incidencia reportada correctamente',
-                severity: 'success'
-            });
+            notify.success('Incidencia reportada');
             setOpenIncidentDialog(false);
 
             const incResp = await api.get('/activity-logs/incidents');
             setIncidents(incResp.data.incidents || []);
         } catch (error) {
             console.error('Error al crear incidente =>', error);
-            setSnackbar({
-                open: true,
-                message: 'No se pudo reportar el incidente.',
-                severity: 'error'
-            });
+            notify.error('No se pudo reportar el incidente');
         } finally {
             setLoading(false);
         }
@@ -784,7 +745,7 @@ const ActivityLogPage = () => {
             setTotalDueGlobal(res.data.sumTotalDue || 0);
             setTotalPenaltyGlobal(res.data.sumPenalty || 0);
         } catch (error) {
-            setSnackbar({ open: true, message: 'Error al obtener análisis global de pagos', severity: 'error' });
+            notify.error('Error al obtener análisis global de pagos');
         }
     };
 
@@ -2107,20 +2068,6 @@ const ActivityLogPage = () => {
                 </DialogActions>
             </Dialog>
 
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={5000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert
-                    severity={snackbar.severity}
-                    onClose={() => setSnackbar({ ...snackbar, open: false })}
-                    sx={{ width: '100%' }}
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </PageContainer>
     );
 };

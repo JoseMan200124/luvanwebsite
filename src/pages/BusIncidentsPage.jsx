@@ -55,6 +55,8 @@ import { F, toPlateOptions, toRouteOptions } from '../components/filters/filterF
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -66,6 +68,8 @@ const FAILURE_TYPE_OPTIONS = [
 ];
 
 const BusIncidentsPage = () => {
+    const notify = useNotify();
+    const confirm = useConfirm();
     const [incidents, setIncidents] = useState([]);
     const [loading, setLoading] = useState(false);
     const [page, setPage] = useState(0);
@@ -116,8 +120,6 @@ const BusIncidentsPage = () => {
     const [loadingDetails, setLoadingDetails] = useState(false);
 
     // Modal de eliminación
-    const [deleteOpen, setDeleteOpen] = useState(false);
-    const [deleteId, setDeleteId] = useState(null);
 
     // Edición de descripción
     const [editingDescription, setEditingDescription] = useState(false);
@@ -322,6 +324,7 @@ const BusIncidentsPage = () => {
             }
         } catch (error) {
             console.error('Error al cargar incidentes:', error);
+            notify.fromError(error, 'Error al cargar los incidentes');
         } finally {
             setLoading(false);
         }
@@ -349,7 +352,7 @@ const BusIncidentsPage = () => {
             setSelectedIncident(data);
         } catch (error) {
             console.error('Error al cargar detalles del incidente:', error);
-            alert('Error al cargar los detalles del incidente');
+            notify.fromError(error, 'Error al cargar los detalles del incidente');
         } finally {
             setLoadingDetails(false);
         }
@@ -389,9 +392,10 @@ const BusIncidentsPage = () => {
             setSelectedIncident(prev => ({ ...prev, fecha: fechaValue.toISOString() }));
             setEditingFecha(false);
             setFechaValue(null);
+            notify.success('Fecha guardada');
         } catch (error) {
             console.error('Error al guardar fecha:', error);
-            alert('Error al guardar la fecha');
+            notify.fromError(error, 'Error al guardar la fecha');
         } finally {
             setSavingFecha(false);
         }
@@ -412,9 +416,10 @@ const BusIncidentsPage = () => {
             setSelectedIncident(prev => ({ ...prev, descripcion: descriptionValue }));
             setEditingDescription(false);
             setDescriptionValue('');
+            notify.success('Descripción guardada');
         } catch (error) {
             console.error('Error al guardar descripción:', error);
-            alert('Error al guardar la descripción');
+            notify.fromError(error, 'Error al guardar la descripción');
         } finally {
             setSavingDescription(false);
         }
@@ -426,25 +431,18 @@ const BusIncidentsPage = () => {
         setOrderBy(column);
     };
 
-    const handleOpenDelete = (id) => {
-        setDeleteId(id);
-        setDeleteOpen(true);
-    };
-
-    const handleCancelDelete = () => {
-        setDeleteOpen(false);
-        setDeleteId(null);
-    };
-
-    const handleConfirmDelete = async () => {
-        try {
-            await deleteBusIncident(deleteId);
-            setDeleteOpen(false);
-            setDeleteId(null);
+    const handleDelete = async (id) => {
+        const ok = await confirm({
+            title: 'Eliminar incidente',
+            message: 'Se eliminará el incidente. Esta acción no se puede deshacer.',
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: () => deleteBusIncident(id),
+            errorMessage: 'Error al eliminar el incidente',
+        });
+        if (ok) {
+            notify.success('Incidente eliminado');
             fetchIncidents();
-        } catch (error) {
-            console.error('Error al eliminar incidente:', error);
-            alert('Error al eliminar el incidente');
         }
     };
 
@@ -719,7 +717,7 @@ const BusIncidentsPage = () => {
                                                         <Tooltip title="Eliminar">
                                                             <IconButton
                                                                 size="small"
-                                                                onClick={() => handleOpenDelete(incident.id)}
+                                                                onClick={() => handleDelete(incident.id)}
                                                                 color="error"
                                                             >
                                                                 <DeleteIcon />
@@ -1006,29 +1004,6 @@ const BusIncidentsPage = () => {
                     <DialogActions>
                         <Button onClick={handleCloseDetails} color="primary">
                             Cerrar
-                        </Button>
-                    </DialogActions>
-                </Dialog>
-
-                {/* Modal de Confirmación de Eliminación */}
-                <Dialog
-                    open={deleteOpen}
-                    onClose={handleCancelDelete}
-                    maxWidth="xs"
-                    fullWidth
-                >
-                    <DialogTitle>Confirmar Eliminación</DialogTitle>
-                    <DialogContent>
-                        <Typography>
-                            ¿Estás seguro de que deseas eliminar este incidente? Esta acción no se puede deshacer.
-                        </Typography>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCancelDelete} color="inherit">
-                            Cancelar
-                        </Button>
-                        <Button onClick={handleConfirmDelete} color="error" variant="contained">
-                            Eliminar
                         </Button>
                     </DialogActions>
                 </Dialog>

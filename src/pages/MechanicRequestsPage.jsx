@@ -74,12 +74,16 @@ import { F, YES_NO_OPTIONS, toRouteOptions } from '../components/filters/filterF
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
 
 const StatsCard = styled(Card)`
     ${tw`h-full`}
 `;
 
 const MechanicRequestsPage = () => {
+    const notify = useNotify();
+    const confirm = useConfirm();
     // Estados para datos
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -137,8 +141,6 @@ const MechanicRequestsPage = () => {
     // Estados para modales
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [detailModalOpen, setDetailModalOpen] = useState(false);
-    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-    const [requestToDelete, setRequestToDelete] = useState(null);
     const [statusModalOpen, setStatusModalOpen] = useState(false);
     const [newStatus, setNewStatus] = useState('');
     const [statusNotes, setStatusNotes] = useState('');
@@ -266,10 +268,11 @@ const MechanicRequestsPage = () => {
             setClientBreakdown({ colegios: Number(response.clientBreakdown?.colegios || 0), corporativos: Number(response.clientBreakdown?.corporativos || 0) });
         } catch (error) {
             console.error('Error fetching mechanic requests:', error);
+            notify.fromError(error, 'Error al cargar las solicitudes de mecánica');
         } finally {
             setLoading(false);
         }
-    }, [page, rowsPerPage, schoolId, corporationId, plate, routeNumber, tipoTrabajo, estado, urgente, selectedCicloEscolar, startDate, endDate, sortBy, sortOrder]);
+    }, [page, rowsPerPage, schoolId, corporationId, plate, routeNumber, tipoTrabajo, estado, urgente, selectedCicloEscolar, startDate, endDate, sortBy, sortOrder, notify]);
 
     // Función para cargar estadísticas
     const fetchStatistics = useCallback(async () => {
@@ -337,28 +340,41 @@ const MechanicRequestsPage = () => {
             setDetailModalOpen(true);
         } catch (error) {
             console.error('Error fetching request detail:', error);
+            notify.fromError(error, 'Error al cargar el detalle de la solicitud');
         }
     };
 
-    // Abrir modal de eliminar
-    const handleOpenDeleteModal = (request) => {
-        setRequestToDelete(request);
-        setDeleteModalOpen(true);
-    };
-
-    // Confirmar eliminación
-    const handleConfirmDelete = async () => {
-        if (!requestToDelete) {
-            return;
-        }
-        try {
-            await deleteMechanicRequest(requestToDelete.id);
-            setDeleteModalOpen(false);
-            setRequestToDelete(null);
+    // Eliminar con confirmación (muestra bus, tipo y fecha de la solicitud)
+    const handleDelete = async (request) => {
+        const ok = await confirm({
+            title: 'Eliminar solicitud de mecánica',
+            message: (
+                <>
+                    <Typography color="text.secondary">
+                        Se eliminará la solicitud de mecánica. Esta acción no se puede deshacer.
+                    </Typography>
+                    <Box mt={2}>
+                        <Typography variant="body2" color="textSecondary">
+                            <strong>Bus:</strong> {request.bus?.plate || '-'}
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                            <strong>Tipo:</strong> {WORK_TYPES[request.tipoTrabajo] || request.tipoTrabajo}
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                            <strong>Fecha:</strong> {formatDate(request.fechaSolicitud)}
+                        </Typography>
+                    </Box>
+                </>
+            ),
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: () => deleteMechanicRequest(request.id),
+            errorMessage: 'Error al eliminar la solicitud',
+        });
+        if (ok) {
+            notify.success('Solicitud eliminada');
             fetchRequests();
             fetchStatistics();
-        } catch (error) {
-            console.error('Error deleting request:', error);
         }
     };
 
@@ -397,8 +413,10 @@ const MechanicRequestsPage = () => {
             setFechaCompletado('');
             fetchRequests();
             fetchStatistics();
+            notify.success('Estado actualizado');
         } catch (error) {
             console.error('Error updating status:', error);
+            notify.fromError(error, 'Error al actualizar el estado');
         }
     };
 
@@ -470,6 +488,7 @@ const MechanicRequestsPage = () => {
             setCreateSubmitting(false);
             fetchRequests();
             fetchStatistics();
+            notify.success('Solicitud creada');
         } catch (e) {
             console.error('Error creating mechanic request:', e);
             setCreateError(e?.response?.data?.message || 'Error al crear la solicitud.');
@@ -752,7 +771,7 @@ const MechanicRequestsPage = () => {
                                                         <IconButton
                                                             size="small"
                                                             color="error"
-                                                            onClick={() => handleOpenDeleteModal(request)}
+                                                            onClick={() => handleDelete(request)}
                                                         >
                                                             <DeleteIcon fontSize="small" />
                                                         </IconButton>
@@ -1079,42 +1098,6 @@ const MechanicRequestsPage = () => {
                             Guardar
                         </Button>
                     </PermissionGuard>
-                </DialogActions>
-            </Dialog>
-
-            {/* Modal de Confirmación de Eliminación */}
-            <Dialog
-                open={deleteModalOpen}
-                onClose={() => setDeleteModalOpen(false)}
-            >
-                <DialogTitle>Confirmar Eliminación</DialogTitle>
-                <DialogContent>
-                    <Typography>
-                        ¿Está seguro de que desea eliminar esta solicitud de mecánica?
-                    </Typography>
-                    {requestToDelete && (
-                        <Box mt={2}>
-                            <Typography variant="body2" color="textSecondary">
-                                <strong>Bus:</strong> {requestToDelete.bus?.plate || '-'}
-                            </Typography>
-                            <Typography variant="body2" color="textSecondary">
-                                <strong>Tipo:</strong> {WORK_TYPES[requestToDelete.tipoTrabajo] || requestToDelete.tipoTrabajo}
-                            </Typography>
-                            <Typography variant="body2" color="textSecondary">
-                                <strong>Fecha:</strong> {formatDate(requestToDelete.fechaSolicitud)}
-                            </Typography>
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setDeleteModalOpen(false)}>Cancelar</Button>
-                    <Button
-                        variant="contained"
-                        color="error"
-                        onClick={handleConfirmDelete}
-                    >
-                        Eliminar
-                    </Button>
                 </DialogActions>
             </Dialog>
         </PageContainer>

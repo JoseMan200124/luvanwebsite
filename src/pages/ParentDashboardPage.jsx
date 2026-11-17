@@ -10,7 +10,6 @@ import {
   Button,
   CircularProgress,
   Grid,
-  Snackbar,
   Alert,
   Container,
   Chip,
@@ -60,6 +59,7 @@ import SignatureCanvas from 'react-signature-canvas';
 import parse from 'html-react-parser';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import useNotify from '../hooks/useNotify';
 
 // ---------- Estilos ----------
 const SectionCard = styled(Card)`width:100%;border-radius:10px;`;
@@ -278,7 +278,7 @@ const ParentDashboardPage = () => {
   }, [auth?.user?.serviceStatus]);
 
   const [loading, setLoading] = useState(true);
-  const [snackbar, setSnackbar] = useState({ open: false, sev: 'success', msg: '' });
+  const notify = useNotify();
 
   // Estado para firma de contratos
   const [contractsDialogOpen, setContractsDialogOpen] = useState(false);
@@ -397,7 +397,7 @@ const ParentDashboardPage = () => {
       if (!userId) {
         setParentInfo(normalizeParentInfo({}));
         setSlotsByStudent({});
-        setSnackbar({ open: true, sev: 'warning', msg: 'Sesión no encontrada. Inicia sesión nuevamente.' });
+        notify.warning('Sesión no encontrada. Inicia sesión nuevamente.');
         return;
       }
 
@@ -468,7 +468,7 @@ const ParentDashboardPage = () => {
       console.error('[ParentDashboard] loadAll error:', e);
       setParentInfo(normalizeParentInfo({}));
       setSlotsByStudent({});
-      setSnackbar({ open: true, sev: 'error', msg: 'No se pudo cargar la información.' });
+      notify.error('No se pudo cargar la información');
     } finally {
       setLoading(false);
     }
@@ -509,7 +509,7 @@ const ParentDashboardPage = () => {
     try {
       const email = auth?.user?.email;
       if (!email) {
-        setSnackbar({ open: true, sev: 'error', msg: 'No se encontró el correo del usuario.' });
+        notify.error('No se encontró el correo del usuario');
         return;
       }
       const res = await api.get(`/update-parent-info?email=${encodeURIComponent(email)}`);
@@ -517,7 +517,7 @@ const ParentDashboardPage = () => {
       setUpdateDialogOpen(true);
     } catch (e) {
       console.error('[ParentDashboard] Error fetching update data:', e);
-      setSnackbar({ open: true, sev: 'error', msg: 'No se pudo cargar la información para actualizar.' });
+      notify.error('No se pudo cargar la información para actualizar');
     }
   };
 
@@ -525,7 +525,7 @@ const ParentDashboardPage = () => {
   const handleOpenContractsDialog = async () => {
     const familyDetailId = parentInfo?.familyDetailId;
     if (!familyDetailId) {
-      setSnackbar({ open: true, sev: 'warning', msg: 'Sesión no encontrada. Inicia sesión nuevamente.' });
+      notify.warning('Sesión no encontrada. Inicia sesión nuevamente.');
       return;
     }
 
@@ -545,7 +545,7 @@ const ParentDashboardPage = () => {
       setContractsDialogOpen(true);
     } catch (e) {
       console.error('[ParentDashboard] Error fetching contracts:', e);
-      setSnackbar({ open: true, sev: 'error', msg: 'No se pudieron obtener los contratos disponibles.' });
+      notify.error('No se pudieron obtener los contratos disponibles');
     } finally {
       setContractsLoading(false);
     }
@@ -572,7 +572,7 @@ const ParentDashboardPage = () => {
       setSigningDialogOpen(true);
     } catch (err) {
       console.error('Error loading shared contract:', err);
-      setSnackbar({ open: true, sev: 'error', msg: 'No se pudo cargar el contrato para firmar.' });
+      notify.error('No se pudo cargar el contrato para firmar');
     }
   };
 
@@ -588,7 +588,7 @@ const ParentDashboardPage = () => {
       setViewFilledData(res.data);
     }).catch((err) => {
       console.error('Error loading filled contract:', err);
-      setSnackbar({ open: true, sev: 'error', msg: 'No se pudo cargar el contrato firmado.' });
+      notify.error('No se pudo cargar el contrato firmado');
       setViewFilledOpen(false);
     }).finally(() => setViewFilledLoading(false));
   };
@@ -805,10 +805,10 @@ const ParentDashboardPage = () => {
       }
 
       pdf.save(`${(filledContract.title || 'contrato').replace(/[^a-z0-9\-_. ]/gi, '')}.pdf`);
-      setSnackbar({ open: true, sev: 'success', msg: 'PDF generado exitosamente.' });
+      notify.success('PDF generado');
     } catch (error) {
       console.error('Error generando el PDF:', error);
-      setSnackbar({ open: true, sev: 'error', msg: 'Hubo un error al generar el PDF.' });
+      notify.error('Hubo un error al generar el PDF');
     }
 
     document.body.removeChild(tempDiv);
@@ -837,7 +837,7 @@ const ParentDashboardPage = () => {
     }
     if (newlyMissing.length > 0) {
       setMissingFields(newlyMissing);
-      setSnackbar({ open: true, sev: 'warning', msg: `Faltan campos: ${newlyMissing.slice(0,3).join(', ')}${newlyMissing.length>3? '...':''}` });
+      notify.warning(`Faltan campos: ${newlyMissing.slice(0,3).join(', ')}${newlyMissing.length>3? '...':''}`);
       const first = newlyMissing[0];
       setTimeout(() => { const el = fieldRefs.current[first]; if (el?.focus) {
           try { el.focus(); } catch(e){}
@@ -865,7 +865,7 @@ const ParentDashboardPage = () => {
     try {
       setSubmittingSignature(true);
       await api.post(`/contracts/share/${signingContract.uuid}`, payload);
-      setSnackbar({ open: true, sev: 'success', msg: 'Contrato firmado y guardado correctamente.' });
+      notify.success('Contrato firmado y guardado');
       // refresh lists: remove from contractsList and reload filledContractsList
       // simple approach: refetch dialog data
       const parentId = auth?.user?.id;
@@ -878,7 +878,7 @@ const ParentDashboardPage = () => {
       loadAll();
     } catch (err) {
       console.error('Error submitting filled contract:', err);
-      setSnackbar({ open: true, sev: 'error', msg: 'Ocurrió un error al enviar el contrato.' });
+      notify.error('Ocurrió un error al enviar el contrato');
     } finally {
       setSubmittingSignature(false);
     }
@@ -1687,20 +1687,6 @@ const ParentDashboardPage = () => {
         </DialogActions>
       </Dialog>
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
-          severity={snackbar.sev}
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          sx={{ width: '100%' }}
-        >
-          {snackbar.msg}
-        </Alert>
-      </Snackbar>
 
       {/* Diálogo para actualizar datos de familia */}
       <UpdateParentInfoDialog
@@ -1709,7 +1695,7 @@ const ParentDashboardPage = () => {
         initialData={updateDialogData}
         onSaved={() => {
           loadAll();
-          setSnackbar({ open: true, sev: 'success', msg: '¡Datos actualizados correctamente!' });
+          notify.success('¡Datos actualizados correctamente!');
         }}
       />
     </>

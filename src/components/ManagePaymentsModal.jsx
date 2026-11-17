@@ -25,8 +25,6 @@ import {
     Chip,
     Stack,
     Paper,
-    Snackbar,
-    Alert,
     useMediaQuery,
     useTheme,
     InputAdornment,
@@ -53,6 +51,8 @@ import dateService from '../services/dateService';
 import ReceiptsPane from './ReceiptsPane';
 import RetroactiveApplyModal from './modals/RetroactiveApplyModal';
 import PaymentFlowTimeline from './PaymentFlowTimeline';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
 
 // cache TTL (ms)
 const PAYMENT_HIST_CACHE_TTL = 1000 * 60 * 5; // 5 minutes
@@ -535,7 +535,6 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const [globalFreezeReason, setGlobalFreezeReason] = useState('');
 
     // Delete confirmation dialog
-    const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
 
     // Receipts dialog state
     const [openReceiptsDialog, setOpenReceiptsDialog] = useState(false);
@@ -554,7 +553,8 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const [txExplanation, setTxExplanation] = useState({ title: '', text: '' });
     // Help / legend dialog state for the table
     const [openHelpLegend, setOpenHelpLegend] = useState(false);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
+    const notify = useNotify();
+    const confirm = useConfirm();
 
     // derive month options only from uploaded receipts (Boletas should show uploaded files only)
     const boletaMonthOptions = React.useMemo(() => {
@@ -713,7 +713,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
             setSelectedReceipt(prev => (prev && prev.id === receiptId ? updated : prev));
         } catch (err) {
             console.error('Error changing receipt status', receiptId, err);
-            setSnackbar({ open: true, message: err.response?.data?.message || 'Error al cambiar el estado de la boleta', severity: 'error' });
+            notify.fromError(err, 'Error al cambiar el estado de la boleta');
         }
     };
 
@@ -1103,9 +1103,20 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     {/* State changes handled elsewhere; action buttons removed */}
                     {/* Delete/Revert payment */}
                     <PermissionGuard permission="pagos-revertir-ultimo">
-                        <Button variant="outlined" color="warning" startIcon={<Restore />} onClick={() => { if (!isDeleted) {
-                            setOpenDeleteDialog(true);
-                        } }} disabled={isDeleted}>Revertir pago</Button>
+                        <Button variant="outlined" color="warning" startIcon={<Restore />} onClick={async () => {
+                            if (isDeleted) {
+                                return;
+                            }
+                            const ok = await confirm({
+                                title: 'Revertir último pago',
+                                message: 'Se revertirá el último pago registrado. Esta acción no se puede deshacer.',
+                                confirmLabel: 'Revertir pago',
+                                tone: 'danger',
+                            });
+                            if (ok) {
+                                handleAction('deletePayment');
+                            }
+                        }} disabled={isDeleted}>Revertir pago</Button>
                     </PermissionGuard>
                 </Box>
 
@@ -1180,24 +1191,6 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     </DialogActions>
                 </Dialog>
 
-                {/* Delete Payment Confirmation Dialog */}
-                <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)} maxWidth="xs" fullWidth fullScreen={isMobile}>
-                    <DialogTitle>Confirmar revertir último pago</DialogTitle>
-                    <DialogContent>
-                        <Typography variant="body2">¿Está seguro que desea revertir el último pago? Esta acción no se puede deshacer.</Typography>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={() => setOpenDeleteDialog(false)}>Cancelar</Button>
-                        <PermissionGuard permission="pagos-revertir-ultimo">
-                            <Button variant="contained" color="error" onClick={() => {
-                                // call parent action to delete the payment
-                                handleAction('deletePayment');
-                                setOpenDeleteDialog(false);
-                            }}>Revertir pago</Button>
-                        </PermissionGuard>
-                    </DialogActions>
-                </Dialog>
-
                 {/* Dialog: Boletas (Receipts) */}
                 <Dialog open={openReceiptsDialog} onClose={() => { setOpenReceiptsDialog(false); setUploadedReceipts([]); setSelectedReceipt(null); setReceiptZoom(1); }} fullWidth maxWidth="md" fullScreen={isMobile}>
                     <DialogTitle>Boletas</DialogTitle>
@@ -1253,20 +1246,6 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                         })();
                     }}
                 />
-                <Snackbar
-                    open={snackbar.open}
-                    autoHideDuration={5000}
-                    onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
-                    anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-                >
-                    <Alert
-                        severity={snackbar.severity}
-                        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
-                        sx={{ width: '100%' }}
-                    >
-                        {snackbar.message}
-                    </Alert>
-                </Snackbar>
                 {!histLoading && sortedHistories.length > 0 && (
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontStyle: 'italic' }}>
                         ℹ️ Mostrando solo pagos realizados. Para ver el flujo completo (créditos automáticos, distribuciones, etc.) usa la pestaña "Flujo Completo".

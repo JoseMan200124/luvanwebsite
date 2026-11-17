@@ -5,7 +5,7 @@ import moment from 'moment-timezone';
 import {
     Accordion, AccordionDetails, AccordionSummary, Box, Button, Chip, CircularProgress, Dialog,
     DialogActions, DialogContent, DialogTitle, IconButton,
-    Snackbar, Alert, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination,
+    Alert, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination,
     TableRow, Tooltip, Typography,
 } from '@mui/material';
 import {
@@ -20,6 +20,8 @@ import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import PermissionGuard from '../components/PermissionGuard';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
 import CircularMasivaModal from '../components/CircularMasivaModal';
 import SendNotificationModal from '../components/SendNotificationModal';
 import { SCHEDULE_TIMEZONE, describeSchedule } from '../components/scheduling/scheduleModel';
@@ -245,14 +247,10 @@ const ScheduledSendsPage = () => {
     const [detail, setDetail] = useState(null);
     const [editing, setEditing] = useState(null);
     const [editSchools, setEditSchools] = useState([]);
-    const [toCancel, setToCancel] = useState(null);
-    const [toResend, setToResend] = useState(null);
-    const [resending, setResending] = useState(false);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
+    const confirm = useConfirm();
 
-    const showError = useCallback((err, fallback) => setSnackbar({
-        open: true, severity: 'error', message: err?.response?.data?.message || fallback,
-    }), []);
+    const showError = useCallback((err, fallback) => notify.fromError(err, fallback), [notify]);
 
     const refresh = useCallback(() => setRefreshKey((key) => key + 1), []);
 
@@ -295,18 +293,28 @@ const ScheduledSendsPage = () => {
         wasRunning.current = hasRunningRun;
     }, [hasRunningRun, refresh]);
 
-    const confirmResend = async () => {
-        setResending(true);
+    const handleResend = async (run) => {
+        const { uuid } = detail;
+        let result = null;
+        const ok = await confirm({
+            title: 'Reenviar a fallidos',
+            message: `Se enviará el correo únicamente a los ${run?.pendingEmailsCount ?? run?.failedRecipientsCount ?? 0} destinatarios que no lo recibieron. La circular y la notificación ya están publicadas en el sistema y no se duplican.`,
+            confirmLabel: 'Reenviar',
+            cancelLabel: 'Volver',
+            onConfirm: async () => {
+                result = await resendScheduledSendFailures(uuid, run.id);
+            },
+            errorMessage: 'Error al reenviar a los destinatarios fallidos',
+        });
+        if (!ok) {
+            return;
+        }
+        notify.success(result?.message || 'Reenviando el correo a los destinatarios fallidos');
+        refresh();
         try {
-            const result = await resendScheduledSendFailures(detail.uuid, toResend.id);
-            setSnackbar({ open: true, severity: 'success', message: result?.message || 'Reenviando el correo a los destinatarios fallidos.' });
-            setToResend(null);
-            setDetail(await getScheduledSend(detail.uuid));
-            refresh();
+            setDetail(await getScheduledSend(uuid));
         } catch (err) {
-            showError(err, 'Error al reenviar a los destinatarios fallidos.');
-        } finally {
-            setResending(false);
+            showError(err, 'Error al actualizar el detalle');
         }
     };
 
@@ -322,20 +330,25 @@ const ScheduledSendsPage = () => {
         }
     };
 
-    const confirmCancel = async () => {
-        try {
-            await cancelScheduledSend(toCancel.uuid);
-            setSnackbar({ open: true, severity: 'success', message: 'Envío programado cancelado.' });
-            setToCancel(null);
+    const handleCancel = async (item) => {
+        const ok = await confirm({
+            title: 'Cancelar envío programado',
+            message: `Se cancelará "${itemTitle(item)}" y no se enviará ninguna ocurrencia más. Lo ya enviado no se modifica, y un envío que esté en curso en este momento terminará normalmente. Esta acción no se puede deshacer.`,
+            confirmLabel: 'Cancelar envío',
+            cancelLabel: 'Volver',
+            tone: 'danger',
+            onConfirm: () => cancelScheduledSend(item.uuid),
+            errorMessage: 'Error al cancelar el envío',
+        });
+        if (ok) {
+            notify.success('Envío programado cancelado');
             refresh();
-        } catch (err) {
-            showError(err, 'Error al cancelar el envío.');
         }
     };
 
     const closeEdit = () => setEditing(null);
     const onEdited = (message) => {
-        setSnackbar({ open: true, severity: 'success', message: message || 'Envío programado actualizado.' });
+        notify.success(message || 'Envío programado actualizado.');
         refresh();
     };
 
@@ -361,7 +374,7 @@ const ScheduledSendsPage = () => {
                     onError={showError}
                     onView={openDetail}
                     onEdit={openEdit}
-                    onCancel={setToCancel}
+                    onCancel={handleCancel}
                 />
             ))}
 
@@ -412,7 +425,7 @@ const ScheduledSendsPage = () => {
                                                     {run.canResend && (
                                                         <PermissionGuard permission={KIND_PERMISSION[detail.kind]}>
                                                             <Tooltip title="Envía el correo solo a quienes no lo recibieron. No duplica la circular ni la notificación en el sistema.">
-                                                                <Button size="small" variant="outlined" startIcon={<ReplayIcon />} onClick={() => setToResend(run)}>
+                                                                <Button size="small" variant="outlined" startIcon={<ReplayIcon />} onClick={() => handleResend(run)}>
                                                                     Reenviar a fallidos
                                                                 </Button>
                                                             </Tooltip>
@@ -428,38 +441,6 @@ const ScheduledSendsPage = () => {
                     )}
                 </DialogContent>
                 <DialogActions><Button onClick={() => setDetail(null)}>Cerrar</Button></DialogActions>
-            </Dialog>
-
-            {/* Confirmar reenvío a fallidos */}
-            <Dialog open={!!toResend} onClose={() => !resending && setToResend(null)}>
-                <DialogTitle>Reenviar a fallidos</DialogTitle>
-                <DialogContent>
-                    <Typography variant="body2">
-                        Se enviará el correo únicamente a los {toResend?.pendingEmailsCount ?? toResend?.failedRecipientsCount ?? 0} destinatarios que no lo recibieron.
-                        La circular y la notificación ya están publicadas en el sistema y no se duplican.
-                    </Typography>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setToResend(null)} disabled={resending}>Volver</Button>
-                    <Button variant="contained" onClick={confirmResend} disabled={resending}>
-                        {resending ? 'Reenviando…' : 'Reenviar'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Confirmar cancelación */}
-            <Dialog open={!!toCancel} onClose={() => setToCancel(null)}>
-                <DialogTitle>Cancelar envío programado</DialogTitle>
-                <DialogContent>
-                    <Typography variant="body2">
-                        ¿Cancelar "{toCancel ? itemTitle(toCancel) : ''}"? No se enviará ninguna ocurrencia más.
-                        Lo ya enviado no se modifica, y un envío que esté en curso en este momento terminará normalmente. Esta acción no se puede deshacer.
-                    </Typography>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setToCancel(null)}>Volver</Button>
-                    <Button color="error" variant="contained" onClick={confirmCancel}>Cancelar envío</Button>
-                </DialogActions>
             </Dialog>
 
             <CircularMasivaModal
@@ -478,17 +459,6 @@ const ScheduledSendsPage = () => {
                 editing={editing?.kind === 'notification' ? editing : null}
                 onSuccess={onEdited}
             />
-
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </PageContainer>
     );
 };

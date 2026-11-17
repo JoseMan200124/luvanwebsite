@@ -7,8 +7,6 @@ import {
     CardContent,
     Button,
     CircularProgress,
-    Snackbar,
-    Alert,
     Grid,
     Chip,
     Table,
@@ -57,7 +55,6 @@ import BulkScheduleColaboradoresModal from '../components/modals/BulkScheduleCol
 import ExcelJS from 'exceljs';
 import moment from 'moment-timezone';
 import { normalizeKey } from '../utils/stringHelpers';
-import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
 import UserServiceStatusModal from '../components/UserServiceStatusModal';
 import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
@@ -69,6 +66,8 @@ import { matchSearchTokens } from '../utils/clientFilter';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import useClientScope from '../hooks/useClientScope';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
 
 const COLABORADOR_STATUS_OPTIONS = ['Nuevo', 'Duplicado', 'Actualizado', 'Sin asignaciones', 'Activo', 'Inactivo']
     .map((status) => ({ value: status, label: status }));
@@ -169,13 +168,12 @@ const ColaboradoresPage = () => {
     });
     const { search: searchQuery, status: statusFilter, serviceStatus: serviceStatusFilter } = pageFilters.applied;
     const [selectedColaborador, setSelectedColaborador] = useState(null);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
+    const confirm = useConfirm();
     
     // Diálogos
     const [openCreateDialog, setOpenCreateDialog] = useState(false);
     const [openEditDialog, setOpenEditDialog] = useState(false);
-    const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
-    const [openToggleStateDialog, setOpenToggleStateDialog] = useState(false);
     const [openScheduleDialog, setOpenScheduleDialog] = useState(false);
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
     const [openBulkScheduleDialog, setOpenBulkScheduleDialog] = useState(false);
@@ -247,7 +245,7 @@ const ColaboradoresPage = () => {
             const resp = await api.get(`/corporations/${corporationId}/colaboradores/download`, { params: { serviceStatus } });
             const list = resp.data.colaboradores || [];
             if (list.length === 0) {
-                setSnackbar({ open: true, message: `No hay colaboradores con estado ${serviceStatus} para descargar`, severity: 'info' });
+                notify.info(`No hay colaboradores con estado ${serviceStatus} para descargar`);
                 return;
             }
 
@@ -305,10 +303,10 @@ const ColaboradoresPage = () => {
             a.click();
             window.URL.revokeObjectURL(url);
 
-            setSnackbar({ open: true, message: 'Archivo descargado exitosamente', severity: 'success' });
+            notify.success('Archivo descargado');
         } catch (err) {
             console.error('Error downloading colaboradores by service status:', err);
-            setSnackbar({ open: true, message: 'Error al descargar colaboradores', severity: 'error' });
+            notify.error('Error al descargar colaboradores');
         }
     };
 
@@ -485,15 +483,11 @@ const ColaboradoresPage = () => {
             setFilteredColaboradores(colaboradoresData);
         } catch (err) {
             console.error('Error fetching colaboradores:', err);
-            setSnackbar({ 
-                open: true, 
-                message: 'Error al obtener colaboradores.', 
-                severity: 'error' 
-            });
+            notify.error('Error al obtener colaboradores');
         } finally {
             setLoading(false);
         }
-    }, [auth.token, corporationId, fiscalYear]);
+    }, [auth.token, corporationId, fiscalYear, notify]);
 
     useEffect(() => {
         if (auth.token && corporationId) {
@@ -681,16 +675,6 @@ const ColaboradoresPage = () => {
         setOpenEditDialog(true);
     };
 
-    const handleOpenDeleteDialog = (colaborador) => {
-        setSelectedColaborador(colaborador);
-        setOpenDeleteDialog(true);
-    };
-
-    const handleOpenToggleStateDialog = (colaborador) => {
-        setSelectedColaborador(colaborador);
-        setOpenToggleStateDialog(true);
-    };
-
     const handleServiceStatusClick = (colaborador) => {
         if (!colaborador) {
             return;
@@ -700,7 +684,7 @@ const ColaboradoresPage = () => {
     };
 
     const handleServiceStatusSuccess = () => {
-        setSnackbar({ open: true, message: 'Estado del servicio actualizado correctamente', severity: 'success' });
+        notify.success('Estado del servicio actualizado');
         setSelectedColaborador(null);
         fetchColaboradores();
     };
@@ -713,8 +697,6 @@ const ColaboradoresPage = () => {
     const handleCloseDialogs = () => {
         setOpenCreateDialog(false);
         setOpenEditDialog(false);
-        setOpenDeleteDialog(false);
-        setOpenToggleStateDialog(false);
         setOpenScheduleDialog(false);
         setSelectedColaborador(null);
     };
@@ -759,29 +741,13 @@ const ColaboradoresPage = () => {
                 }
             });
             
-            setSnackbar({
-                open: true,
-                message: 'Colaborador creado exitosamente',
-                severity: 'success'
-            });
+            notify.success('Colaborador creado');
             
             handleCloseDialogs();
             fetchColaboradores();
         } catch (err) {
-            try {
-                if (showDuplicateEmailFromError(err, setSnackbar)) {
-                    return;
-                }
-            } catch (e) {
-                // fallthrough to generic handling
-            }
-
             console.error('Error creating colaborador:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.error || 'Error al crear colaborador',
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error al crear colaborador');
         }
     };
 
@@ -824,88 +790,63 @@ const ColaboradoresPage = () => {
                 }
             });
             
-            setSnackbar({
-                open: true,
-                message: 'Colaborador actualizado exitosamente',
-                severity: 'success'
-            });
+            notify.success('Colaborador actualizado');
             
             handleCloseDialogs();
             fetchColaboradores();
         } catch (err) {
             console.error('Error updating colaborador:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.error || 'Error al actualizar colaborador',
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error al actualizar colaborador');
         }
     };
 
-    const handleDeleteColaborador = async () => {
-        if (!selectedColaborador) {
-            return;
-        }
-        
-        try {
-            await api.delete(`/users/${selectedColaborador.id}`, {
+    const handleDeleteColaborador = async (colaborador) => {
+        const ok = await confirm({
+            title: 'Eliminar colaborador',
+            message: `Se eliminará al colaborador "${colaborador.name}". Esta acción no se puede deshacer.`,
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: () => api.delete(`/users/${colaborador.id}`, {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 }
-            });
-            
-            setSnackbar({
-                open: true,
-                message: 'Colaborador eliminado exitosamente',
-                severity: 'success'
-            });
-            
-            handleCloseDialogs();
+            }),
+            errorMessage: 'Error al eliminar el colaborador',
+        });
+        if (ok) {
+            notify.success('Colaborador eliminado');
             fetchColaboradores();
-        } catch (err) {
-            console.error('Error deleting colaborador:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.message || 'Error al eliminar colaborador',
-                severity: 'error'
-            });
         }
     };
 
-    const handleToggleState = async () => {
-        if (!selectedColaborador) {
+    const handleToggleState = async (colaborador) => {
+        if (!hasPermission('usuarios-toggle-estado')) {
+            notify.warning('No tiene permiso para activar o desactivar colaboradores');
             return;
         }
-        
         // Determinar el nuevo estado (opuesto al actual)
-        const currentState = Number(selectedColaborador.state);
-        const newState = currentState === 1 ? 0 : 1;
-        
-        try {
-            await api.put(`/users/${selectedColaborador.id}/toggle-state`, 
+        const deactivating = Number(colaborador.state) === 1;
+        const newState = deactivating ? 0 : 1;
+        const ok = await confirm({
+            title: deactivating ? 'Desactivar colaborador' : 'Activar colaborador',
+            message: deactivating
+                ? `Se desactivará al colaborador "${colaborador.name}". No podrá acceder al sistema mientras esté desactivado.`
+                : `Se activará al colaborador "${colaborador.name}". Podrá acceder al sistema nuevamente.`,
+            confirmLabel: deactivating ? 'Desactivar' : 'Activar',
+            tone: deactivating ? 'danger' : 'default',
+            onConfirm: () => api.put(`/users/${colaborador.id}/toggle-state`,
                 { state: newState },
                 {
                     headers: {
                         Authorization: `Bearer ${auth.token}`,
                     }
                 }
-            );
-            
-            setSnackbar({
-                open: true,
-                message: `Colaborador ${newState === 1 ? 'activado' : 'desactivado'} exitosamente`,
-                severity: 'success'
-            });
-            
-            handleCloseDialogs();
+            ),
+            errorMessage: 'Error al cambiar el estado del colaborador',
+        });
+        if (ok) {
+            notify.success(`Colaborador ${newState === 1 ? 'activado' : 'desactivado'}`);
             fetchColaboradores();
-        } catch (err) {
-            console.error('Error toggling colaborador state:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.message || 'Error al cambiar estado del colaborador',
-                severity: 'error'
-            });
         }
     };
 
@@ -915,7 +856,7 @@ const ColaboradoresPage = () => {
             const resp = await api.get(`/corporations/${corporationId}/colaboradores/download`, { params: { mode: 'new' } });
             const newColaboradores = resp.data.colaboradores || [];
             if (newColaboradores.length === 0) {
-                setSnackbar({ open: true, message: 'No hay colaboradores nuevos para descargar', severity: 'warning' });
+                notify.warning('No hay colaboradores nuevos para descargar');
                 return;
             }
             
@@ -980,18 +921,10 @@ const ColaboradoresPage = () => {
             a.click();
             window.URL.revokeObjectURL(url);
             
-            setSnackbar({
-                open: true,
-                message: 'Archivo descargado exitosamente',
-                severity: 'success'
-            });
+            notify.success('Archivo descargado');
         } catch (err) {
             console.error('Error downloading new colaboradores:', err);
-            setSnackbar({
-                open: true,
-                message: 'Error al descargar colaboradores',
-                severity: 'error'
-            });
+            notify.error('Error al descargar colaboradores');
         }
     };
 
@@ -1001,17 +934,13 @@ const ColaboradoresPage = () => {
             const resp = await api.get(`/corporations/${corporationId}/colaboradores/download`, { params: { mode: 'all' } });
             const allCols = resp.data.colaboradores || [];
             if (allCols.length === 0) {
-                setSnackbar({ open: true, message: 'No hay colaboradores para descargar', severity: 'warning' });
+                notify.warning('No hay colaboradores para descargar');
                 return;
             }
             await buildColaboradoresWorkbookAndDownload(allCols, `Colaboradores_Todos_${currentCorporation?.name || 'Corporativo'}`);
         } catch (err) {
             console.error('Error downloading all colaboradores:', err);
-            setSnackbar({
-                open: true,
-                message: 'Error al descargar colaboradores',
-                severity: 'error'
-            });
+            notify.error('Error al descargar colaboradores');
         }
     };
 
@@ -1081,10 +1010,10 @@ const ColaboradoresPage = () => {
             a.click();
             window.URL.revokeObjectURL(url);
 
-            setSnackbar({ open: true, message: 'Archivo descargado exitosamente', severity: 'success' });
+            notify.success('Archivo descargado');
         } catch (err) {
             console.error('Error building colaboradores workbook:', err);
-            setSnackbar({ open: true, message: 'Error al descargar colaboradores', severity: 'error' });
+            notify.error('Error al descargar colaboradores');
         }
     };
 
@@ -1165,10 +1094,10 @@ const ColaboradoresPage = () => {
             a.click();
             window.URL.revokeObjectURL(url);
 
-            setSnackbar({ open: true, message: 'Plantilla descargada', severity: 'success' });
+            notify.success('Plantilla descargada');
         } catch (err) {
             console.error('Error descargando plantilla:', err);
-            setSnackbar({ open: true, message: 'Error al descargar plantilla', severity: 'error' });
+            notify.error('Error al descargar plantilla');
         }
     };
 
@@ -1204,11 +1133,7 @@ const ColaboradoresPage = () => {
     // Función para manejar carga masiva
     const handleBulkUpload = async () => {
         if (!bulkFile) {
-            setSnackbar({
-                open: true,
-                message: 'Por favor seleccione un archivo',
-                severity: 'warning'
-            });
+            notify.warning('Por favor seleccione un archivo');
             return;
         }
         
@@ -1225,22 +1150,14 @@ const ColaboradoresPage = () => {
                 }
             });
             
-            setSnackbar({
-                open: true,
-                message: 'Carga masiva completada exitosamente',
-                severity: 'success'
-            });
+            notify.success('Carga masiva completada');
             
             setOpenBulkDialog(false);
             setBulkFile(null);
             fetchColaboradores();
         } catch (err) {
             console.error('Error in bulk upload:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.error || 'Error en la carga masiva',
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error en la carga masiva');
         } finally {
             setBulkLoading(false);
         }
@@ -1249,11 +1166,7 @@ const ColaboradoresPage = () => {
     // Función para enviar circular
     const handleSendCircular = async () => {
         if (!circularSubject || !circularMessage) {
-            setSnackbar({
-                open: true,
-                message: 'Por favor complete todos los campos',
-                severity: 'warning'
-            });
+            notify.warning('Por favor complete todos los campos');
             return;
         }
         
@@ -1269,22 +1182,14 @@ const ColaboradoresPage = () => {
                 }
             });
             
-            setSnackbar({
-                open: true,
-                message: 'Circular enviada exitosamente',
-                severity: 'success'
-            });
+            notify.success('Circular enviada');
             
             setOpenCircularDialog(false);
             setCircularSubject('');
             setCircularMessage('');
         } catch (err) {
             console.error('Error sending circular:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.error || 'Error al enviar circular',
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error al enviar circular');
         } finally {
             setCircularLoading(false);
         }
@@ -1293,7 +1198,7 @@ const ColaboradoresPage = () => {
     // Función para descargar reporte de paradas de colaboradores
     const handleDownloadRouteReport = async () => {
         if (!corporationId) {
-            setSnackbar({ open: true, message: 'No hay corporación seleccionada.', severity: 'warning' });
+            notify.warning('No hay corporación seleccionada');
             return;
         }
 
@@ -1308,7 +1213,7 @@ const ColaboradoresPage = () => {
             );
 
             if (colaboradoresWithRoutes.length === 0) {
-                setSnackbar({ open: true, message: 'No hay colaboradores con paradas asignadas para generar el reporte.', severity: 'warning' });
+                notify.warning('No hay colaboradores con paradas asignadas para generar el reporte');
                 return;
             }
 
@@ -1522,10 +1427,10 @@ const ColaboradoresPage = () => {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
 
-            setSnackbar({ open: true, message: `Reporte de paradas para ${corpName} descargado exitosamente`, severity: 'success' });
+            notify.success(`Reporte de paradas para ${corpName} descargado exitosamente`);
         } catch (error) {
             console.error('[handleDownloadRouteReport] Error:', error);
-            setSnackbar({ open: true, message: 'Error al descargar el reporte de paradas', severity: 'error' });
+            notify.error('Error al descargar el reporte de paradas');
         }
     };
 
@@ -2070,7 +1975,7 @@ const ColaboradoresPage = () => {
                                                             color="success"
                                                             size="small"
                                                             clickable
-                                                            onClick={() => handleOpenToggleStateDialog(colaborador)}
+                                                            onClick={() => handleToggleState(colaborador)}
                                                         />
                                                     ) : getColaboradorStatus(colaborador) === 'Inactivo' ? (
                                                         <Chip
@@ -2078,7 +1983,7 @@ const ColaboradoresPage = () => {
                                                             color={getStatusColor(getColaboradorStatus(colaborador))}
                                                             size="small"
                                                             clickable
-                                                            onClick={() => handleOpenToggleStateDialog(colaborador)}
+                                                            onClick={() => handleToggleState(colaborador)}
                                                         />
                                                     ) : (
                                                         <Chip
@@ -2133,7 +2038,7 @@ const ColaboradoresPage = () => {
                                                             </IconButton>
                                                         )}
                                                         <PermissionGuard permission="usuarios-eliminar">
-                                                            <IconButton size="small" onClick={() => handleOpenDeleteDialog(colaborador)} title="Eliminar" color="error">
+                                                            <IconButton size="small" onClick={() => handleDeleteColaborador(colaborador)} title="Eliminar" color="error">
                                                                 <Delete fontSize="small" />
                                                             </IconButton>
                                                         </PermissionGuard>
@@ -2177,50 +2082,6 @@ const ColaboradoresPage = () => {
             {renderColaboradorDialog(true)}
 
             {/* Diálogo de eliminar */}
-            <Dialog open={openDeleteDialog} onClose={handleCloseDialogs}>
-                <DialogTitle>Confirmar Eliminación</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        ¿Está seguro que desea eliminar al colaborador "{selectedColaborador?.name}"?
-                        Esta acción no es reversible..
-                    </DialogContentText>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseDialogs}>Cancelar</Button>
-                    <PermissionGuard permission="usuarios-eliminar">
-                        <Button onClick={handleDeleteColaborador} color="error" variant="contained">
-                            Eliminar
-                        </Button>
-                    </PermissionGuard>
-                </DialogActions>
-            </Dialog>
-
-            {/* Diálogo de toggle state (activar/desactivar) */}
-            <Dialog open={openToggleStateDialog} onClose={handleCloseDialogs}>
-                <DialogTitle>
-                    {selectedColaborador && Number(selectedColaborador.state) === 1 ? 'Desactivar' : 'Activar'} Colaborador
-                </DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        ¿Está seguro que desea {selectedColaborador && Number(selectedColaborador.state) === 1 ? 'desactivar' : 'activar'} al colaborador "{selectedColaborador?.name}"?
-                        {selectedColaborador && Number(selectedColaborador.state) === 1 
-                            ? ' El colaborador no podrá acceder al sistema mientras esté desactivado.' 
-                            : ' El colaborador podrá acceder al sistema nuevamente.'}
-                    </DialogContentText>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseDialogs}>Cancelar</Button>
-                    <PermissionGuard permission="usuarios-toggle-estado">
-                        <Button
-                            onClick={handleToggleState}
-                            color={selectedColaborador && Number(selectedColaborador.state) === 1 ? 'warning' : 'success'}
-                            variant="contained"
-                        >
-                            {selectedColaborador && Number(selectedColaborador.state) === 1 ? 'Desactivar' : 'Activar'}
-                        </Button>
-                    </PermissionGuard>
-                </DialogActions>
-            </Dialog>
 
             {/* Modal de horario completo igual al de estudiantes */}
             <ColaboradorScheduleModal 
@@ -2230,11 +2091,7 @@ const ColaboradoresPage = () => {
                 onClose={handleCloseDialogs}
                 onScheduleUpdated={async () => {
                     await fetchColaboradores();
-                    setSnackbar({
-                        open: true,
-                        message: 'Horario actualizado correctamente',
-                        severity: 'success'
-                    });
+                    notify.success('Horario actualizado');
                 }}
             />
 
@@ -2372,20 +2229,6 @@ const ColaboradoresPage = () => {
             />
 
             {/* Snackbar */}
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert
-                    onClose={() => setSnackbar({ ...snackbar, open: false })}
-                    severity={snackbar.severity}
-                    sx={{ width: '100%' }}
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </PageContainer>
     );
 };

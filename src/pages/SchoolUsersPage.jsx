@@ -11,7 +11,6 @@ import {
     Button,
     CircularProgress,
     LinearProgress,
-    Snackbar,
     Alert,
     Grid,
     Chip,
@@ -60,7 +59,6 @@ import useManageableRoles from '../hooks/useManageableRoles';
 import { normalizeKey } from '../utils/stringHelpers';
 import BulkFamilyDraftsReview, { BulkPendingSteps, getDraftIssues, getDuplicateRowsByEmail, getExistingChanges, hasNothingToUpdate } from '../components/BulkFamilyDraftsReview';
 import { getServerPairing, pruneStalePairing, normalizeStudentText } from '../utils/bulkStudentPairing';
-import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
 import StudentScheduleModal from '../components/modals/StudentScheduleModal';
 import BulkStopsEditor from '../components/paradas/BulkStopsEditor';
 import RetroactiveApplyModal from '../components/modals/RetroactiveApplyModal';
@@ -77,6 +75,8 @@ import { matchSearchTokens } from '../utils/clientFilter';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import useClientScope from '../hooks/useClientScope';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
 
 const FAMILY_STATUS_OPTIONS = ['Nuevo', 'Duplicado', 'Actualizado', 'Sin asignaciones']
     .map((status) => ({ value: status, label: status }));
@@ -131,7 +131,8 @@ const SchoolUsersPage = () => {
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [selectedUser, setSelectedUser] = useState(null);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
+    const confirm = useConfirm();
 
     // Filtros (en el navegador): solo se aplican con "Aplicar filtros", Enter o "Limpiar filtros".
     const pageFilters = useFilters({
@@ -148,7 +149,6 @@ const SchoolUsersPage = () => {
     
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
     const [openBulkStopsEditor, setOpenBulkStopsEditor] = useState(false);
-    const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
     const [openServiceStatusModal, setOpenServiceStatusModal] = useState(false);
     const [openEditDialog, setOpenEditDialog] = useState(false);
     const [openRouteTypeModal, setOpenRouteTypeModal] = useState(false);
@@ -263,12 +263,12 @@ const SchoolUsersPage = () => {
     const handleDownloadCombinedFamilies = async (selection, schoolIdParam) => {
         const schoolIdToUse = schoolIdParam || schoolId || currentSchool?.id;
         if (!schoolIdToUse) {
-            setSnackbar({ open: true, message: 'Por favor selecciona un colegio.', severity: 'warning' });
+            notify.warning('Por favor selecciona un colegio');
             return;
         }
         const choices = Array.isArray(selection) ? selection : [selection].filter(Boolean);
         if (choices.length === 0) {
-            setSnackbar({ open: true, message: 'Selecciona al menos una opción para descargar.', severity: 'warning' });
+            notify.warning('Selecciona al menos una opción para descargar');
             return;
         }
 
@@ -282,7 +282,7 @@ const SchoolUsersPage = () => {
             const parents = resp.data.users || [];
 
             if (parents.length === 0) {
-                setSnackbar({ open: true, message: 'No hay familias para descargar con los filtros seleccionados.', severity: 'info' });
+                notify.info('No hay familias para descargar con los filtros seleccionados');
                 return;
             }
 
@@ -294,7 +294,7 @@ const SchoolUsersPage = () => {
             await buildParentsWorkbookAndDownload(parents, schoolIdToUse, `familias_${optionsSlug}`);
         } catch (error) {
             console.error('[handleDownloadCombinedFamilies] Error:', error);
-            setSnackbar({ open: true, message: 'Error al generar el archivo de familias', severity: 'error' });
+            notify.error('Error al generar el archivo de familias');
         } finally {
             setRouteReportLoading(false);
         }
@@ -303,7 +303,7 @@ const SchoolUsersPage = () => {
     const handleDownloadRouteReport = async (schoolIdParam) => {
         const schoolIdToUse = schoolIdParam || schoolId || currentSchool?.id;
         if (!schoolIdToUse) {
-            setSnackbar({ open: true, message: 'Por favor selecciona un colegio.', severity: 'warning' });
+            notify.warning('Por favor selecciona un colegio');
             return;
         }
 
@@ -588,10 +588,10 @@ const SchoolUsersPage = () => {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
 
-            setSnackbar({ open: true, message: `Reporte de rutas para ${schoolName} descargado exitosamente`, severity: 'success' });
+            notify.success(`Reporte de rutas para ${schoolName} descargado exitosamente`);
         } catch (error) {
             console.error('[handleDownloadRouteReport] Error:', error);
-            setSnackbar({ open: true, message: 'Error al descargar el reporte de rutas', severity: 'error' });
+            notify.error('Error al descargar el reporte de rutas');
         } finally {
             setRouteReportLoading(false);
         }
@@ -734,10 +734,10 @@ const SchoolUsersPage = () => {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
 
-            setSnackbar({ open: true, message: `Archivo con padres de ${schoolName} descargado.`, severity: 'success' });
+            notify.success(`Archivo con padres de ${schoolName} descargado.`);
         } catch (err) {
             console.error('[buildParentsWorkbookAndDownload] Error:', err);
-            setSnackbar({ open: true, message: 'Error al generar el archivo de padres', severity: 'error' });
+            notify.error('Error al generar el archivo de padres');
         }
     };
 
@@ -854,12 +854,12 @@ const SchoolUsersPage = () => {
                 inactiveStudents: (prev.inactiveStudents || []).filter(s => s.id !== student.id)
             }));
             setOriginalStudents(prev => [...(prev || []), reactivado]);
-            setSnackbar({ open: true, message: `${student.fullName} reactivado. Asígnale sus horarios.`, severity: 'success' });
+            notify.success(`${student.fullName} reactivado. Asígnale sus horarios.`);
             // El cambio ya está guardado: se refresca la lista para que, si se cancela la edición, al reabrirla el alumno
             // venga como activo (con datos viejos, guardar otra edición lo volvería a desactivar).
             fetchUsers();
         } catch (err) {
-            setSnackbar({ open: true, message: err?.response?.data?.message || 'No se pudo reactivar al alumno.', severity: 'error' });
+            notify.fromError(err, 'No se pudo reactivar al alumno.');
         } finally {
             setReactivatingId(null);
         }
@@ -1191,17 +1191,13 @@ const SchoolUsersPage = () => {
             setFilteredUsers(normalized);
         } catch (err) {
             console.error('Error fetching users:', err);
-            setSnackbar({ 
-                open: true, 
-                message: 'Error al obtener los usuarios', 
-                severity: 'error' 
-            });
+            notify.error('Error al obtener los usuarios');
             setUsers([]);
             setFilteredUsers([]);
         } finally {
             setLoading(false);
         }
-    }, [auth.token, schoolId, buildSchoolCycleParams]);
+    }, [auth.token, schoolId, buildSchoolCycleParams, notify]);
 
     useEffect(() => {
         if (auth.token && schoolId) {
@@ -1386,64 +1382,45 @@ const SchoolUsersPage = () => {
     };
 
     const handleServiceStatusSuccess = () => {
-        setSnackbar({ open: true, message: 'Estado del servicio actualizado correctamente', severity: 'success' });
+        notify.success('Estado del servicio actualizado');
         setSelectedUser(null);
         fetchUsers();
     };
 
-    const handleDeleteClick = (userOrId) => {
+    const handleDeleteClick = async (userOrId) => {
         // Accept either user object or id
         if (!userOrId) {
             return;
         }
-        if (typeof userOrId === 'object') {
-                setSelectedUser(userOrId);
-        } else {
-            const found = filteredUsers.find(u => u.id === userOrId) || users.find(u => u.id === userOrId);
-            setSelectedUser(found ? found : { id: userOrId });
-        }
-        // Open confirmation dialog after selection
-        setOpenDeleteConfirm(true);
-    };
-
-    const handleCancelDelete = () => {
-        setSelectedUser(null);
-        setOpenDeleteConfirm(false);
-    };
-
-    const handleConfirmDelete = async () => {
-        if (!selectedUser?.id) {
-            return;
-        }
+        const user = typeof userOrId === 'object'
+            ? userOrId
+            : (filteredUsers.find(u => u.id === userOrId) || users.find(u => u.id === userOrId) || { id: userOrId });
         const schoolIdToUse = currentSchool?.id || schoolId || stateSchool?.id;
         if (!schoolIdToUse || !stateCicloEscolarId) {
-            setSnackbar({ open: true, message: 'No se pudo resolver el colegio y ciclo escolar para eliminar al usuario.', severity: 'error' });
+            notify.error('No se pudo resolver el colegio y ciclo escolar para eliminar al usuario');
             return;
         }
 
-        try {
-            setBulkLoading(true);
-            const response = await api.delete(`/users/${selectedUser.id}/school-cycle`, {
-                data: {
-                    schoolId: schoolIdToUse,
-                    cicloEscolarId: stateCicloEscolarId,
-                    reason: 'Usuario eliminado desde gestión de familias por ciclo escolar'
-                }
-            });
-            setSnackbar({
-                open: true,
-                message: response?.data?.message || 'Usuario eliminado del ciclo escolar',
-                severity: 'success'
-            });
-            setOpenDeleteConfirm(false);
-            setSelectedUser(null);
+        let response = null;
+        const ok = await confirm({
+            title: 'Eliminar del ciclo escolar',
+            message: `Se eliminará a ${user.name || user.email || user.id} de este colegio y ciclo escolar.`,
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: async () => {
+                response = await api.delete(`/users/${user.id}/school-cycle`, {
+                    data: {
+                        schoolId: schoolIdToUse,
+                        cicloEscolarId: stateCicloEscolarId,
+                        reason: 'Usuario eliminado desde gestión de familias por ciclo escolar'
+                    }
+                });
+            },
+            errorMessage: 'Error al eliminar el usuario',
+        });
+        if (ok) {
+            notify.success(response?.data?.message || 'Usuario eliminado del ciclo escolar');
             fetchUsers();
-        } catch (err) {
-            console.error('Error deleting user:', err);
-            const message = err?.response?.data?.message || 'Error eliminando el usuario';
-            setSnackbar({ open: true, message, severity: 'error' });
-        } finally {
-            setBulkLoading(false);
         }
     };
 
@@ -1478,22 +1455,22 @@ const SchoolUsersPage = () => {
 
     const handleSendFamilyMessage = async () => {
         if (!selectedUser?.id) {
-            setSnackbar({ open: true, message: 'No se pudo identificar la familia destino.', severity: 'error' });
+            notify.error('No se pudo identificar la familia destino');
             return;
         }
 
         if (!familyMessageChannel) {
-            setSnackbar({ open: true, message: 'Selecciona si quieres enviar correo o notificación push.', severity: 'warning' });
+            notify.warning('Selecciona si quieres enviar correo o notificación push');
             return;
         }
 
         if (!familyMessageTitle.trim()) {
-            setSnackbar({ open: true, message: 'El título es requerido.', severity: 'warning' });
+            notify.warning('El título es requerido');
             return;
         }
 
         if (!familyMessageBody.trim()) {
-            setSnackbar({ open: true, message: 'El cuerpo del mensaje es requerido.', severity: 'warning' });
+            notify.warning('El cuerpo del mensaje es requerido');
             return;
         }
 
@@ -1517,7 +1494,7 @@ const SchoolUsersPage = () => {
                     }
                 });
 
-                setSnackbar({ open: true, message: 'Correo enviado a la familia.', severity: 'success' });
+                notify.success('Correo enviado a la familia');
             } else {
                 await api.post('/notifications', {
                     type: 'manual',
@@ -1542,17 +1519,13 @@ const SchoolUsersPage = () => {
                     }
                 });
 
-                setSnackbar({ open: true, message: 'Notificación push enviada a la familia.', severity: 'success' });
+                notify.success('Notificación push enviada a la familia');
             }
 
             handleCloseFamilyMessageDialog();
         } catch (err) {
             console.error('[handleSendFamilyMessage] Error:', err);
-            setSnackbar({
-                open: true,
-                message: err?.response?.data?.message || 'No se pudo enviar la comunicación.',
-                severity: 'error'
-            });
+            notify.fromError(err, 'No se pudo enviar la comunicación.');
         } finally {
             setFamilyMessageSending(false);
         }
@@ -1595,7 +1568,7 @@ const SchoolUsersPage = () => {
 
             // Un alumno nuevo que coincide con uno inactivo exige decidir si es el mismo (Reactivar) u otro.
             if (Number(selectedUser.roleId) === 3 && (familyDetail.students || []).some(s => inactiveMatchFor(s))) {
-                setSnackbar({ open: true, message: 'Indica si cada alumno nuevo es uno inactivo (Reactivar) o es otro alumno.', severity: 'warning' });
+                notify.warning('Indica si cada alumno nuevo es uno inactivo (Reactivar) o es otro alumno');
                 return;
             }
 
@@ -1635,11 +1608,11 @@ const SchoolUsersPage = () => {
                 ).length;
                 const sendingStudents = Object.hasOwn(familyDetailPayload, 'students');
                 if ((!selectedUser.id || sendingStudents) && validStudentsCount === 0) {
-                    setSnackbar({ open: true, message: 'La familia debe tener al menos un estudiante con nombre y grado.', severity: 'warning' });
+                    notify.warning('La familia debe tener al menos un estudiante con nombre y grado');
                     return;
                 }
                 if (!selectedUser.id && !familyDetail.routeType) {
-                    setSnackbar({ open: true, message: 'Selecciona el tipo de ruta de la familia.', severity: 'warning' });
+                    notify.warning('Selecciona el tipo de ruta de la familia');
                     return;
                 }
             }
@@ -1681,36 +1654,26 @@ const SchoolUsersPage = () => {
             // Crear o actualizar (no envíes id en POST)
             if (selectedUser.id) {
                 await api.put(`/users/${selectedUser.id}`, payload);
-                setSnackbar({ open: true, message: 'Usuario actualizado exitosamente', severity: 'success' });
+                notify.success('Usuario actualizado');
             } else {
                 const { id, ...payloadForPost } = payload;
                 await api.post('/users', payloadForPost);
-                setSnackbar({ open: true, message: 'Usuario creado exitosamente', severity: 'success' });
+                notify.success('Usuario creado');
             }
 
             // Refresca y cierra
             fetchUsers();
             setOpenEditDialog(false);
         } catch (err) {
-            // Centralized duplicate-email handler: it shows the snackbar and returns true if handled
-            try {
-                if (showDuplicateEmailFromError(err, setSnackbar)) {
-                    return;
-                }
-            } catch (e) {
-                // fallthrough to generic handling
-            }
-
+            // fromError también reconoce el correo duplicado y lo muestra 15 s.
             console.error('[handleSaveUser] Error:', err);
-            const resp = err?.response?.data || {};
-            const messageToShow = resp.message || 'Error al guardar usuario';
-            setSnackbar({ open: true, message: messageToShow, severity: 'error' });
+            notify.fromError(err, 'Error al guardar usuario');
         }
     };
 
     const handleAddUser = () => {
         if (!canCreateUsersInManagedSchool) {
-            setSnackbar({ open: true, message: newUserCreationDisabledMessage, severity: 'warning' });
+            notify.warning(newUserCreationDisabledMessage);
             return;
         }
 
@@ -1939,7 +1902,7 @@ const SchoolUsersPage = () => {
             return;
         }
         if (!canCreateUsersInManagedSchool) {
-            setSnackbar({ open: true, message: newUserCreationDisabledMessage, severity: 'warning' });
+            notify.warning(newUserCreationDisabledMessage);
             return;
         }
 
@@ -1963,7 +1926,7 @@ const SchoolUsersPage = () => {
 
             const drafts = Array.isArray(response.data?.drafts) ? response.data.drafts : [];
             if (drafts.length === 0) {
-                setSnackbar({ open: true, message: 'No se encontraron familias en la hoja "Padres" del archivo.', severity: 'warning' });
+                notify.warning('No se encontraron familias en la hoja "Padres" del archivo');
                 return;
             }
 
@@ -1988,11 +1951,7 @@ const SchoolUsersPage = () => {
             }));
         } catch (err) {
             console.error('Error in bulk upload:', err);
-            setSnackbar({
-                open: true,
-                message: err?.response?.data?.message || 'Error al analizar el archivo',
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error al analizar el archivo');
         } finally {
             setBulkLoading(false);
         }
@@ -2006,7 +1965,7 @@ const SchoolUsersPage = () => {
     const handleCompletePendingSteps = async () => {
         const schoolToAttach = currentSchool?.id || schoolId || '';
         if (!schoolToAttach) {
-            setSnackbar({ open: true, message: 'No se pudo determinar el colegio.', severity: 'error' });
+            notify.error('No se pudo determinar el colegio');
             return;
         }
 
@@ -2059,23 +2018,17 @@ const SchoolUsersPage = () => {
                 completedCount += 1;
             } }));
             const totalAsked = items.reduce((total, item) => total + item.steps.length, 0);
-            setSnackbar({
-                open: true,
-                message: completedCount === totalAsked
-                    ? `${completedCount} paso(s) completado(s).`
-                    : `${completedCount} de ${totalAsked} paso(s) completado(s). Revisa los que siguen pendientes.`,
-                severity: completedCount === totalAsked ? 'success' : 'warning'
-            });
+            if (completedCount === totalAsked) {
+                notify.success(`${completedCount} paso(s) completado(s)`);
+            } else {
+                notify.warning(`${completedCount} de ${totalAsked} paso(s) completado(s). Revisa los que siguen pendientes.`);
+            }
             if (completedCount > 0) {
                 fetchUsers();
             }
         } catch (err) {
             console.error('Error completing bulk pending steps:', err);
-            setSnackbar({
-                open: true,
-                message: err?.response?.data?.message || 'No se pudieron completar los pasos pendientes. Inténtalo de nuevo.',
-                severity: 'error'
-            });
+            notify.fromError(err, 'No se pudieron completar los pasos pendientes. Inténtalo de nuevo.');
         } finally {
             setBulkCompleting(false);
         }
@@ -2088,7 +2041,7 @@ const SchoolUsersPage = () => {
 
         const schoolToAttach = currentSchool?.id || schoolId || '';
         if (!schoolToAttach) {
-            setSnackbar({ open: true, message: 'No se pudo determinar el colegio.', severity: 'error' });
+            notify.error('No se pudo determinar el colegio');
             return;
         }
 
@@ -2144,11 +2097,7 @@ const SchoolUsersPage = () => {
 
             if (!blockedMessage && failedByKey.size === 0 && uncertainKeys.size === 0 && pendingFamilies.length === 0) {
                 const skippedCount = bulkDrafts.filter(draft => draft.skip).length;
-                setSnackbar({
-                    open: true,
-                    message: `${successCount} familia(s) guardada(s)${skippedCount > 0 ? `; ${skippedCount} omitida(s)` : ''}.`,
-                    severity: 'success'
-                });
+                notify.success(`${successCount} familia(s) guardada(s)${skippedCount > 0 ? `; ${skippedCount} omitida(s)` : ''}`);
                 closeBulkDialog();
                 return;
             }
@@ -2224,7 +2173,11 @@ const SchoolUsersPage = () => {
                 const notSent = draftsToSave.filter(draft => !answeredKeys.has(draft._key) && !uncertainKeys.has(draft._key)).length;
                 parts.push(`El guardado se detuvo: ${blockedMessage} ${notSent} familia(s) no se enviaron.`);
             }
-            setSnackbar({ open: true, message: parts.join(' '), severity: blockedMessage || uncertainKeys.size > 0 ? 'error' : 'warning' });
+            if (blockedMessage || uncertainKeys.size > 0) {
+                notify.error(parts.join(' '));
+            } else {
+                notify.warning(parts.join(' '));
+            }
         } finally {
             setBulkSaving(false);
         }
@@ -2409,11 +2362,7 @@ const SchoolUsersPage = () => {
             } catch (err) {
                 console.error('Error consultando el correo de la familia:', err);
                 // Sin respuesta no se sabe nada del correo; el guardado lo vuelve a validar en el servidor.
-                setSnackbar({
-                    open: true,
-                    message: `${err?.response?.data?.message || 'No se pudo verificar el correo.'} Se volverá a validar al guardar.`,
-                    severity: 'warning'
-                });
+                notify.warning(`${err?.response?.data?.message || 'No se pudo verificar el correo.'} Se volverá a validar al guardar.`);
             }
         }
 
@@ -2423,7 +2372,7 @@ const SchoolUsersPage = () => {
             }
             return { ...pruneStalePairing(draft, existing?.students), existing, otherSchool };
         }));
-    }, [auth.token, currentSchool?.id, schoolId]);
+    }, [auth.token, currentSchool?.id, schoolId, notify]);
 
     const handleChangeBulkDraft = useCallback((key, patch) => {
         setBulkDrafts(prev => prev.map(draft => (draft._key === key ? { ...draft, ...patch } : draft)));
@@ -2981,24 +2930,6 @@ const SchoolUsersPage = () => {
                 />
             )}
 
-            {/* Diálogo de confirmación para eliminación de usuario */}
-            <Dialog open={openDeleteConfirm} onClose={handleCancelDelete} maxWidth="xs" fullWidth>
-                <DialogTitle>Eliminar del ciclo escolar</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        ¿Estás seguro que deseas eliminar a <strong>{selectedUser?.name || selectedUser?.email || selectedUser?.id}</strong> de este colegio y ciclo escolar?
-                    </DialogContentText>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCancelDelete}>Cancelar</Button>
-                    <PermissionGuard permission="usuarios-eliminar">
-                        <Button variant="contained" color="error" onClick={handleConfirmDelete} disabled={bulkLoading}>
-                            {bulkLoading ? 'Eliminando...' : 'Eliminar'}
-                        </Button>
-                    </PermissionGuard>
-                </DialogActions>
-            </Dialog>
-
             {/* Modal de gestión de estados del servicio (reemplaza activar/suspender) */}
             <UserServiceStatusModal
                 open={openServiceStatusModal}
@@ -3207,20 +3138,6 @@ const SchoolUsersPage = () => {
                 </DialogActions>
             </Dialog>
 
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert
-                    onClose={() => setSnackbar({ ...snackbar, open: false })}
-                    severity={snackbar.severity}
-                    sx={{ width: '100%' }}
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
 
             {/* Diálogo para crear/editar usuario */}
             <Dialog
@@ -3804,7 +3721,7 @@ const SchoolUsersPage = () => {
                     onApplied={() => {
                         setFamilyDetail(prev => ({ ...prev, routeType: routeTypeDraft }));
                         setOpenRouteTypeModal(false);
-                        setSnackbar({ open: true, message: 'Cambio de tipo de ruta aplicado correctamente', severity: 'success' });
+                        notify.success('Cambio de tipo de ruta aplicado');
                         fetchUsers();
                     }}
                 />

@@ -14,7 +14,6 @@ import {
   Grid,
   IconButton,
   Paper,
-  Snackbar,
   Table,
   TableBody,
   TableCell,
@@ -50,6 +49,8 @@ import { F } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -228,9 +229,8 @@ const CircularHistoryPage = () => {
   const [detail, setDetail] = useState(null);
   const [recipientSearch, setRecipientSearch] = useState('');
   const [recipientsOpen, setRecipientsOpen] = useState(false);
-  const [toResend, setToResend] = useState(null);
-  const [resending, setResending] = useState(false);
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const notify = useNotify();
+  const confirm = useConfirm();
 
   const listParams = useMemo(() => {
     const params = {
@@ -345,21 +345,26 @@ const CircularHistoryPage = () => {
     }
   }, []);
 
-  const confirmResend = async () => {
-    setResending(true);
-    try {
-      const { uuid } = toResend;
-      const res = await api.post(`/circulars/admin/${uuid}/resend-failed`);
-      setSnackbar({ open: true, severity: 'success', message: res?.data?.message || 'Reenviando el correo a los destinatarios fallidos.' });
-      setToResend(null);
-      fetchRows();
-      if (detail?.uuid === uuid) {
-        refreshDetail(uuid);
-      }
-    } catch (e) {
-      setSnackbar({ open: true, severity: 'error', message: e?.response?.data?.message || 'No se pudo reenviar a los destinatarios fallidos.' });
-    } finally {
-      setResending(false);
+  const handleResend = async (item) => {
+    const { uuid } = item;
+    let res = null;
+    const ok = await confirm({
+      title: 'Reenviar a fallidos',
+      message: `Se enviará el correo únicamente a los ${item?.emailPendingCount ?? item?.emailFailedCount ?? 0} destinatarios que no lo recibieron. La circular y la notificación ya están publicadas en el sistema y no se duplican.`,
+      confirmLabel: 'Reenviar',
+      cancelLabel: 'Volver',
+      onConfirm: async () => {
+        res = await api.post(`/circulars/admin/${uuid}/resend-failed`);
+      },
+      errorMessage: 'No se pudo reenviar a los destinatarios fallidos',
+    });
+    if (!ok) {
+      return;
+    }
+    notify.success(res?.data?.message || 'Reenviando el correo a los destinatarios fallidos');
+    fetchRows();
+    if (detail?.uuid === uuid) {
+      refreshDetail(uuid);
     }
   };
 
@@ -569,7 +574,7 @@ const CircularHistoryPage = () => {
                         <PermissionGuard permission="mail-enviar-circular">
                           <Tooltip title="Reenviar el correo solo a quienes no lo recibieron">
                             <IconButton
-                              onClick={() => setToResend(r)}
+                              onClick={() => handleResend(r)}
                               size="small"
                               color="warning"
                               sx={{ mr: 1 }}
@@ -655,7 +660,7 @@ const CircularHistoryPage = () => {
                   sx={{ mb: 2 }}
                   action={detail.canResend ? (
                     <PermissionGuard permission="mail-enviar-circular">
-                      <Button color="inherit" size="small" startIcon={<ReplayIcon />} onClick={() => setToResend(detail)}>
+                      <Button color="inherit" size="small" startIcon={<ReplayIcon />} onClick={() => handleResend(detail)}>
                         Reenviar a fallidos
                       </Button>
                     </PermissionGuard>
@@ -848,32 +853,7 @@ const CircularHistoryPage = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={!!toResend} onClose={() => !resending && setToResend(null)}>
-        <DialogTitle>Reenviar a fallidos</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">
-            Se enviará el correo únicamente a los {toResend?.emailPendingCount ?? toResend?.emailFailedCount ?? 0} destinatarios que no lo recibieron.
-            La circular y la notificación ya están publicadas en el sistema y no se duplican.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setToResend(null)} disabled={resending}>Volver</Button>
-          <Button variant="contained" onClick={confirmResend} disabled={resending}>
-            {resending ? 'Reenviando…' : 'Reenviar'}
-          </Button>
-        </DialogActions>
-      </Dialog>
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))} severity={snackbar.severity} sx={{ width: '100%' }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </PageContainer>
   );
 };

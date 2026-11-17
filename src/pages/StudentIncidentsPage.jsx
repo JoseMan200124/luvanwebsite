@@ -39,12 +39,14 @@ import { F, toPlateOptions, toRouteOptions } from '../components/filters/filterF
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
+import useNotify from '../hooks/useNotify';
 
 moment.tz.setDefault('America/Guatemala');
 
 const SCHEDULE_OPTIONS = DEFAULT_SCHEDULE_CODES.map((code) => ({ value: code, label: SCHEDULE_LABELS[code] || code }));
 
 const StudentIncidentsPage = () => {
+    const notify = useNotify();
     const [incidents, setIncidents] = useState([]);
     const [loading, setLoading] = useState(false);
     const [page, setPage] = useState(0);
@@ -208,6 +210,7 @@ const StudentIncidentsPage = () => {
             });
         } catch (error) {
             console.error('Error al cargar incidentes:', error);
+            notify.fromError(error, 'Error al cargar los reportes de conducta');
         } finally {
             setLoading(false);
         }
@@ -236,7 +239,7 @@ const StudentIncidentsPage = () => {
             setDetailsOpen(true);
         } catch (error) {
             console.error('Error al cargar detalles del incidente:', error);
-            alert('Error al cargar los detalles del incidente');
+            notify.fromError(error, 'Error al cargar los detalles del reporte');
         }
     };
 

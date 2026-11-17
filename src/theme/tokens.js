@@ -39,3 +39,25 @@ export const PAGE_BG = '#f3f4f6';
 export const HEADER_TITLE_COLOR = '#111827';
 export const SIMPLE_HEADER_SHADOW = '0 14px 28px -18px rgba(17, 24, 39, 0.35)';
 export const HERO_SHADOW = '0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1)';
+
+// Acciones peligrosas (eliminar, revertir…): rojo, en degradado para el cuadro del ícono de los diálogos.
+export const DANGER_COLOR = '#D32F2F';
+export const DANGER_GRADIENT = 'linear-gradient(135deg, #E53935 0%, #B71C1C 100%)';
+
+// Diálogos: franja superior y cuadro del ícono con el degradado del logo, como el encabezado simple.
+export const DIALOG_SHADOW = '0 24px 48px -12px rgba(17, 24, 39, 0.35)';
+
+// Avisos: color de acento por tipo. Éxito e info usan los colores del logo; advertencia y error, naranja y rojo.
+export const NOTIFY_ACCENTS = {
+    success: LOGO_COLORS.green,
+    info: LOGO_COLORS.blue,
+    warning: '#ED6C02',
+    error: DANGER_COLOR,
+};
+export const NOTIFY_SHADOW = '0 12px 28px -10px rgba(17, 24, 39, 0.35)';
+
+// Capas del aviso y la confirmación: por encima de los modales propios de horarios, para que se vean también cuando se abren desde ellos.
+export const FEEDBACK_Z_INDEX = {
+    confirm: 32050,
+    notify: 32100,
+};

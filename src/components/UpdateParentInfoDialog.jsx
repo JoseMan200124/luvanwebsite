@@ -15,8 +15,6 @@ import {
     FormHelperText,
     Checkbox,
     FormControlLabel,
-    Alert,
-    Snackbar,
     Box,
     Divider,
     CircularProgress,
@@ -25,6 +23,7 @@ import {
 import api from '../utils/axiosConfig';
 import { AuthContext } from '../context/AuthProvider';
 import { getPasswordChangeError } from '../utils/passwordPolicy';
+import useNotify from '../hooks/useNotify';
 
 const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) => {
     const { logout } = useContext(AuthContext);
@@ -69,7 +68,7 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
     // Campos extras
     const [formExtraValues, setFormExtraValues] = useState({});
 
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
 
     useEffect(() => {
         if (!open) {
@@ -132,11 +131,7 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
             }
         } catch (error) {
             console.error('Error al obtener info del colegio:', error);
-            setSnackbar({
-                open: true,
-                message: 'No se pudieron obtener los datos del colegio.',
-                severity: 'error'
-            });
+            notify.error('No se pudieron obtener los datos del colegio');
         } finally {
             setLoading(false);
         }
@@ -177,12 +172,12 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
         e?.preventDefault?.();
 
         if (!familyLastName || !serviceAddress || !zoneOrSector) {
-            setSnackbar({ open: true, message: 'Por favor, completa los campos requeridos.', severity: 'error' });
+            notify.error('Por favor, completa los campos requeridos');
             return;
         }
 
         if (!hasValidStudent) {
-            setSnackbar({ open: true, message: 'La familia debe tener al menos un estudiante con nombre y grado.', severity: 'error' });
+            notify.error('La familia debe tener al menos un estudiante con nombre y grado');
             return;
         }
 
@@ -216,7 +211,7 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
         if (isChangingPassword) {
             const passwordError = getPasswordChangeError({ currentPassword, newPassword: accountPassword });
             if (passwordError) {
-                setSnackbar({ open: true, message: passwordError, severity: 'error' });
+                notify.error(passwordError);
                 return;
             }
             payload.accountPassword = accountPassword;
@@ -227,21 +222,17 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
             await api.put(`/update-parent-info/${schoolId}`, payload);
 
             if (isChangingPassword) {
-                setSnackbar({ open: true, message: 'Contraseña actualizada. Inicia sesión con tu nueva contraseña.', severity: 'success' });
+                notify.success('Contraseña actualizada. Inicia sesión con tu nueva contraseña.');
                 setTimeout(() => logout(), 2000);
                 return;
             }
 
-            setSnackbar({ open: true, message: '¡Información actualizada correctamente!', severity: 'success' });
+            notify.success('¡Información actualizada correctamente!');
             onSaved?.();
             setTimeout(() => onClose?.(), 1000);
         } catch (error) {
             console.error('Error al enviar formulario:', error);
-            setSnackbar({
-                open: true,
-                message: error?.response?.data?.message || 'Ocurrió un error al actualizar la información.',
-                severity: 'error'
-            });
+            notify.fromError(error, 'Ocurrió un error al actualizar la información.');
         }
     };
 
@@ -495,9 +486,6 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
                 <Button variant="contained" onClick={handleSubmit} color="primary" disabled={!hasValidStudent}>Actualizar Datos</Button>
             </DialogActions>
 
-            <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={() => setSnackbar({ ...snackbar, open: false })} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-                <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>{snackbar.message}</Alert>
-            </Snackbar>
         </Dialog>
     );
 };

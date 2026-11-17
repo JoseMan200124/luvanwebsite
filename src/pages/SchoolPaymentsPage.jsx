@@ -14,7 +14,6 @@ import {
     TablePagination,
     Grid,
     Chip,
-    Snackbar,
     Alert,
     Dialog,
     DialogTitle,
@@ -74,6 +73,7 @@ import { getCicloEscolarYear } from '../services/cicloEscolarService';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import useClientScope from '../hooks/useClientScope';
+import useNotify from '../hooks/useNotify';
 
 moment.locale('es'); // Configurar moment en español
 const SectionCard = styled(Card)`
@@ -214,7 +214,7 @@ const SchoolPaymentsPage = () => {
     // Total families authoritative (includes active + inactive). Fetched independently
     // so it doesn't change when table filters/switches are toggled.
     const [totalFamiliesCount, setTotalFamiliesCount] = useState(null);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
     // Loading indicator for initial data fetch
     const [loading, setLoading] = useState(true);
     // Analysis data (short version of PaymentsManagementPage analysis)
@@ -474,9 +474,9 @@ const SchoolPaymentsPage = () => {
         } catch (err) {
             console.error('Error cargando pagos:', err);
             if (err.response?.status === 403) {
-                setSnackbar({ open: true, message: `Sin permisos: ${err.response?.data?.message || 'No autorizado'}`, severity: 'error' });
+                notify.error(`Sin permisos: ${err.response?.data?.message || 'No autorizado'}`);
             } else {
-            setSnackbar({ open: true, message: 'Error cargando pagos', severity: 'error' });
+            notify.error('Error cargando pagos');
             }
         }
     };
@@ -984,12 +984,12 @@ const SchoolPaymentsPage = () => {
     const handleUploadRegisterReceipt = useCallback(async (file, displayDate) => {
         const userId = getRegisterReceiptUserId();
         if (!userId) {
-            setSnackbar({ open: true, message: 'No se encontro la familia para subir la boleta', severity: 'error' });
+            notify.error('No se encontro la familia para subir la boleta');
             return;
         }
 
         if (!file || !['image/jpeg', 'image/png'].includes(file.type)) {
-            setSnackbar({ open: true, message: 'Solo se permite subir una imagen JPG o PNG.', severity: 'warning' });
+            notify.warning('Solo se permite subir una imagen JPG o PNG');
             return;
         }
 
@@ -1026,14 +1026,14 @@ const SchoolPaymentsPage = () => {
             }
 
             setBoletaMonth('');
-            setSnackbar({ open: true, message: 'Boleta subida correctamente', severity: 'success' });
+            notify.success('Boleta subida');
         } catch (err) {
             console.error('Error subiendo boleta administrativa:', err);
-            setSnackbar({ open: true, message: err.response?.data?.message || 'Error al subir la boleta', severity: 'error' });
+            notify.fromError(err, 'Error al subir la boleta');
         } finally {
             setReceiptUploadLoading(false);
         }
-    }, [getRegisterReceiptUserId, registerPaymentTarget]);
+    }, [getRegisterReceiptUserId, registerPaymentTarget, notify]);
 
     const handleChangeReceiptStatus = useCallback(async (receiptId, status, reason) => {
         try {
@@ -1043,9 +1043,9 @@ const SchoolPaymentsPage = () => {
             setSelectedReceipt(prev => (prev && prev.id === receiptId ? updated : prev));
         } catch (err) {
             console.error('Error changing receipt status', receiptId, err);
-            setSnackbar({ open: true, message: err.response?.data?.message || 'Error al cambiar el estado de la boleta', severity: 'error' });
+            notify.fromError(err, 'Error al cambiar el estado de la boleta');
         }
-    }, []);
+    }, [notify]);
 
     // Pay Penalty dialog states
     const [openPayPenaltyDialog, setOpenPayPenaltyDialog] = useState(false);
@@ -1361,7 +1361,7 @@ const SchoolPaymentsPage = () => {
                 } : {})
             });
             
-            setSnackbar({ open: true, message: 'Pago registrado exitosamente', severity: 'success' });
+            notify.success('Pago registrado');
             setOpenRegisterDialog(false);
             
             // Invalidate cached payment histories (some caches are by userId, others by paymentId)
@@ -1372,7 +1372,7 @@ const SchoolPaymentsPage = () => {
         } catch (err) {
             console.error(err);
             const errorMsg = err?.response?.data?.error || 'Error registrando pago';
-            setSnackbar({ open: true, message: errorMsg, severity: 'error' });
+            notify.error(errorMsg);
         }
     };
 
@@ -1397,7 +1397,7 @@ const SchoolPaymentsPage = () => {
         try {
             const userId = payment?.User?.id || payment?.userId || null;
             if (!userId) {
-                setSnackbar({ open: true, message: 'Usuario no encontrado para generar reporte', severity: 'error' });
+                notify.error('Usuario no encontrado para generar reporte');
                 return;
             }
 
@@ -1509,7 +1509,7 @@ const SchoolPaymentsPage = () => {
                                 noTransactions = true;
                             } else {
                                 // Otherwise, generic error when generating PDF
-                                setSnackbar({ open: true, message: 'No es posible generar el PDF por un error consultando historial', severity: 'error' });
+                                notify.error('No es posible generar el PDF por un error consultando historial');
                                 return;
                             }
                         }
@@ -2508,12 +2508,12 @@ const SchoolPaymentsPage = () => {
                 : 'Familia';
             const fileName = `Reporte Historial de Pagos Familia ${familyForName}.pdf`;
             doc.save(fileName);
-            setSnackbar({ open: true, message: 'Descarga iniciada', severity: 'success' });
+            notify.success('Descarga iniciada');
         } catch (err) {
             console.error('handleDownloadHistory', err);
-            setSnackbar({ open: true, message: 'Error descargando reporte PDF', severity: 'error' });
+            notify.error('Error descargando reporte PDF');
         }
-    }, []);
+    }, [notify]);
 
     // Notes handlers
     const handleOpenNotes = useCallback(async (payment) => {
@@ -2532,14 +2532,14 @@ const SchoolPaymentsPage = () => {
         }
         try {
             await api.put(`/payments/v2/${notesTarget.id}/notes`, { notes: notesDraft });
-            setSnackbar({ open: true, message: 'Notas actualizadas', severity: 'success' });
+            notify.success('Notas actualizadas');
             handleCloseNotes();
             // Invalidate cache for this user so modal will fetch fresh histories
             invalidatePaymentHistCacheForUser(notesTarget?.User?.id || notesTarget?.userId);
             fetchAllPayments();
         } catch (err) {
             console.error('Error actualizando notas', err);
-            setSnackbar({ open: true, message: 'Error actualizando notas', severity: 'error' });
+            notify.error('Error actualizando notas');
         }
     };
 
@@ -2549,18 +2549,18 @@ const SchoolPaymentsPage = () => {
 
         try {
             if (!payment?.id) {
-                setSnackbar({ open: true, message: 'Pago no válido', severity: 'error' });
+                notify.error('Pago no válido');
                 return;
             }
 
             if (actionName === 'exoneratePenalty') {
                 const amount = payload?.exonerateAmount ?? payload?.amount ?? null;
                 if (!amount || Number.isNaN(amount) || amount <= 0) {
-                    setSnackbar({ open: true, message: 'Monto inválido para exonerar', severity: 'error' });
+                    notify.error('Monto inválido para exonerar');
                     return;
                 }
                 await api.post(`/payments/${payment.id}/exonerate-penalty`, { discountAmount: amount, type: 'EXONERATION' });
-                setSnackbar({ open: true, message: 'Mora exonerada', severity: 'success' });
+                notify.success('Mora exonerada');
             } else if (actionName === 'freezePenalty') {
                 // Congelar mora con fecha específica del backend (simulada o real)
                 let freezeDate;
@@ -2578,18 +2578,18 @@ const SchoolPaymentsPage = () => {
                     notes: `Mora congelada manualmente el ${moment(freezeDate).format('DD/MM/YYYY')}`
                 });
                 console.log('[FREEZE_PENALTY] Response received:', response.data);
-                setSnackbar({ open: true, message: 'Mora congelada', severity: 'success' });
+                notify.success('Mora congelada');
             } else if (actionName === 'unfreezePenalty') {
                 // Descongelar mora (reanudar acumulación)
                 await api.post('/payments/penalties/unfreeze', { 
                     paymentId: payment.id,
                     notes: 'Mora reanudada manualmente'
                 });
-                setSnackbar({ open: true, message: 'Mora reanudada', severity: 'success' });
+                notify.success('Mora reanudada');
             } else if (actionName === 'freezeGlobalPenalty') {
                 const reason = String(payload?.reason || '').trim();
                 if (!reason) {
-                    setSnackbar({ open: true, message: 'La razón es requerida para congelar mora global', severity: 'error' });
+                    notify.error('La razón es requerida para congelar mora global');
                     return;
                 }
 
@@ -2599,22 +2599,22 @@ const SchoolPaymentsPage = () => {
                     reason,
                     notes: payload?.notes || reason
                 });
-                setSnackbar({ open: true, message: 'Mora global congelada', severity: 'success' });
+                notify.success('Mora global congelada');
             } else if (actionName === 'unfreezeGlobalPenalty') {
                 await api.post('/payments/penalties/unfreeze-global', {
                     paymentId: payment.id,
                     notes: payload?.notes || 'Mora global descongelada desde hoy'
                 });
-                setSnackbar({ open: true, message: 'Mora global descongelada', severity: 'success' });
+                notify.success('Mora global descongelada');
             } else if (actionName === 'suspend' || actionName === 'activate') {
                 // Cambiar status del payment usando endpoints V2
                 const endpoint = actionName === 'suspend' ? 'suspend' : 'activate';
                 await api.post(`/payments/v2/${payment.id}/${endpoint}`);
-                setSnackbar({ open: true, message: actionName === 'suspend' ? 'Familia suspendida' : 'Familia activada', severity: 'success' });
+                notify.success(actionName === 'suspend' ? 'Familia suspendida' : 'Familia activada');
             } else if (actionName === 'toggleAutoDebit') {
                 const userId = payload?.payment?.User?.id || payment.User?.id;
                 if (!userId) {
-                    return setSnackbar({ open: true, message: 'Usuario no encontrado', severity: 'error' });
+                    return notify.error('Usuario no encontrado');
                 }
                 const val = payload?.value;
                 
@@ -2633,20 +2633,20 @@ const SchoolPaymentsPage = () => {
                         activateAutoDebit: false 
                     });
                 }
-                setSnackbar({ open: true, message: 'Débito automático desactivado', severity: 'success' });
+                notify.success('Débito automático desactivado');
             
             } else if (actionName === 'toggleRequiresInvoice') {
                 // Use payments endpoint to set invoice need
                 const val = payload?.value;
                 await api.put(`/payments/${payment.id}/set-invoice-need`, { requiresInvoice: !!val });
-                setSnackbar({ open: true, message: `Requiere factura: ${val ? 'Sí' : 'No'}`, severity: 'success' });
+                notify.success(`Requiere factura: ${val ? 'Sí' : 'No'}`);
             } else if (actionName === 'deletePayment') {
                 // Revert last payment transaction. '/payments/revert' con { paymentId } reemplaza
                 // a '/payments/:id/revert': mismo comportamiento (resuelve la última transacción
                 // del pago), consolidado en el único entrypoint de reversión.
                 try {
                     await api.post('/payments/revert', { paymentId: payment.id });
-                    setSnackbar({ open: true, message: 'Pago revertido', severity: 'success' });
+                    notify.success('Pago revertido');
                     // invalidate caches for this payment/user and refresh payments/analysis
                     invalidatePaymentHistCache(payment || manageTarget);
                     // close manage modal if open
@@ -2659,13 +2659,13 @@ const SchoolPaymentsPage = () => {
                     // El backend puede rechazar con un motivo específico (mora ya limpiada,
                     // crédito ya auto-aplicado): mostrarlo en vez de un mensaje genérico.
                     const errorMsg = e?.response?.data?.error || 'Error revirtiendo pago';
-                    setSnackbar({ open: true, message: errorMsg, severity: 'error' });
+                    notify.error(errorMsg);
                 }
             } else if (actionName === 'payPenalty') {
                 // Pagar mora congelada
                 const { amountPaid, numeroBoleta, bankAccountNumber, paidAt } = payload;
                 if (!amountPaid || Number.isNaN(amountPaid) || amountPaid <= 0) {
-                    setSnackbar({ open: true, message: 'Monto inválido para pagar mora', severity: 'error' });
+                    notify.error('Monto inválido para pagar mora');
                     return;
                 }
                 await api.post(`/payments/${payment.id}/pay-penalty`, {
@@ -2674,12 +2674,12 @@ const SchoolPaymentsPage = () => {
                     bankAccountNumber,
                     paidAt
                 });
-                setSnackbar({ open: true, message: 'Pago de mora registrado exitosamente', severity: 'success' });
+                notify.success('Pago de mora registrado');
             } else if (actionName === 'discountPenalty') {
                 // Exonerar o aplicar descuento a mora congelada
                 const { discountAmount, type, notes } = payload;
                 if (!discountAmount || Number.isNaN(discountAmount) || discountAmount <= 0) {
-                    setSnackbar({ open: true, message: 'Monto inválido para exonerar/descontar', severity: 'error' });
+                    notify.error('Monto inválido para exonerar/descontar');
                     return;
                 }
                 await api.post(`/payments/${payment.id}/exonerate-penalty`, {
@@ -2688,11 +2688,11 @@ const SchoolPaymentsPage = () => {
                     notes
                 });
                 const message = type === 'EXONERATION' ? 'Mora exonerada exitosamente' : 'Descuento aplicado a mora';
-                setSnackbar({ open: true, message, severity: 'success' });
+                notify.success(message);
             } else if (actionName === 'refreshPayments') {
                 // Child requested a refresh only (no API call needed here).
             } else {
-                setSnackbar({ open: true, message: `Acción no manejada: ${actionName}`, severity: 'info' });
+                notify.info(`Acción no manejada: ${actionName}`);
             }
             // Invalidate payment history cache for affected user and refresh payments
             // Invalidate cache for this payment/user so modal will fetch fresh histories
@@ -2703,7 +2703,7 @@ const SchoolPaymentsPage = () => {
             console.error('[handleManageAction] Error details:', err);
             console.error('[handleManageAction] Response data:', err?.response?.data);
             const errorMsg = err?.response?.data?.error || err?.message || 'Error ejecutando acción';
-            setSnackbar({ open: true, message: errorMsg, severity: 'error' });
+            notify.error(errorMsg);
         }
     };
 
@@ -2712,13 +2712,13 @@ const SchoolPaymentsPage = () => {
             // V2: La actualización ya se hizo en ManagePaymentsModal a nivel de transacción
             // Ya no necesitamos actualizar a nivel de pago porque ese campo no existe en V2
             
-            setSnackbar({ open: true, message: `Factura ${newVal ? 'marcada como enviada' : 'desmarcada'}`, severity: 'success' });
+            notify.success(`Factura ${newVal ? 'marcada como enviada' : 'desmarcada'}`);
             // Invalidate cache for this user so modal will fetch fresh histories
             invalidatePaymentHistCacheForUser(row?.userId || row?.User?.id || manageTarget?.User?.id || manageTarget?.userId);
             fetchAllPayments();
         } catch (err) {
             console.error('handleToggleInvoiceSent', err);
-            setSnackbar({ open: true, message: 'Error actualizando envío de factura', severity: 'error' });
+            notify.error('Error actualizando envío de factura');
         }
     };
 
@@ -2780,13 +2780,13 @@ const SchoolPaymentsPage = () => {
                 params.finalstatus = exportFinalStatus;
             }
             setOpenExportStatusDialog(false);
-            setSnackbar({ open: true, message: 'Preparando descarga...', severity: 'info' });
+            notify.info('Preparando descarga...');
 
             const res = await api.get('/payments/histories-by-finalstatus', { params });
             const historiesAll = res.data.histories || res.data || [];
 
             if (!Array.isArray(historiesAll) || historiesAll.length === 0) {
-                setSnackbar({ open: true, message: 'No se encontraron historiales para el filtro seleccionado', severity: 'info' });
+                notify.info('No se encontraron historiales para el filtro seleccionado');
                 return;
             }
 
@@ -2977,7 +2977,7 @@ const SchoolPaymentsPage = () => {
             });
 
             if (sheet.rowCount <= 1) {
-                setSnackbar({ open: true, message: 'No se encontraron registros con los filtros seleccionados', severity: 'info' });
+                notify.info('No se encontraron registros con los filtros seleccionados');
                 return;
             }
 
@@ -3067,18 +3067,18 @@ const SchoolPaymentsPage = () => {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            setSnackbar({ open: true, message: 'Descarga iniciada', severity: 'success' });
+            notify.success('Descarga iniciada');
         } catch (err) {
             console.error('handleDownloadPaymentsByStatus', err);
-            setSnackbar({ open: true, message: 'Error generando exportación', severity: 'error' });
+            notify.error('Error generando exportación');
         }
-    }, [schoolId, buildPaymentParams, school, paymentsAll, exportYear, exportFinalStatus, exportServiceStatus]);
+    }, [schoolId, buildPaymentParams, school, paymentsAll, exportYear, exportFinalStatus, exportServiceStatus, notify]);
 
     // Export payments filtered by estado using client-side dataset (paymentsAll)
     const handleDownloadByState = useCallback(async (estado) => {
         try {
             setOpenExportByStateDialog(false);
-            setSnackbar({ open: true, message: 'Preparando descarga...', severity: 'info' });
+            notify.info('Preparando descarga...');
 
             const estadoNorm = estado ? String(estado).toUpperCase().trim() : 'TODOS';
             const arr = Array.isArray(paymentsAll) ? paymentsAll : [];
@@ -3128,7 +3128,7 @@ const SchoolPaymentsPage = () => {
             });
 
             if (!filteredRows || filteredRows.length === 0) {
-                setSnackbar({ open: true, message: 'No se encontraron registros para el estado seleccionado', severity: 'info' });
+                notify.info('No se encontraron registros para el estado seleccionado');
                 return;
             }
 
@@ -3237,12 +3237,12 @@ const SchoolPaymentsPage = () => {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
 
-            setSnackbar({ open: true, message: 'Descarga iniciada', severity: 'success' });
+            notify.success('Descarga iniciada');
         } catch (err) {
             console.error('handleDownloadByState', err);
-            setSnackbar({ open: true, message: 'Error generando exportación', severity: 'error' });
+            notify.error('Error generando exportación');
         }
-    }, [paymentsAll, exportByStateServiceStatus, school, schoolId]);
+    }, [paymentsAll, exportByStateServiceStatus, school, schoolId, notify]);
 
     // Exporta a Excel los cargos de inscripción del ciclo, filtrados por pago de inscripción y estado del servicio
     // (mismo dataset de familias que "Descargar por Estado"; las familias eliminadas se ignoran).
@@ -3266,10 +3266,10 @@ const SchoolPaymentsPage = () => {
                 .sort((a, b) => String(a.User?.FamilyDetail?.familyLastName || '')
                     .localeCompare(String(b.User?.FamilyDetail?.familyLastName || ''), 'es'));
             if (rows.length === 0) {
-                setSnackbar({ open: true, message: 'No se encontraron registros para el estado seleccionado', severity: 'info' });
+                notify.info('No se encontraron registros para el estado seleccionado');
                 return;
             }
-            setSnackbar({ open: true, message: 'Preparando descarga...', severity: 'info' });
+            notify.info('Preparando descarga...');
 
             const serviceText = {
                 ACTIVE: 'ACTIVO',
@@ -3341,12 +3341,12 @@ const SchoolPaymentsPage = () => {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
 
-            setSnackbar({ open: true, message: 'Descarga iniciada', severity: 'success' });
+            notify.success('Descarga iniciada');
         } catch (err) {
             console.error('handleDownloadEnrollment', err);
-            setSnackbar({ open: true, message: 'Error generando exportación', severity: 'error' });
+            notify.error('Error generando exportación');
         }
-    }, [paymentsAll, enrollmentByUser, exportByStateServiceStatus, school, schoolId]);
+    }, [paymentsAll, enrollmentByUser, exportByStateServiceStatus, school, schoolId, notify]);
 
     // Derived values for the Register Payment dialog summary
     const formatCurrency = (v) => `Q ${Number(v || 0).toFixed(2)}`;
@@ -4114,7 +4114,7 @@ const SchoolPaymentsPage = () => {
                                 {/* Inner light box to match Analysis visuals */}
                                 <Box sx={{ mt: 2, p: 2, background: '#f9fafb', borderRadius: 2, boxShadow: 1 }}>
                                     <ExtraordinaryPaymentSection noWrapper={true} initialSchoolId={schoolId} hideSchoolSelect={true} onPaymentCreated={(newExtra) => {
-                                        setSnackbar({ open: true, message: 'Pago extraordinario registrado', severity: 'success' });
+                                        notify.success('Pago extraordinario registrado');
                                         // refresh analysis and payments
                                         fetchPaymentsAnalysis(schoolId);
                                         fetchAllPayments();
@@ -4236,7 +4236,7 @@ const SchoolPaymentsPage = () => {
                                 fetchAllPayments();
                                 fetchPaymentsAnalysis(schoolId);
                                 if (message) {
-                                    setSnackbar({ open: true, message, severity: 'success' });
+                                    notify.success(message);
                                 }
                             }}
                         />
@@ -4251,7 +4251,7 @@ const SchoolPaymentsPage = () => {
                                 fetchAllPayments();
                                 fetchMetrics(selectedPeriod);
                                 if (message) {
-                                    setSnackbar({ open: true, message, severity: 'success' });
+                                    notify.success(message);
                                 }
                             }}
                         />
@@ -4510,7 +4510,7 @@ const SchoolPaymentsPage = () => {
                                                 canManageReceipts={hasPermission('admin-subir-boletas')}
                                                 uploadReceiptLoading={receiptUploadLoading}
                                                 onUploadReceipt={handleUploadRegisterReceipt}
-                                                onReceiptError={(message) => setSnackbar({ open: true, message, severity: 'warning' })}
+                                                onReceiptError={(message) => notify.warning(message)}
                                                 onChangeReceiptStatus={handleChangeReceiptStatus}
                                                 downloadFile={(url, name) => {
                                                     const a = document.createElement('a');
@@ -5503,25 +5503,25 @@ const SchoolPaymentsPage = () => {
 
                                         if (payPenaltyUseCredit) {
                                             if (!creditAmt || Number.isNaN(creditAmt) || creditAmt <= 0) {
-                                                setSnackbar({ open: true, message: 'Ingrese un monto de crédito válido', severity: 'error' });
+                                                notify.error('Ingrese un monto de crédito válido');
                                                 return;
                                             }
                                             if (creditAmt > dialogCredito) {
-                                                setSnackbar({ open: true, message: `El crédito a aplicar excede el disponible (Q${dialogCredito.toFixed(2)})`, severity: 'error' });
+                                                notify.error(`El crédito a aplicar excede el disponible (Q${dialogCredito.toFixed(2)})`);
                                                 return;
                                             }
                                         } else {
                                             if (Number.isNaN(amt) || amt < 0) {
-                                                setSnackbar({ open: true, message: 'Ingrese un monto válido', severity: 'error' });
+                                                notify.error('Ingrese un monto válido');
                                                 return;
                                             }
                                             if (amt === 0 && discount === 0) {
-                                                setSnackbar({ open: true, message: 'Debe ingresar un monto de pago o de exoneración', severity: 'error' });
+                                                notify.error('Debe ingresar un monto de pago o de exoneración');
                                                 return;
                                             }
                                             const total = amt + discount;
                                             if (total > effectivePenaltyDue) {
-                                                setSnackbar({ open: true, message: `El monto total (pago + exoneración) excede la mora adeudada (Q${effectivePenaltyDue.toFixed(2)})`, severity: 'error' });
+                                                notify.error(`El monto total (pago + exoneración) excede la mora adeudada (Q${effectivePenaltyDue.toFixed(2)})`);
                                                 return;
                                             }
                                         }
@@ -5548,9 +5548,9 @@ const SchoolPaymentsPage = () => {
                                                         source: 'manual',
                                                         ...receiptLinkFields
                                                     });
-                                                    setSnackbar({ open: true, message: `Crédito (Q${creditAmt.toFixed(2)}) y boleta (Q${boletaAmt.toFixed(2)}) aplicados a mora`, severity: 'success' });
+                                                    notify.success(`Crédito (Q${creditAmt.toFixed(2)}) y boleta (Q${boletaAmt.toFixed(2)}) aplicados a mora`);
                                                 } else {
-                                                    setSnackbar({ open: true, message: 'Crédito aplicado a mora exitosamente', severity: 'success' });
+                                                    notify.success('Crédito aplicado a mora');
                                                 }
                                             } else {
                                                 const payloadData = {
@@ -5565,7 +5565,7 @@ const SchoolPaymentsPage = () => {
                                                     ...receiptLinkFields
                                                 };
                                                 await api.post('/payments/pay-penalty', payloadData);
-                                                setSnackbar({ open: true, message: isExonerating ? `Mora exonerada: Q${discount.toFixed(2)}` : 'Pago de mora registrado exitosamente', severity: 'success' });
+                                                notify.success(isExonerating ? `Mora exonerada: Q${discount.toFixed(2)}` : 'Pago de mora registrado exitosamente');
                                             }
                                             setOpenRegisterDialog(false);
                                             setIsExonerating(false);
@@ -5582,7 +5582,7 @@ const SchoolPaymentsPage = () => {
                                         } catch (err) {
                                             console.error('Error procesando mora:', err);
                                             const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Error al procesar el pago de mora';
-                                            setSnackbar({ open: true, message: errorMsg, severity: 'error' });
+                                            notify.error(errorMsg);
                                         }
                                     }} disabled={uploadedReceiptsLoading || regHistLoading || effectivePenaltyDue === 0 || (() => {
                                         if (isExonerating) {
@@ -5625,7 +5625,7 @@ const SchoolPaymentsPage = () => {
                                             const amount = Number(payEnrollmentAmount) || 0;
                                             const extraordinaryDiscount = Number(payEnrollmentDiscount) || 0;
                                             if (amount <= 0 && extraordinaryDiscount <= 0) {
-                                                setSnackbar({ open: true, message: 'Debe indicar un monto pagado o un descuento extraordinario.', severity: 'error' });
+                                                notify.error('Debe indicar un monto pagado o un descuento extraordinario');
                                                 return;
                                             }
                                             setEnrollmentSaving(true);
@@ -5638,17 +5638,13 @@ const SchoolPaymentsPage = () => {
                                                     receiptNumber: payEnrollmentReceiptNumber || undefined,
                                                     notes: payEnrollmentNotes || undefined,
                                                 });
-                                                setSnackbar({ open: true, message: 'Pago de inscripción registrado.', severity: 'success' });
+                                                notify.success('Pago de inscripción registrado');
                                                 setOpenRegisterDialog(false);
                                                 setPaymentTab(0);
                                                 await fetchAllPayments();
                                                 await fetchEnrollmentCharges();
                                             } catch (err) {
-                                                setSnackbar({
-                                                    open: true,
-                                                    message: err.response?.data?.error || 'Error al registrar el pago.',
-                                                    severity: 'error',
-                                                });
+                                                notify.fromError(err, 'Error al registrar el pago.');
                                             } finally {
                                                 setEnrollmentSaving(false);
                                             }
@@ -5720,18 +5716,14 @@ const SchoolPaymentsPage = () => {
                                                     activateAutoDebit: true,
                                                     applyToCurrentMonth: true 
                                                 });
-                                                setSnackbar({ 
-                                                    open: true, 
-                                                    message: 'Débito automático activado para el mes actual. Se procesó el pago y se exoneró la mora existente.', 
-                                                    severity: 'success' 
-                                                });
+                                                notify.success('Débito automático activado para el mes actual. Se procesó el pago y se exoneró la mora existente.');
                                                 setOpenAutoDebitDialog(false);
                                                 setAutoDebitPayload(null);
                                                 // Actualizar vista
                                                 await fetchAllPayments();
                                             } catch (err) {
                                                 console.error(err);
-                                                setSnackbar({ open: true, message: 'Error activando débito automático', severity: 'error' });
+                                                notify.error('Error activando débito automático');
                                             }
                                         }}
                                         sx={{ py: 2, textAlign: 'left', justifyContent: 'flex-start' }}
@@ -5761,18 +5753,14 @@ const SchoolPaymentsPage = () => {
                                                     activateAutoDebit: true,
                                                     applyToCurrentMonth: false 
                                                 });
-                                                setSnackbar({ 
-                                                    open: true, 
-                                                    message: 'Débito automático activado. Se aplicará a partir del siguiente mes.', 
-                                                    severity: 'success' 
-                                                });
+                                                notify.success('Débito automático activado. Se aplicará a partir del siguiente mes.');
                                                 setOpenAutoDebitDialog(false);
                                                 setAutoDebitPayload(null);
                                                 // Actualizar vista
                                                 await fetchAllPayments();
                                             } catch (err) {
                                                 console.error(err);
-                                                setSnackbar({ open: true, message: 'Error activando débito automático', severity: 'error' });
+                                                notify.error('Error activando débito automático');
                                             }
                                         }}
                                         sx={{ py: 2, textAlign: 'left', justifyContent: 'flex-start' }}
@@ -5930,24 +5918,24 @@ const SchoolPaymentsPage = () => {
                                     // Validaciones
                                     if (payPenaltyUseCredit) {
                                         if (!creditAmt || Number.isNaN(creditAmt) || creditAmt <= 0) {
-                                            setSnackbar({ open: true, message: 'Ingrese un monto de crédito válido', severity: 'error' });
+                                            notify.error('Ingrese un monto de crédito válido');
                                             return;
                                         }
                                         if (creditAmt > dialogCredito) {
-                                            setSnackbar({ open: true, message: `El crédito a aplicar excede el disponible (Q${dialogCredito.toFixed(2)})`, severity: 'error' });
+                                            notify.error(`El crédito a aplicar excede el disponible (Q${dialogCredito.toFixed(2)})`);
                                             return;
                                         }
                                         if (creditAmt + cashAmt > currentPenalty + 0.005) {
-                                            setSnackbar({ open: true, message: `El total excede la mora adeudada (Q${currentPenalty.toFixed(2)})`, severity: 'error' });
+                                            notify.error(`El total excede la mora adeudada (Q${currentPenalty.toFixed(2)})`);
                                             return;
                                         }
                                     } else {
                                         if (!cashAmt || Number.isNaN(cashAmt) || cashAmt <= 0) {
-                                            setSnackbar({ open: true, message: 'Ingrese un monto válido', severity: 'error' });
+                                            notify.error('Ingrese un monto válido');
                                             return;
                                         }
                                         if (cashAmt > currentPenalty) {
-                                            setSnackbar({ open: true, message: `El monto excede la mora adeudada (Q${currentPenalty.toFixed(2)})`, severity: 'error' });
+                                            notify.error(`El monto excede la mora adeudada (Q${currentPenalty.toFixed(2)})`);
                                             return;
                                         }
                                     }
@@ -5968,9 +5956,9 @@ const SchoolPaymentsPage = () => {
                                                     bankAccountNumber: payPenaltyAccount,
                                                     paidAt: payPenaltyDate
                                                 });
-                                                setSnackbar({ open: true, message: `Crédito (Q${creditAmt.toFixed(2)}) y boleta (Q${cashAmt.toFixed(2)}) aplicados a mora`, severity: 'success' });
+                                                notify.success(`Crédito (Q${creditAmt.toFixed(2)}) y boleta (Q${cashAmt.toFixed(2)}) aplicados a mora`);
                                             } else {
-                                                setSnackbar({ open: true, message: 'Crédito aplicado a mora exitosamente', severity: 'success' });
+                                                notify.success('Crédito aplicado a mora');
                                             }
                                         } else {
                                             // Pago en efectivo/boleta
@@ -5980,7 +5968,7 @@ const SchoolPaymentsPage = () => {
                                                 bankAccountNumber: payPenaltyAccount,
                                                 paidAt: payPenaltyDate
                                             });
-                                            setSnackbar({ open: true, message: 'Pago de mora registrado exitosamente', severity: 'success' });
+                                            notify.success('Pago de mora registrado');
                                         }
                                         setOpenPayPenaltyDialog(false);
                                         setPayPenaltyAmount('');
@@ -5999,7 +5987,7 @@ const SchoolPaymentsPage = () => {
                                         console.error('Error pagando mora:', err);
                                         console.error('Error response:', err.response?.data);
                                         const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Error al registrar pago de mora';
-                                        setSnackbar({ open: true, message: errorMsg, severity: 'error' });
+                                        notify.error(errorMsg);
                                     }
                                 }}>{payPenaltyUseCredit && Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0 ? 'Aplicar Crédito + Boleta' : payPenaltyUseCredit ? 'Aplicar Crédito' : 'Registrar Pago'}</Button>
                             </DialogActions>
@@ -6066,14 +6054,14 @@ const SchoolPaymentsPage = () => {
                                 <Button variant="contained" color="warning" onClick={async () => {
                                     const amt = Number(discountPenaltyAmount || 0);
                                     if (!amt || Number.isNaN(amt) || amt <= 0) {
-                                        setSnackbar({ open: true, message: 'Ingrese un monto válido', severity: 'error' });
+                                        notify.error('Ingrese un monto válido');
                                         return;
                                     }
                                     const currentPenalty = (registerPaymentTarget?.frozenPenalty || 0) > 0 
                                         ? registerPaymentTarget?.frozenPenalty 
                                         : registerPaymentTarget?.accumulatedPenalty || 0;
                                     if (amt > currentPenalty) {
-                                        setSnackbar({ open: true, message: `El monto excede la mora (Q${currentPenalty.toFixed(2)})`, severity: 'error' });
+                                        notify.error(`El monto excede la mora (Q${currentPenalty.toFixed(2)})`);
                                         return;
                                     }
                                     try {
@@ -6096,7 +6084,7 @@ const SchoolPaymentsPage = () => {
                                             });
                                         }
                                         const message = discountPenaltyType === 'EXONERATION' ? 'Mora exonerada exitosamente' : 'Descuento aplicado a mora';
-                                        setSnackbar({ open: true, message, severity: 'success' });
+                                        notify.success(message);
                                         setOpenDiscountPenaltyDialog(false);
                                         setDiscountPenaltyAmount('');
                                         setDiscountPenaltyType('DISCOUNT');
@@ -6110,7 +6098,7 @@ const SchoolPaymentsPage = () => {
                                         }
                                     } catch (err) {
                                         console.error('Error descatando/exonerando mora:', err);
-                                        setSnackbar({ open: true, message: 'Error al descontar/exonerar mora', severity: 'error' });
+                                        notify.error('Error al descontar/exonerar mora');
                                     }
                                 }}>{discountPenaltyType === 'EXONERATION' ? 'Exonerar' : 'Aplicar Descuento'}</Button>
                             </DialogActions>
@@ -6195,9 +6183,6 @@ const SchoolPaymentsPage = () => {
                 </Grid>
             </Grid>
 
-            <Snackbar open={snackbar.open} autoHideDuration={5000} onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-                <Alert severity={snackbar.severity} onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}>{snackbar.message}</Alert>
-            </Snackbar>
         </PageContainer>
     );
 };

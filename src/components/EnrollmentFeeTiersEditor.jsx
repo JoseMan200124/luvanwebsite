@@ -7,7 +7,6 @@ import {
     Button,
     IconButton,
     MenuItem,
-    Snackbar,
     Table,
     TableBody,
     TableCell,
@@ -19,6 +18,7 @@ import {
 import { Add, Delete } from '@mui/icons-material';
 import api from '../utils/axiosConfig';
 import usePermissions from '../hooks/usePermissions';
+import useNotify from '../hooks/useNotify';
 
 const DISCOUNT_TYPE_OPTIONS = [
     { value: 'FREE', label: 'Gratis' },
@@ -39,7 +39,7 @@ export default function EnrollmentFeeTiersEditor({ schoolId, draftTiers, onDraft
     const [loading, setLoading] = useState(false);
     const [loadFailed, setLoadFailed] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
 
     const loadTiers = useCallback(async () => {
         if (!schoolId) {
@@ -87,13 +87,13 @@ export default function EnrollmentFeeTiersEditor({ schoolId, draftTiers, onDraft
 
     const handleSaveTiers = async () => {
         if (loadFailed) {
-            setSnackbar({ open: true, message: 'No se pudieron cargar los tramos actuales, así que no se pueden guardar cambios (evita sobrescribirlos a ciegas). Reintenta abrir el colegio.', severity: 'error' });
+            notify.error('No se pudieron cargar los tramos actuales, así que no se pueden guardar cambios (evita sobrescribirlos a ciegas). Reintenta abrir el colegio.');
             return;
         }
 
         const invalidRow = tiers.find((row) => !row.untilDate || !row.discountType);
         if (invalidRow) {
-            setSnackbar({ open: true, message: 'Cada tramo requiere fecha límite y tipo de descuento.', severity: 'error' });
+            notify.error('Cada tramo requiere fecha límite y tipo de descuento');
             return;
         }
 
@@ -107,14 +107,10 @@ export default function EnrollmentFeeTiersEditor({ schoolId, draftTiers, onDraft
                 })),
             });
             await loadTiers();
-            setSnackbar({ open: true, message: 'Tramos de inscripción guardados.', severity: 'success' });
+            notify.success('Tramos de inscripción guardados');
         } catch (err) {
             console.error('Error guardando tramos de inscripción:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.message || 'Error al guardar los tramos de inscripción.',
-                severity: 'error',
-            });
+            notify.fromError(err, 'Error al guardar los tramos de inscripción.');
         } finally {
             setSaving(false);
         }
@@ -206,15 +202,6 @@ export default function EnrollmentFeeTiersEditor({ schoolId, draftTiers, onDraft
                 )}
             </Box>
 
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={4000}
-                onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-            >
-                <Alert severity={snackbar.severity} onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}>
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </Box>
     );
 }

@@ -46,10 +46,14 @@ import { F, toPlateOptions, toRouteOptions } from '../components/filters/filterF
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
 
 moment.tz.setDefault('America/Guatemala');
 
 const BusEmergenciesPage = () => {
+    const notify = useNotify();
+    const confirm = useConfirm();
     const [emergencies, setEmergencies] = useState([]);
     const [loading, setLoading] = useState(false);
     const [page, setPage] = useState(0);
@@ -89,8 +93,6 @@ const BusEmergenciesPage = () => {
     const [loadingDetails, setLoadingDetails] = useState(false);
 
     // Modal de eliminación
-    const [deleteOpen, setDeleteOpen] = useState(false);
-    const [deleteId, setDeleteId] = useState(null);
 
     // Estadísticas
     const [statistics, setStatistics] = useState({
@@ -266,6 +268,7 @@ const BusEmergenciesPage = () => {
             }
         } catch (error) {
             console.error('Error al cargar emergencias:', error);
+            notify.fromError(error, 'Error al cargar las emergencias');
         } finally {
             setLoading(false);
         }
@@ -293,7 +296,7 @@ const BusEmergenciesPage = () => {
             setSelectedEmergency(data);
         } catch (error) {
             console.error('Error al cargar detalles de la emergencia:', error);
-            alert('Error al cargar los detalles de la emergencia');
+            notify.fromError(error, 'Error al cargar los detalles de la emergencia');
         } finally {
             setLoadingDetails(false);
         }
@@ -310,25 +313,18 @@ const BusEmergenciesPage = () => {
         setOrderBy(column);
     };
 
-    const handleOpenDelete = (id) => {
-        setDeleteId(id);
-        setDeleteOpen(true);
-    };
-
-    const handleCancelDelete = () => {
-        setDeleteOpen(false);
-        setDeleteId(null);
-    };
-
-    const handleConfirmDelete = async () => {
-        try {
-            await deleteBusEmergency(deleteId);
-            setDeleteOpen(false);
-            setDeleteId(null);
+    const handleDelete = async (id) => {
+        const ok = await confirm({
+            title: 'Eliminar emergencia',
+            message: 'Se eliminará la emergencia. Esta acción no se puede deshacer.',
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: () => deleteBusEmergency(id),
+            errorMessage: 'Error al eliminar la emergencia',
+        });
+        if (ok) {
+            notify.success('Emergencia eliminada');
             fetchEmergencies();
-        } catch (error) {
-            console.error('Error al eliminar emergencia:', error);
-            alert('Error al eliminar la emergencia');
         }
     };
 
@@ -525,7 +521,7 @@ const BusEmergenciesPage = () => {
                                                         <Tooltip title="Eliminar">
                                                             <IconButton
                                                                 size="small"
-                                                                onClick={() => handleOpenDelete(emergency.id)}
+                                                                onClick={() => handleDelete(emergency.id)}
                                                                 color="error"
                                                             >
                                                                 <DeleteIcon />
@@ -676,29 +672,6 @@ const BusEmergenciesPage = () => {
                     <DialogActions>
                         <Button onClick={handleCloseDetails} color="primary">
                             Cerrar
-                        </Button>
-                    </DialogActions>
-                </Dialog>
-
-                {/* Modal de Confirmación de Eliminación */}
-                <Dialog
-                    open={deleteOpen}
-                    onClose={handleCancelDelete}
-                    maxWidth="xs"
-                    fullWidth
-                >
-                    <DialogTitle>Confirmar Eliminación</DialogTitle>
-                    <DialogContent>
-                        <Typography>
-                            ¿Estás seguro de que deseas eliminar esta emergencia? Esta acción no se puede deshacer.
-                        </Typography>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCancelDelete} color="inherit">
-                            Cancelar
-                        </Button>
-                        <Button onClick={handleConfirmDelete} color="error" variant="contained">
-                            Eliminar
                         </Button>
                     </DialogActions>
                 </Dialog>

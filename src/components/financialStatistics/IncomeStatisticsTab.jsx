@@ -5,8 +5,6 @@ import {
     Typography,
     Button,
     CircularProgress,
-    Snackbar,
-    Alert,
     Box,
     Select,
     MenuItem,
@@ -33,6 +31,7 @@ import FilterBar from '../filters/FilterBar';
 import useFilters from '../../hooks/useFilters';
 import { F } from '../filters/filterFields';
 import { getCurrentDateSync } from '../../hooks/useCurrentDate';
+import useNotify from '../../hooks/useNotify';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import moment from 'moment-timezone';
@@ -296,7 +295,7 @@ const IncomeStatisticsTab = () => {
 
     const [result, setResult] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const notify = useNotify();
 
     const fetchSchools = useCallback(async () => {
         try {
@@ -310,7 +309,6 @@ const IncomeStatisticsTab = () => {
     // Recibe los filtros aplicados. Sin colegios elegidos = todos los colegios.
     const fetchAll = useCallback(async (values) => {
         setLoading(true);
-        setError(null);
         try {
             const schoolIdsParam = values.schools.length === 0 ? 'all' : values.schools.join(',');
             const statsRes = await api.get('/financial-statistics', { params: { schoolIds: schoolIdsParam, from: values.months.from, to: values.months.to, groupBy: 'school' } });
@@ -320,12 +318,12 @@ const IncomeStatisticsTab = () => {
             setBreakdownCache({});
         } catch (e) {
             console.error('fetchAll error', e);
-            setError('Error al obtener las estadísticas financieras. Por favor, inténtalo de nuevo más tarde.');
+            notify.fromError(e, 'Error al obtener las estadísticas financieras');
             setResult(null);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [notify]);
 
     const toggleExpand = useCallback(async (schoolId) => {
         if (expandedSchoolId === schoolId) {
@@ -987,11 +985,6 @@ const IncomeStatisticsTab = () => {
                 </div>
             )}
 
-            <Snackbar open={Boolean(error)} autoHideDuration={6000} onClose={() => setError(null)}>
-                <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>
-                    {error}
-                </Alert>
-            </Snackbar>
         </>
     );
 };

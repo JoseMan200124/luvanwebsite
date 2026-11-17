@@ -2,7 +2,6 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
-    Alert,
     Box,
     Button,
     Card,
@@ -18,7 +17,6 @@ import {
     Divider,
     IconButton,
     Modal,
-    Snackbar,
     Stack,
     Tooltip,
     Typography,
@@ -51,6 +49,7 @@ import ParentNavbar from '../components/ParentNavbar';
 import api from '../utils/axiosConfig';
 import { AuthContext } from '../context/AuthProvider';
 import useParentSchoolOperational from '../hooks/useParentSchoolOperational';
+import useNotify from '../hooks/useNotify';
 
 const PRIMARY_COLOR = '#0D3FE2';
 const BACKGROUND_COLOR = '#F8F9FA';
@@ -765,7 +764,7 @@ const ParentPaymentPage = () => {
     const [pageLoading, setPageLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [uploadLoading, setUploadLoading] = useState(false);
-    const [snackbar, setSnackbar] = useState({ open: false, msg: '', sev: 'success' });
+    const notify = useNotify();
     const [routeInfo, setRouteInfo] = useState(null);
     const [paymentAccount, setPaymentAccount] = useState(null);
     const [paymentHistory, setPaymentHistory] = useState(null);
@@ -845,7 +844,7 @@ const ParentPaymentPage = () => {
         } catch (error) {
             if (!signal?.aborted) {
                 console.error(error);
-                setSnackbar({ open: true, msg: 'Error al obtener información de pago.', sev: 'error' });
+                notify.error('Error al obtener información de pago');
             }
         } finally {
             if (!signal?.aborted) {
@@ -853,7 +852,7 @@ const ParentPaymentPage = () => {
                 setRefreshing(false);
             }
         }
-    }, [auth?.user?.id]);
+    }, [auth?.user?.id, notify]);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -877,14 +876,14 @@ const ParentPaymentPage = () => {
     const capturePhoto = useCallback(() => {
         const imageSrc = webcamRef.current?.getScreenshot();
         if (!imageSrc) {
-            setSnackbar({ open: true, msg: 'No se pudo capturar la imagen.', sev: 'warning' });
+            notify.warning('No se pudo capturar la imagen');
             return;
         }
         const imageFile = dataURLtoFile(imageSrc, `photo_${Date.now()}.jpg`);
         setFile(imageFile);
         setPreview(imageSrc);
         setOpenCam(false);
-    }, []);
+    }, [notify]);
 
     const handleSelect = (event) => {
         const selected = event.target.files?.[0];
@@ -893,7 +892,7 @@ const ParentPaymentPage = () => {
         }
 
         if (!['image/jpeg', 'image/png'].includes(selected.type)) {
-            setSnackbar({ open: true, msg: 'El archivo debe ser una imagen JPG o PNG.', sev: 'warning' });
+            notify.warning('El archivo debe ser una imagen JPG o PNG');
             event.target.value = '';
             return;
         }
@@ -920,7 +919,7 @@ const ParentPaymentPage = () => {
 
     const handleUpload = async () => {
         if (!file) {
-            setSnackbar({ open: true, msg: 'Primero selecciona una imagen.', sev: 'warning' });
+            notify.warning('Primero selecciona una imagen');
             return;
         }
 
@@ -931,13 +930,13 @@ const ParentPaymentPage = () => {
             await api.post('/parents/upload-receipt', form, {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
-            setSnackbar({ open: true, msg: 'Boleta enviada correctamente.', sev: 'success' });
+            notify.success('Boleta enviada');
             clearSelectedFile();
             setUploadDialogOpen(false);
             await fetchPaymentInfo(undefined, true);
         } catch (err) {
             console.error(err);
-            setSnackbar({ open: true, msg: 'Error al subir la boleta.', sev: 'error' });
+            notify.error('Error al subir la boleta');
         } finally {
             setUploadLoading(false);
         }
@@ -1240,16 +1239,6 @@ const ParentPaymentPage = () => {
 
             <ReceiptViewerDialog receipt={selectedReceipt} onClose={() => setSelectedReceipt(null)} />
 
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert severity={snackbar.sev} onClose={() => setSnackbar({ ...snackbar, open: false })} sx={{ width: '100%' }}>
-                    {snackbar.msg}
-                </Alert>
-            </Snackbar>
         </Box>
     );
 };

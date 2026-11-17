@@ -42,14 +42,15 @@ import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { matchSearchTokens } from '../utils/clientFilter';
 import { Autocomplete } from '@mui/material';
 import { ListItemText } from '@mui/material';
-import { Snackbar, Alert } from '@mui/material';
+import { Alert } from '@mui/material';
 import { Edit, Delete, Add, FileUpload, Lock } from '@mui/icons-material';
 import styled from 'styled-components';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import * as XLSX from 'xlsx';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
-import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
 import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
 import useManageableRoles from '../hooks/useManageableRoles';
@@ -225,11 +226,8 @@ const RolesManagementPage = () => {
     // Se elimina la gestión de contrato en el diálogo de edición
     // const [selectedContractUuid, setSelectedContractUuid] = useState('');
 
-    const [snackbar, setSnackbar] = useState({
-        open: false,
-        message: '',
-        severity: 'success'
-    });
+    const notify = useNotify();
+    const confirm = useConfirm();
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [totalUsers, setTotalUsers] = useState(0);
@@ -395,7 +393,7 @@ const RolesManagementPage = () => {
             setTotalUsers(Number(data.count || 0));
         } catch (err) {
             console.error('[fetchUsers] Error:', err);
-            setSnackbar({ open: true, message: 'Error al obtener usuarios', severity: 'error' });
+            notify.error('Error al obtener usuarios');
         }
         setLoading(false);
     };
@@ -417,7 +415,7 @@ const RolesManagementPage = () => {
             setSchools(resp.data.schools || []);
         } catch (err) {
             console.error('[fetchSchools] Error:', err);
-            setSnackbar({ open: true, message: 'Error al obtener colegios', severity: 'error' });
+            notify.error('Error al obtener colegios');
         }
     };
 
@@ -464,7 +462,7 @@ const RolesManagementPage = () => {
             setCanonicalSchoolIdById(canonicalBySchoolId);
         } catch (err) {
             console.error('[fetchAssignableSchools] Error:', err);
-            setSnackbar({ open: true, message: 'Error al obtener colegios asignables', severity: 'error' });
+            notify.error('Error al obtener colegios asignables');
         }
     };
 
@@ -474,7 +472,7 @@ const RolesManagementPage = () => {
             setCorporations(resp.data.corporations || []);
         } catch (err) {
             console.error('[fetchCorporations] Error:', err);
-            setSnackbar({ open: true, message: 'Error al obtener corporaciones', severity: 'error' });
+            notify.error('Error al obtener corporaciones');
         }
     };
 
@@ -572,17 +570,19 @@ const RolesManagementPage = () => {
         setSelectedAuxiliarCorporations([]);
     };
 
-    const handleDeleteClick = async (userId) => {
-        if (window.confirm('¿Estás seguro de que deseas eliminar este usuario de forma PERMANENTE? Esta acción no se puede deshacer.')) {
-            try {
-                // Soft-delete endpoint (logical delete)
-                await api.delete(`/users/${userId}`);
-                setSnackbar({ open: true, message: 'Usuario eliminado', severity: 'success' });
-                fetchUsers();
-            } catch (err) {
-                console.error('[handleDeleteClick] Error:', err);
-                setSnackbar({ open: true, message: err?.response?.data?.message || 'Error al eliminar usuario', severity: 'error' });
-            }
+    const handleDeleteClick = async (user) => {
+        const ok = await confirm({
+            title: 'Eliminar usuario',
+            message: `Se eliminará de forma permanente a ${user.name || user.email || 'este usuario'}. Esta acción no se puede deshacer.`,
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            // Soft-delete endpoint (logical delete)
+            onConfirm: () => api.delete(`/users/${user.id}`),
+            errorMessage: 'Error al eliminar el usuario',
+        });
+        if (ok) {
+            notify.success('Usuario eliminado');
+            fetchUsers();
         }
     };
 
@@ -622,7 +622,7 @@ const RolesManagementPage = () => {
                 {puedeEliminar && (
                     <PermissionGuard permission="usuarios-eliminar">
                         <Tooltip title="Eliminar">
-                            <IconButton onClick={() => handleDeleteClick(user.id)}>
+                            <IconButton onClick={() => handleDeleteClick(user)}>
                                 <Delete />
                             </IconButton>
                         </Tooltip>
@@ -661,7 +661,7 @@ const RolesManagementPage = () => {
                     selfPayload.phoneNumber = selectedUser.phoneNumber;
                 }
                 await api.put(`/users/${selectedUser.id}`, selfPayload);
-                setSnackbar({ open: true, message: 'Tus datos se actualizaron exitosamente', severity: 'success' });
+                notify.success('Tus datos se actualizaron');
                 fetchUsers();
                 handleDialogClose();
                 return;
@@ -722,27 +722,19 @@ const RolesManagementPage = () => {
                 const releasedMessage = releasedBuses.length > 0
                     ? `. Se desasignó ${releasedBuses.length === 1 ? 'del bus' : 'de los buses'} ${releasedPlates}`
                     : '';
-                setSnackbar({ open: true, message: `Usuario actualizado exitosamente${releasedMessage}`, severity: 'success' });
+                notify.success(`Usuario actualizado exitosamente${releasedMessage}`);
             } else {
                 const { id, ...payloadForPost } = payload;
                 await api.post('/users', payloadForPost);
-                setSnackbar({ open: true, message: 'Usuario creado exitosamente', severity: 'success' });
+                notify.success('Usuario creado');
             }
 
             // Refresca y cierra
             fetchUsers();
             handleDialogClose();
         } catch (err) {
-            try {
-                if (showDuplicateEmailFromError(err, setSnackbar)) {
-                    return;
-                }
-            } catch (e) {
-                // ignore and fallback to generic handling
-            }
-
             console.error('[handleSaveUser] Error:', err);
-            setSnackbar({ open: true, message: err?.response?.data?.message || 'Error al guardar usuario', severity: 'error' });
+            notify.fromError(err, 'Error al guardar usuario');
         }
     };
 
@@ -844,7 +836,7 @@ const RolesManagementPage = () => {
             fetchUsers();
         } catch (error) {
             console.error('[handleUploadBulk] Error:', error);
-            setSnackbar({ open: true, message: 'Ocurrió un error al procesar la carga masiva', severity: 'error' });
+            notify.error('Ocurrió un error al procesar la carga masiva');
         }
         setBulkLoading(false);
     };
@@ -876,14 +868,14 @@ const RolesManagementPage = () => {
             if (category === 'Colegios') {
                 const schoolId = clientObj ? clientObj.id : null;
                 if (!schoolId) {
-                    setSnackbar({ open: true, message: 'Por favor selecciona un colegio para descargar.', severity: 'warning' });
+                    notify.warning('Por favor selecciona un colegio para descargar');
                     return;
                 }
                 baseParams.schoolId = schoolId;
             } else if (category === 'Corporaciones') {
                 const corpId = clientObj ? clientObj.id : null;
                 if (!corpId) {
-                    setSnackbar({ open: true, message: 'Por favor selecciona una corporación para descargar.', severity: 'warning' });
+                    notify.warning('Por favor selecciona una corporación para descargar');
                     return;
                 }
                 baseParams.corporationId = corpId;
@@ -910,21 +902,21 @@ const RolesManagementPage = () => {
 
             // Filtrar según categoría seleccionada
             if (!category) {
-                setSnackbar({ open: true, message: 'Por favor selecciona una opción para descargar.', severity: 'warning' });
+                notify.warning('Por favor selecciona una opción para descargar');
                 return;
             }
 
             if (category === 'Colegios') {
                 const schoolId = clientObj ? clientObj.id : null;
                 if (!schoolId) {
-                    setSnackbar({ open: true, message: 'Por favor selecciona un colegio para descargar.', severity: 'warning' });
+                    notify.warning('Por favor selecciona un colegio para descargar');
                     return;
                 }
                 allUsers = allUsers.filter(u => String(u.school) === String(schoolId));
             } else if (category === 'Corporaciones') {
                 const corpId = clientObj ? clientObj.id : null;
                 if (!corpId) {
-                    setSnackbar({ open: true, message: 'Por favor selecciona una corporación para descargar.', severity: 'warning' });
+                    notify.warning('Por favor selecciona una corporación para descargar');
                     return;
                 }
                 allUsers = allUsers.filter(u => String(u.corporationId || u.corporation?.id || '') === String(corpId));
@@ -1025,11 +1017,7 @@ const RolesManagementPage = () => {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         } catch (error) {
-            setSnackbar({
-                open: true,
-                message: 'Error al descargar todos los usuarios',
-                severity: 'error'
-            });
+            notify.fromError(error, 'Error al descargar todos los usuarios');
         }
     };
 
@@ -1913,17 +1901,6 @@ const RolesManagementPage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
-
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </PageContainer>
     );
 };

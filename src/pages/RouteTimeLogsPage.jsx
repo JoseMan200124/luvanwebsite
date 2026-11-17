@@ -21,12 +21,6 @@ import {
     IconButton,
     Tooltip,
     TableSortLabel,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogContentText,
-    DialogActions,
-    Button,
 } from '@mui/material';
 import { Delete as DeleteIcon } from '@mui/icons-material';
 import moment from 'moment-timezone';
@@ -42,11 +36,15 @@ import { F, toPlateOptions, toRouteOptions } from '../components/filters/filterF
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
 import PermissionGuard from '../components/PermissionGuard';
 
 moment.tz.setDefault('America/Guatemala');
 
 const RouteTimeLogsPage = () => {
+    const notify = useNotify();
+    const confirm = useConfirm();
     const [timeLogs, setTimeLogs] = useState([]);
     const [loading, setLoading] = useState(false);
     const [page, setPage] = useState(0);
@@ -113,9 +111,6 @@ const RouteTimeLogsPage = () => {
         averageDuration: 0,
     });
     const [exporting, setExporting] = useState(false);
-    // Delete dialog state
-    const [deleteId, setDeleteId] = useState(null);
-    const [deleteOpen, setDeleteOpen] = useState(false);
 
     // ignoramos la respuesta vieja para que el primer click no "se pierda".
     const timeLogsRequestSeqRef = useRef(0);
@@ -258,6 +253,7 @@ const RouteTimeLogsPage = () => {
             // Solo entrar si esta request aún es la vigente
             if (requestSeq === timeLogsRequestSeqRef.current) {
                 console.error('Error al cargar registros de tiempo:', error);
+                notify.fromError(error, 'Error al cargar los registros de tiempo');
             }
         } finally {
             if (requestSeq === timeLogsRequestSeqRef.current) {
@@ -276,6 +272,7 @@ const RouteTimeLogsPage = () => {
         selectedDay,
         selectedCicloEscolar,
         dates,
+        notify,
     ]);
 
     useEffect(() => {
@@ -294,30 +291,18 @@ const RouteTimeLogsPage = () => {
     // Register page-level refresh handler for the global refresh control
     useRegisterPageRefresh(fetchTimeLogs);
 
-    const handleOpenDelete = (id) => {
-        setDeleteId(id);
-        setDeleteOpen(true);
-    };
-
-    const handleCancelDelete = () => {
-        setDeleteId(null);
-        setDeleteOpen(false);
-    };
-
-    const handleConfirmDelete = async () => {
-        if (!deleteId) {
-            return;
-        }
-        try {
-            await deleteRouteTimeLog(deleteId);
-            // refresh list
-            setDeleteOpen(false);
-            setDeleteId(null);
+    const handleDelete = async (id) => {
+        const ok = await confirm({
+            title: 'Eliminar registro de tiempo',
+            message: 'Se eliminará el registro de tiempo de la ruta. Esta acción no se puede deshacer.',
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: () => deleteRouteTimeLog(id),
+            errorMessage: 'Error al eliminar el registro',
+        });
+        if (ok) {
+            notify.success('Registro eliminado');
             fetchTimeLogs();
-        } catch (error) {
-            console.error('Error al eliminar registro:', error);
-            setDeleteOpen(false);
-            setDeleteId(null);
         }
     };
 
@@ -369,7 +354,7 @@ const RouteTimeLogsPage = () => {
     const handleDownloadExcel = async () => {
         try {
             if (!totalCount || totalCount === 0) {
-                window.alert('No hay registros para exportar con los filtros seleccionados.');
+                notify.warning('No hay registros para exportar con los filtros seleccionados');
                 return;
             }
             setExporting(true);
@@ -495,6 +480,7 @@ const RouteTimeLogsPage = () => {
 
         } catch (err) {
             console.error('Error generando Excel:', err);
+            notify.fromError(err, 'Error al generar el reporte');
         } finally {
             setExporting(false);
         }
@@ -769,7 +755,7 @@ const RouteTimeLogsPage = () => {
                                                 <TableCell align="center">
                                                     <PermissionGuard permission="monitora-eliminar-tiempos">
                                                         <Tooltip title="Eliminar registro">
-                                                            <IconButton onClick={() => handleOpenDelete(log.id)} size="small" color="error">
+                                                            <IconButton onClick={() => handleDelete(log.id)} size="small" color="error">
                                                                 <DeleteIcon fontSize="small" />
                                                             </IconButton>
                                                         </Tooltip>
@@ -799,22 +785,6 @@ const RouteTimeLogsPage = () => {
                                     `${from}-${to} de ${count !== -1 ? count : `más de ${to}`}`
                                 }
                             />
-                            <Dialog
-                                open={deleteOpen}
-                                onClose={handleCancelDelete}
-                                aria-labelledby="delete-dialog-title"
-                            >
-                                <DialogTitle id="delete-dialog-title">Confirmar eliminación</DialogTitle>
-                                <DialogContent>
-                                    <DialogContentText>
-                                        ¿Estás seguro que deseas eliminar este registro? Esta acción no se puede deshacer.
-                                    </DialogContentText>
-                                </DialogContent>
-                                <DialogActions>
-                                    <Button onClick={handleCancelDelete}>Cancelar</Button>
-                                    <Button onClick={handleConfirmDelete} color="error">Eliminar</Button>
-                                </DialogActions>
-                            </Dialog>
                         </>
                     )}
                 </Paper>

@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
     Dialog, DialogTitle, DialogContent, DialogActions,
     Button, Box, Typography, Switch, FormControlLabel, TextField,
-    Divider, Chip, Snackbar, Alert, IconButton, Tooltip,
+    Divider, Chip, Alert, IconButton, Tooltip,
     Tabs, Tab, Table, TableHead, TableBody, TableRow, TableCell,
     CircularProgress, Card, CardContent, Grid
 } from '@mui/material';
@@ -13,6 +13,7 @@ import ReceiptIcon from '@mui/icons-material/Receipt';
 import RotateRightIcon from '@mui/icons-material/RotateRight';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import api from '../../utils/axiosConfig';
+import useNotify from '../../hooks/useNotify';
 
 const ROUTE_TYPE_LABELS = { ALL: 'Todos', COMPLETA: 'Completa', 'MEDIA AM': 'Media AM', 'MEDIA PM': 'Media PM' };
 const TARIFF_MODE_LABELS  = { SET: 'Fijar', INCREMENT: 'Aumentar', DECREMENT: 'Disminuir' };
@@ -223,7 +224,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
     const [applying, setApplying] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [appliedResult, setAppliedResult] = useState(null);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info', action: null });
+    const notify = useNotify();
     const [applyLedger, setApplyLedger] = useState(true);
     const [ledgerKeep, setLedgerKeep] = useState({});
     const [ledgerEditData, setLedgerEditData] = useState({});
@@ -353,7 +354,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions, lateStartDecisions, moraPaidAsTariffDecisions, manualTransactions, manualDeleteTransactionIds, tariffOverrides, noPenalty });
             const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
             if (!fresh) {
-                setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
+                notify.warning('No se encontró el pago en la nueva simulación');
             } else {
                 if (onReplaceRow) {
                     onReplaceRow(fresh);
@@ -361,10 +362,10 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 setEditPayment({});
                 setEditPeriods({});
                 setAppliedResult(null);
-                setSnackbar({ open: true, severity: 'success', message: 'Reconstrucción actualizada desde la base de datos.' });
+                notify.success('Reconstrucción actualizada desde la base de datos');
             }
         } catch (err) {
-            setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || err.message || 'Error al re-simular.' });
+            notify.error(err?.response?.data?.message || err.message || 'Error al re-simular.');
         } finally {
             setRefreshing(false);
         }
@@ -387,7 +388,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions: next, lateStartDecisions, moraPaidAsTariffDecisions, manualTransactions, manualDeleteTransactionIds, tariffOverrides, noPenalty });
             const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
             if (!fresh) {
-                setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
+                notify.warning('No se encontró el pago en la nueva simulación');
             } else {
                 if (onReplaceRow) {
                     onReplaceRow(fresh);
@@ -395,10 +396,10 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 setEditPayment({});
                 setEditPeriods({});
                 setAppliedResult(null);
-                setSnackbar({ open: true, severity: 'success', message: 'Reconstrucción recalculada con la decisión de crédito automático.' });
+                notify.success('Reconstrucción recalculada con la decisión de crédito automático');
             }
         } catch (err) {
-            setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || err.message || 'Error al recalcular.' });
+            notify.error(err?.response?.data?.message || err.message || 'Error al recalcular.');
         } finally {
             setRefreshing(false);
         }
@@ -418,7 +419,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions, lateStartDecisions: next, moraPaidAsTariffDecisions, manualTransactions, manualDeleteTransactionIds, tariffOverrides, noPenalty });
             const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
             if (!fresh) {
-                setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
+                notify.warning('No se encontró el pago en la nueva simulación');
             } else {
                 if (onReplaceRow) {
                     onReplaceRow(fresh);
@@ -426,10 +427,10 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 setEditPayment({});
                 setEditPeriods({});
                 setAppliedResult(null);
-                setSnackbar({ open: true, severity: 'success', message: 'Mora quitada/restaurada. Simulación actualizada.' });
+                notify.success('Mora quitada/restaurada. Simulación actualizada.');
             }
         } catch (err) {
-            setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || err.message || 'Error al recalcular.' });
+            notify.error(err?.response?.data?.message || err.message || 'Error al recalcular.');
         } finally {
             setRefreshing(false);
         }
@@ -452,7 +453,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions, lateStartDecisions, moraPaidAsTariffDecisions: next, manualTransactions, manualDeleteTransactionIds, tariffOverrides, noPenalty });
             const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
             if (!fresh) {
-                setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
+                notify.warning('No se encontró el pago en la nueva simulación');
             } else {
                 if (onReplaceRow) {
                     onReplaceRow(fresh);
@@ -460,10 +461,10 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 setEditPayment({});
                 setEditPeriods({});
                 setAppliedResult(null);
-                setSnackbar({ open: true, severity: 'success', message: 'Escenario aplicado/restaurado. Simulación actualizada.' });
+                notify.success('Escenario aplicado/restaurado. Simulación actualizada.');
             }
         } catch (err) {
-            setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || err.message || 'Error al recalcular.' });
+            notify.error(err?.response?.data?.message || err.message || 'Error al recalcular.');
         } finally {
             setRefreshing(false);
         }
@@ -485,7 +486,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             });
             const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
             if (!fresh) {
-                setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
+                notify.warning('No se encontró el pago en la nueva simulación');
             } else {
                 if (onReplaceRow) {
                     onReplaceRow(fresh);
@@ -493,10 +494,10 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 setEditPayment({});
                 setEditPeriods({});
                 setAppliedResult(null);
-                setSnackbar({ open: true, severity: 'success', message: successMessage });
+                notify.success(successMessage);
             }
         } catch (err) {
-            setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || err.message || 'Error al recalcular.' });
+            notify.error(err?.response?.data?.message || err.message || 'Error al recalcular.');
         } finally {
             setRefreshing(false);
         }
@@ -511,13 +512,13 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
         const extraordinaryDiscount = Number(manualTxForm.extraordinaryDiscount || 0);
         const type = String(manualTxForm.type || 'TARIFA').trim().toUpperCase();
         if (!manualTxForm.date || Number.isNaN(amount) || !['TARIFA', 'MORA'].includes(type)) {
-            setSnackbar({ open: true, severity: 'warning', message: 'Completa tipo (TARIFA/MORA), fecha y monto válido.' });
+            notify.warning('Completa tipo (TARIFA/MORA), fecha y monto válido');
             return;
         }
         // For MORA, amount=0 is valid when extraordinaryDiscount > 0 (full exoneration)
         const isMoraExoneration = type === 'MORA' && amount === 0 && extraordinaryDiscount > 0;
         if (!isMoraExoneration && amount <= 0) {
-            setSnackbar({ open: true, severity: 'warning', message: 'Completa tipo (TARIFA/MORA), fecha y monto válido.' });
+            notify.warning('Completa tipo (TARIFA/MORA), fecha y monto válido');
             return;
         }
         const tx = {
@@ -573,7 +574,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             });
             const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
             if (!fresh) {
-                setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
+                notify.warning('No se encontró el pago en la nueva simulación');
             } else {
                 if (onReplaceRow) {
                     onReplaceRow(fresh);
@@ -581,10 +582,10 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 setEditPayment({});
                 setEditPeriods({});
                 setAppliedResult(null);
-                setSnackbar({ open: true, severity: 'success', message: shouldDelete ? 'Transacción marcada para eliminar.' : 'Transacción restaurada en la simulación.' });
+                notify.success(shouldDelete ? 'Transacción marcada para eliminar.' : 'Transacción restaurada en la simulación.');
             }
         } catch (err) {
-            setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || err.message || 'Error al recalcular.' });
+            notify.error(err?.response?.data?.message || err.message || 'Error al recalcular.');
         } finally {
             setRefreshing(false);
         }
@@ -646,7 +647,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
 
             const { data } = await api.post('/payments/rebuild/apply', body);
             setAppliedResult(data);
-            setSnackbar({ open: true, severity: 'success', message: 'Cambios aplicados correctamente.' });
+            notify.success('Cambios aplicados');
             if (onApplied) {
                 onApplied(payment.paymentId, data);
             }
@@ -654,20 +655,18 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             const status = err?.response?.status;
             const data = err?.response?.data;
             if (status === 409) {
-                setSnackbar({
-                    open: true,
-                    severity: 'warning',
-                    message: data?.message || 'Los datos cambiaron desde la simulación.',
+                notify.warning(data?.message || 'Los datos cambiaron desde la simulación', {
+                    duration: null,
                     action: (
-                        <Button color="inherit" size="small" onClick={() => { setSnackbar(s => ({ ...s, open: false })); if (onCtxChanged) {
+                        <Button color="inherit" size="small" onClick={() => { notify.dismiss(); if (onCtxChanged) {
                             onCtxChanged();
                         } }}>
                             Volver a simular
                         </Button>
-                    )
+                    ),
                 });
             } else {
-                setSnackbar({ open: true, severity: 'error', message: data?.message || err.message || 'Error al aplicar.' });
+                notify.error(data?.message || err.message || 'Error al aplicar.');
             }
         } finally {
             setApplying(false);
@@ -693,7 +692,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             const { data } = await api.get(`/parents/${payment.userId}/receipts`);
             setReceipts(data?.receipts || []);
         } catch (err) {
-            setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || 'No se pudieron cargar las boletas.' });
+            notify.fromError(err, 'No se pudieron cargar las boletas.');
         } finally {
             setReceiptsLoading(false);
         }
@@ -709,7 +708,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             const { data } = await api.get(`/schools/${payment.schoolId}`);
             setSchoolData(data?.school || null);
         } catch (err) {
-            setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || 'No se pudo cargar el colegio.' });
+            notify.fromError(err, 'No se pudo cargar el colegio.');
         } finally {
             setSchoolLoading(false);
         }
@@ -1583,21 +1582,6 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 </DialogContent>
             </Dialog>
 
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={snackbar.severity === 'warning' ? null : 5000}
-                onClose={() => setSnackbar(s => ({ ...s, open: false }))}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert
-                    onClose={() => setSnackbar(s => ({ ...s, open: false }))}
-                    severity={snackbar.severity}
-                    action={snackbar.action}
-                    variant="filled"
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </>
     );
 }

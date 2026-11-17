@@ -38,6 +38,7 @@ import {
 } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
+import useConfirm from '../hooks/useConfirm';
 
 const NIVELES = [
     { value: 'ver', label: 'Ver' },
@@ -102,6 +103,7 @@ const FilaCatalogo = memo(function FilaCatalogo({ permiso, grupoKey, onAlternarV
  */
 const CatalogOrganizer = ({ onNotify }) => {
     const { auth } = useContext(AuthContext);
+    const confirm = useConfirm();
     const cabeceras = useMemo(
         () => ({ headers: { Authorization: `Bearer ${auth?.token}` } }),
         [auth?.token]
@@ -182,24 +184,28 @@ const CatalogOrganizer = ({ onNotify }) => {
     };
 
     const eliminarCategoria = async (categoria) => {
-        const aviso =
-            categoria.permissionCount > 0
-                ? `"${categoria.label}" tiene ${categoria.permissionCount} permiso(s). Se moverán a "Sin clasificar". ¿Continuar?`
-                : `¿Eliminar la categoría "${categoria.label}"?`;
-        if (!window.confirm(aviso)) {
+        let res = null;
+        const ok = await confirm({
+            title: 'Eliminar categoría',
+            message: categoria.permissionCount > 0
+                ? `Se eliminará la categoría "${categoria.label}". Sus ${categoria.permissionCount} permiso(s) se moverán a "Sin clasificar".`
+                : `Se eliminará la categoría "${categoria.label}".`,
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: async () => {
+                res = await api.delete(`/permissions/categories/${categoria.id}`, cabeceras);
+            },
+            errorMessage: 'No se pudo eliminar la categoría',
+        });
+        if (!ok) {
             return;
         }
-        try {
-            const res = await api.delete(`/permissions/categories/${categoria.id}`, cabeceras);
-            onNotify(
-                res.data.movedPermissions
-                    ? `Categoría eliminada. ${res.data.movedPermissions} permiso(s) movidos a Sin clasificar.`
-                    : 'Categoría eliminada'
-            );
-            await cargar();
-        } catch (err) {
-            onNotify(err?.response?.data?.message || 'No se pudo eliminar', 'error');
-        }
+        onNotify(
+            res?.data?.movedPermissions
+                ? `Categoría eliminada. ${res.data.movedPermissions} permiso(s) movidos a Sin clasificar.`
+                : 'Categoría eliminada'
+        );
+        await cargar();
     };
 
     // -------------------------------------------------------------- permisos

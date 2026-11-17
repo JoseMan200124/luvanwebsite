@@ -1,7 +1,7 @@
 // src/components/financialStatistics/FuelStatisticsTab.jsx
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Box, Button, CircularProgress, Snackbar, Typography } from '@mui/material';
+import { Box, Button, CircularProgress, Typography } from '@mui/material';
 import { Download } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../../hooks/useRegisterPageRefresh';
@@ -9,6 +9,7 @@ import FilterBar from '../filters/FilterBar';
 import useFilters from '../../hooks/useFilters';
 import { F } from '../filters/filterFields';
 import { getCurrentDateSync } from '../../hooks/useCurrentDate';
+import useNotify from '../../hooks/useNotify';
 import { getFuelFinancialStatistics, getFuelClients } from '../../services/fuelStatisticsService';
 import {
     ALL_OPTION, FUEL_TYPES, FUELING_REASONS, GRANULARITIES, DATE_PRESETS, computePresetRange, monthRangeToDates,
@@ -39,12 +40,11 @@ const FuelStatisticsTab = () => {
     const [clientOptions, setClientOptions] = useState({ schools: [], corporations: [], hasUnassigned: false });
     const [result, setResult] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const notify = useNotify();
 
     // Recibe los filtros aplicados. Listas vacías = todos.
     const fetchStats = useCallback(async (values) => {
         setLoading(true);
-        setError(null);
         try {
             const { from, to } = monthRangeToDates(values.months.from, values.months.to, getCurrentDateSync());
             const data = await getFuelFinancialStatistics({
@@ -58,12 +58,12 @@ const FuelStatisticsTab = () => {
             setResult(data);
         } catch (e) {
             console.error('fetchStats error', e);
-            setError(e?.response?.data?.error || 'Error al obtener las estadísticas de combustible. Por favor, inténtalo de nuevo más tarde.');
+            notify.fromError(e, 'Error al obtener las estadísticas de combustible');
             setResult(null);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [notify]);
 
     useEffect(() => {
         getFuelClients()
@@ -224,9 +224,6 @@ const FuelStatisticsTab = () => {
                 </Box>
             ) : null}
 
-            <Snackbar open={Boolean(error)} autoHideDuration={6000} onClose={() => setError(null)}>
-                <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>{error}</Alert>
-            </Snackbar>
         </>
     );
 };

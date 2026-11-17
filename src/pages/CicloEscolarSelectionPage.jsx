@@ -8,7 +8,6 @@ import {
     CardContent,
     Button,
     CircularProgress,
-    Snackbar,
     Alert,
     FormControl,
     InputLabel,
@@ -76,6 +75,8 @@ import {
     getSelectedCicloEscolarId,
     setSelectedCicloEscolarId as persistSelectedCicloEscolarId,
 } from '../utils/schoolContext';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
 
 const SchoolCard = styled(Card)`
     ${tw`cursor-pointer transition-all duration-300`}
@@ -216,7 +217,8 @@ const CicloEscolarSelectionPage = () => {
     const [selectedCicloEscolarId, setSelectedCicloEscolarId] = useState(() => getSelectedCicloEscolarId() || '');
     const [cyclesLoading, setCyclesLoading] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
+    const confirm = useConfirm();
     const [operationalConflict, setOperationalConflict] = useState(null);
     const [billingConflict, setBillingConflict] = useState(null);
     const [billingDecision, setBillingDecision] = useState({ action: 'SET_NEXT_MONTH_START', customStartDate: '', confirmText: '' });
@@ -225,7 +227,6 @@ const CicloEscolarSelectionPage = () => {
     const [paymentsExclusionPromptOpen, setPaymentsExclusionPromptOpen] = useState(false);
     const paymentsExclusionConfirmedRef = useRef(false);
     const [paymentsReactivationChoice, setPaymentsReactivationChoice] = useState({ chargeEnrollment: null, billingStart: null, clearPenalty: false });
-    const [opStatusConfirm, setOpStatusConfirm] = useState({ open: false, pendingValue: null, schoolName: '', confirmText: '' });
     
     // Estados para diálogos y acciones
     const [selectedSchool, setSelectedSchool] = useState(null);
@@ -478,11 +479,11 @@ const CicloEscolarSelectionPage = () => {
             }
         } catch (error) {
             console.error('Error fetching ciclos escolares:', error);
-            setSnackbar({ open: true, message: 'Error al obtener los ciclos escolares', severity: 'error' });
+            notify.error('Error al obtener los ciclos escolares');
         } finally {
             setCyclesLoading(false);
         }
-    }, []);
+    }, [notify]);
 
     const fetchSchoolsByYear = useCallback(async () => {
         setLoading(true);
@@ -538,15 +539,11 @@ const CicloEscolarSelectionPage = () => {
             setSchools(processedSchools);
         } catch (err) {
             console.error('Error fetching schools:', err);
-            setSnackbar({ 
-                open: true, 
-                message: 'Error al obtener los colegios', 
-                severity: 'error' 
-            });
+            notify.error('Error al obtener los colegios');
         } finally {
             setLoading(false);
         }
-    }, [auth.token, selectedCicloEscolarId]);
+    }, [auth.token, selectedCicloEscolarId, notify]);
 
     const fetchPrefillSchools = useCallback(async () => {
         if (!auth.token) {
@@ -570,15 +567,11 @@ const CicloEscolarSelectionPage = () => {
             setPrefillSchools(rawSchools.filter((school) => school?.id));
         } catch (err) {
             console.error('Error fetching prefill schools:', err);
-            setSnackbar({
-                open: true,
-                message: 'Error al obtener colegios para prellenar',
-                severity: 'error'
-            });
+            notify.error('Error al obtener colegios para prellenar');
         } finally {
             setPrefillSchoolsLoading(false);
         }
-    }, [auth.token]);
+    }, [auth.token, notify]);
 
     // Register page-level refresh handler for global refresh control
     useRegisterPageRefresh(async () => {
@@ -632,19 +625,11 @@ const CicloEscolarSelectionPage = () => {
         const link = `${baseUrl}/schools/enroll/${schoolId}`;
         navigator.clipboard.writeText(link)
             .then(() => {
-                setSnackbar({
-                    open: true,
-                    message: 'Enlace copiado al portapapeles',
-                    severity: 'success',
-                });
+                notify.success('Enlace copiado al portapapeles');
             })
             .catch((err) => {
                 console.error('Error copiando enlace:', err);
-                setSnackbar({
-                    open: true,
-                    message: 'No se pudo copiar el enlace',
-                    severity: 'error'
-                });
+                notify.error('No se pudo copiar el enlace');
             });
     };
 
@@ -801,20 +786,12 @@ const CicloEscolarSelectionPage = () => {
                 headers: { Authorization: `Bearer ${auth.token}` },
             });
             setDeleteDialog(null);
-            setSnackbar({
-                open: true,
-                message: 'Colegio eliminado exitosamente',
-                severity: 'success'
-            });
+            notify.success('Colegio eliminado');
             fetchSchoolsByYear(); // Recargar la lista
         } catch (err) {
             console.error('Error al eliminar colegio:', err);
             setDeleteDialog(null);
-            setSnackbar({
-                open: true,
-                message: err?.response?.data?.message || 'Error al eliminar colegio',
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error al eliminar colegio');
         } finally {
             setDeletingSchool(false);
         }
@@ -849,11 +826,7 @@ const CicloEscolarSelectionPage = () => {
             setOpenSubmissionDialog(true);
         } catch (error) {
             console.error('Error al obtener inscripciones:', error);
-            setSnackbar({
-                open: true,
-                message: 'Error al obtener formularios de este colegio',
-                severity: 'error'
-            });
+            notify.error('Error al obtener formularios de este colegio');
         } finally {
             setLoading(false);
         }
@@ -893,10 +866,10 @@ const CicloEscolarSelectionPage = () => {
             setBulkResults(resp.data || null);
             // Refresh list after upload
             fetchSchoolsByYear();
-            setSnackbar({ open: true, message: 'Carga masiva procesada', severity: 'success' });
+            notify.success('Carga masiva procesada');
         } catch (err) {
             console.error('Error al subir colegios masivamente:', err);
-            setSnackbar({ open: true, message: 'Error al procesar la carga masiva', severity: 'error' });
+            notify.error('Error al procesar la carga masiva');
         } finally {
             setBulkLoading(false);
         }
@@ -1024,14 +997,25 @@ const CicloEscolarSelectionPage = () => {
     const popoverId = openPopover ? 'grades-popover' : undefined;
 
     // Funciones para manejar cambios en el formulario de edición
+    // Cambiar el estado de operación pide escribir CONFIRMAR.
+    const confirmOperationStatus = async (pendingValue) => {
+        const activating = pendingValue === 'ACTIVE';
+        const schoolName = selectedSchool?.name || 'este colegio';
+        const ok = await confirm({
+            title: activating ? 'Activar operación' : 'Desactivar operación',
+            message: `Se ${activating ? 'pondrá en operación' : 'sacará de operación'} a ${schoolName}.${activating ? ' Si otro ciclo del mismo colegio ya está operando, el cambio será bloqueado.' : ''}`,
+            confirmLabel: activating ? 'Activar' : 'Desactivar',
+            tone: activating ? 'default' : 'danger',
+            requireText: 'CONFIRMAR',
+        });
+        if (ok) {
+            setSelectedSchool(prev => ({ ...prev, operationStatus: pendingValue }));
+        }
+    };
+
     const handleInputChange = (e) => {
         if (e.target.name === 'operationStatus') {
-            setOpStatusConfirm({
-                open: true,
-                pendingValue: e.target.value,
-                schoolName: selectedSchool?.name || 'este colegio',
-                confirmText: ''
-            });
+            confirmOperationStatus(e.target.value);
             return;
         }
         setSelectedSchool((prev) => ({
@@ -1200,38 +1184,30 @@ const CicloEscolarSelectionPage = () => {
             Number(selectedSchool.transportFeeComplete) < 0 ||
             Number(selectedSchool.transportFeeHalf) < 0
         ) {
-            setSnackbar({
-                open: true,
-                message: 'Las cuotas de transporte no pueden ser negativas.',
-                severity: 'error'
-            });
+            notify.error('Las cuotas de transporte no pueden ser negativas');
             return;
         }
         if (
             Number(selectedSchool.duePaymentDay) < 1 ||
             Number(selectedSchool.duePaymentDay) > 31
         ) {
-            setSnackbar({
-                open: true,
-                message: 'El día de pago debe estar entre 1 y 31.',
-                severity: 'error'
-            });
+            notify.error('El día de pago debe estar entre 1 y 31');
             return;
         }
         // Validate daily penalty
         if (Number(selectedSchool.dailyPenalty) < 0) {
-            setSnackbar({ open: true, message: 'La mora diaria no puede ser negativa.', severity: 'error' });
+            notify.error('La mora diaria no puede ser negativa');
             return;
         }
         if (Number(selectedSchool.enrollmentFeeAmount) < 0) {
-            setSnackbar({ open: true, message: 'El monto de inscripción no puede ser negativo.', severity: 'error' });
+            notify.error('El monto de inscripción no puede ser negativo');
             return;
         }
         // Validate draft enrollment fee tiers (new school, saved after creation)
         if (!selectedSchool.id) {
             const invalidTier = draftEnrollmentTiers.find((row) => !row.untilDate || !row.discountType);
             if (invalidTier) {
-                setSnackbar({ open: true, message: 'Cada tramo de inscripción requiere fecha límite y tipo de descuento.', severity: 'error' });
+                notify.error('Cada tramo de inscripción requiere fecha límite y tipo de descuento');
                 return;
             }
         }
@@ -1240,7 +1216,7 @@ const CicloEscolarSelectionPage = () => {
         const schedulesWithCode = schoolSchedules.filter(s => s?.code);
         const invalidCode = schedulesWithCode.find(s => !/^[A-Z]{2,4}$/.test(s.code));
         if (invalidCode) {
-            setSnackbar({ open: true, message: `Código de horario inválido: "${invalidCode.code}". Use 2 a 4 letras mayúsculas (ej: AM, VE, NO).`, severity: 'error' });
+            notify.error(`Código de horario inválido: "${invalidCode.code}". Use 2 a 4 letras mayúsculas (ej: AM, VE, NO).`);
             return;
         }
         const codeCounts = {};
@@ -1249,7 +1225,7 @@ const CicloEscolarSelectionPage = () => {
         }
         const dupCode = Object.keys(codeCounts).find(c => codeCounts[c] > 1);
         if (dupCode) {
-            setSnackbar({ open: true, message: `Código de horario duplicado: "${dupCode}". Cada código debe ser único.`, severity: 'error' });
+            notify.error(`Código de horario duplicado: "${dupCode}". Cada código debe ser único.`);
             return;
         }
 
@@ -1268,11 +1244,7 @@ const CicloEscolarSelectionPage = () => {
                     const existingCode = occupancyByDayTime.get(k);
                     const dayLabel = DAY_LABEL_BY_KEY[day] || day;
                     const timeLabel = formatTimeTo12h(time);
-                    setSnackbar({
-                        open: true,
-                        message: `Conflicto de hora base: los horarios "${existingCode}" y "${s.code}" comparten ${timeLabel} en ${dayLabel}.`,
-                        severity: 'error'
-                    });
+                    notify.error(`Conflicto de hora base: los horarios "${existingCode}" y "${s.code}" comparten ${timeLabel} en ${dayLabel}.`);
                     return;
                 }
                 occupancyByDayTime.set(k, s.code);
@@ -1374,22 +1346,14 @@ const CicloEscolarSelectionPage = () => {
                     headers: { Authorization: `Bearer ${auth.token}` },
                 });
                 
-                setSnackbar({
-                    open: true,
-                    message: 'Colegio actualizado exitosamente',
-                    severity: 'success'
-                });
+                notify.success('Colegio actualizado');
             } else {
                 // Create new school (enrollmentFeeTiers, if any, are persisted atomically by the backend)
                 await api.post('/schools', payload, {
                     headers: { Authorization: `Bearer ${auth.token}` },
                 });
 
-                setSnackbar({
-                    open: true,
-                    message: 'Colegio creado exitosamente',
-                    severity: 'success'
-                });
+                notify.success('Colegio creado');
             }
 
             paymentsExclusionConfirmedRef.current = false;
@@ -1400,19 +1364,11 @@ const CicloEscolarSelectionPage = () => {
             const responseData = err.response?.data;
             if (err.response?.status === 409 && responseData?.code === 'OPERATIONAL_SCHOOL_CONFLICT') {
                 setOperationalConflict(responseData);
-                setSnackbar({
-                    open: true,
-                    message: responseData.message || 'Ya existe un ciclo de este colegio en operación.',
-                    severity: 'warning'
-                });
+                notify.warning(responseData.message || 'Ya existe un ciclo de este colegio en operación.');
                 return;
             }
             if (err.response?.status === 409 && responseData?.code === 'SCHOOL_HAS_PAYMENT_MOVEMENTS') {
-                setSnackbar({
-                    open: true,
-                    message: responseData.message || 'Este colegio ya tiene movimientos de pago registrados. Contacta a soporte.',
-                    severity: 'warning'
-                });
+                notify.warning(responseData.message || 'Este colegio ya tiene movimientos de pago registrados. Contacta a soporte.');
                 return;
             }
             if (err.response?.status === 409 && responseData?.code === 'PAYMENTS_REACTIVATION_DECISION_REQUIRED') {
@@ -1432,18 +1388,10 @@ const CicloEscolarSelectionPage = () => {
                     customStartDate: responseData.suggestedNextMonthStart || '',
                     confirmText: ''
                 });
-                setSnackbar({
-                    open: true,
-                    message: responseData.message || 'Se requiere decidir desde qué fecha iniciará el cobro.',
-                    severity: 'warning'
-                });
+                notify.warning(responseData.message || 'Se requiere decidir desde qué fecha iniciará el cobro.');
                 return;
             }
-            setSnackbar({
-                open: true,
-                message: 'Error al guardar el colegio',
-                severity: 'error'
-            });
+            notify.error('Error al guardar el colegio');
         } finally {
             setSavingSchool(false);
         }
@@ -1462,13 +1410,13 @@ const CicloEscolarSelectionPage = () => {
                 : billingConflict.currentSchoolYearStart;
 
         if (action !== 'KEEP_START_DATE' && !nextStartDate) {
-            setSnackbar({ open: true, message: 'Selecciona una fecha de inicio válida.', severity: 'warning' });
+            notify.warning('Selecciona una fecha de inicio válida');
             return;
         }
 
         const requiresConfirmation = action !== 'SET_NEXT_MONTH_START';
         if (requiresConfirmation && billingDecision.confirmText !== 'CONFIRMAR') {
-            setSnackbar({ open: true, message: 'Escribe CONFIRMAR para continuar con esta decisión.', severity: 'warning' });
+            notify.warning('Escribe CONFIRMAR para continuar con esta decisión');
             return;
         }
 
@@ -2347,12 +2295,12 @@ const CicloEscolarSelectionPage = () => {
                                         });
                                         setQuickClearing(false);
                                         setOpenQuickClear(false);
-                                        setSnackbar({ open: true, message: 'Limpieza de mora realizada correctamente', severity: 'success' });
+                                        notify.success('Limpieza de mora realizada');
                                         fetchSchoolsByYear();
                                     } catch (err) {
                                         console.error(err);
                                         setQuickClearing(false);
-                                        setSnackbar({ open: true, message: 'Error al realizar limpieza de mora', severity: 'error' });
+                                        notify.error('Error al realizar limpieza de mora');
                                     }
                                 }}
                             >
@@ -2655,67 +2603,6 @@ const CicloEscolarSelectionPage = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Diálogo de confirmación para cambio de estado operativo */}
-            <Dialog
-                open={opStatusConfirm.open}
-                onClose={() => setOpStatusConfirm(s => ({ ...s, open: false, confirmText: '' }))}
-                maxWidth="xs"
-                fullWidth
-            >
-                <DialogTitle>
-                    {opStatusConfirm.pendingValue === 'ACTIVE' ? 'Activar operación' : 'Desactivar operación'}
-                </DialogTitle>
-                <DialogContent>
-                    <DialogContentText sx={{ mb: 2 }}>
-                        Estás a punto de {opStatusConfirm.pendingValue === 'ACTIVE' ? 'poner en operación' : 'sacar de operación'} a{' '}
-                        <strong>{opStatusConfirm.schoolName}</strong>.
-                        {opStatusConfirm.pendingValue === 'ACTIVE' && (
-                            <>
-                                {' '}Si otro ciclo del mismo colegio ya está operando, el cambio será bloqueado.
-                            </>
-                        )}
-                    </DialogContentText>
-                    <DialogContentText sx={{ mb: 1.5 }}>
-                        Para confirmar, escribe <strong>CONFIRMAR</strong> en el campo de abajo:
-                    </DialogContentText>
-                    <TextField
-                        autoFocus
-                        fullWidth
-                        size="small"
-                        placeholder="CONFIRMAR"
-                        value={opStatusConfirm.confirmText}
-                        onChange={(e) => setOpStatusConfirm(s => ({ ...s, confirmText: e.target.value }))}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && opStatusConfirm.confirmText === 'CONFIRMAR') {
-                                setSelectedSchool(prev => ({ ...prev, operationStatus: opStatusConfirm.pendingValue }));
-                                setOpStatusConfirm({ open: false, pendingValue: null, schoolName: '', confirmText: '' });
-                            }
-                        }}
-                        error={opStatusConfirm.confirmText.length > 0 && opStatusConfirm.confirmText !== 'CONFIRMAR'}
-                        helperText={
-                            opStatusConfirm.confirmText.length > 0 && opStatusConfirm.confirmText !== 'CONFIRMAR'
-                                ? 'Escribe exactamente CONFIRMAR'
-                                : ' '
-                        }
-                    />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setOpStatusConfirm(s => ({ ...s, open: false, confirmText: '' }))}>
-                        Cancelar
-                    </Button>
-                    <Button
-                        variant="contained"
-                        color={opStatusConfirm.pendingValue === 'ACTIVE' ? 'success' : 'warning'}
-                        disabled={opStatusConfirm.confirmText !== 'CONFIRMAR'}
-                        onClick={() => {
-                            setSelectedSchool(prev => ({ ...prev, operationStatus: opStatusConfirm.pendingValue }));
-                            setOpStatusConfirm({ open: false, pendingValue: null, schoolName: '', confirmText: '' });
-                        }}
-                    >
-                        {opStatusConfirm.pendingValue === 'ACTIVE' ? 'Activar' : 'Desactivar'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
 
             <Dialog
                 open={!!deleteDialog}
@@ -3195,7 +3082,7 @@ const CicloEscolarSelectionPage = () => {
                 onClose={handleCloseEditSchedulesModal}
                 school={selectedSchool ? { ...selectedSchool, schedules: schoolSchedules, routeSchedules: schoolRouteSchedules } : null}
                 onSuccess={handleEditSchedulesSuccess}
-                onNotify={(snackbarState) => setSnackbar(snackbarState)}
+                onNotify={(snackbarState) => (notify[snackbarState?.severity] || notify.info)(snackbarState?.message)}
             />
 
             {/* Popover para mostrar grados adicionales */}
@@ -3227,20 +3114,6 @@ const CicloEscolarSelectionPage = () => {
                 </Box>
             </Popover>
 
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert
-                    onClose={() => setSnackbar({ ...snackbar, open: false })}
-                    severity={snackbar.severity}
-                    sx={{ width: '100%' }}
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
 
             <SendNotificationModal
                 open={openSendNotifModal}
@@ -3255,7 +3128,7 @@ const CicloEscolarSelectionPage = () => {
                 schools={Array.isArray(schools) ? schools : []}
                 cicloEscolarId={selectedCicloEscolarId || null}
                 onSuccess={(message) => {
-                    setSnackbar({ open: true, message: message || 'Circular enviada exitosamente', severity: 'success' });
+                    notify.success(message || 'Circular enviada exitosamente');
                 }}
             />
 

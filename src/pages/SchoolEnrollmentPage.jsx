@@ -6,7 +6,6 @@ import {
     TextField,
     Button,
     Alert,
-    Snackbar,
     Box,
     Chip,
     Divider,
@@ -31,6 +30,7 @@ import {
 import { getReenrollmentForm, submitReenrollment } from '../services/familyReenrollmentService';
 import { normalizeSchoolContext, setStoredSchoolContext } from '../utils/schoolContext';
 import { PASSWORD_MIN_LENGTH, getPasswordLengthError } from '../utils/passwordPolicy';
+import useNotify from '../hooks/useNotify';
 
 const REENROLL_VIEW_PERMISSION = 'padre-reinscripcion-ver';
 const STEPS = { CHOOSE: 'choose', LOGIN: 'login', PUBLIC: 'public', REENROLL: 'reenroll' };
@@ -60,8 +60,8 @@ const SchoolEnrollmentPage = () => {
     const [submitting, setSubmitting] = useState(false);
     const autoReenrollStartedRef = useRef(false);
 
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
-    const showSnackbar = (message, severity = 'success') => setSnackbar({ open: true, message, severity });
+    const notify = useNotify();
+    const showSnackbar = (message, severity = 'success') => (notify[severity] || notify.info)(message);
 
     useEffect(() => {
         const fetchSchoolData = async () => {
@@ -87,14 +87,14 @@ const SchoolEnrollmentPage = () => {
             } catch (error) {
                 console.error('Error al obtener info del colegio:', error);
                 setSchoolInfo(null);
-                setSnackbar({ open: true, message: 'No se pudieron obtener los datos del colegio.', severity: 'error' });
+                notify.error('No se pudieron obtener los datos del colegio');
             } finally {
                 setLoading(false);
             }
         };
 
         fetchSchoolData();
-    }, [schoolId]);
+    }, [schoolId, notify]);
 
     const loadReenrollment = useCallback(async () => {
         // Evita que el auto-arranque vuelva a disparar al recargarse los permisos tras el login.
@@ -111,18 +111,12 @@ const SchoolEnrollmentPage = () => {
         } catch (error) {
             console.error('Error al cargar la reinscripción:', error);
             setReenrollData(null);
-            setSnackbar({
-                open: true,
-                message: error?.response?.status === 403
-                    ? 'Tu cuenta no tiene acceso a la reinscripción de familias.'
-                    : (error?.response?.data?.message || 'No se pudo cargar tu información para la reinscripción.'),
-                severity: 'error'
-            });
+            notify.error(error?.response?.status === 403 ? 'Tu cuenta no tiene acceso a la reinscripción de familias.' : (error?.response?.data?.message || 'No se pudo cargar tu información para la reinscripción.'));
             setStep(STEPS.CHOOSE);
         } finally {
             setReenrollLoading(false);
         }
-    }, [schoolId]);
+    }, [schoolId, notify]);
 
     // Una sesión con permiso de reinscripción (p. ej. desde el banner del dashboard) entra directo.
     useEffect(() => {
@@ -527,16 +521,6 @@ const SchoolEnrollmentPage = () => {
                     </Typography>
                 </Box>
 
-                <Snackbar
-                    open={snackbar.open}
-                    autoHideDuration={6000}
-                    onClose={() => setSnackbar({ ...snackbar, open: false })}
-                    anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-                >
-                    <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
-                        {snackbar.message}
-                    </Alert>
-                </Snackbar>
             </Box>
         </Box>
     );

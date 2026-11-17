@@ -8,8 +8,6 @@ import {
     CardContent,
     Button,
     CircularProgress,
-    Snackbar,
-    Alert,
     useTheme,
     useMediaQuery,
     FormControl,
@@ -36,6 +34,7 @@ import moment from 'moment-timezone';
 import { getCicloEscolarFilterParams } from '../../utils/cicloEscolarFilterParams';
 import FilterBar from '../filters/FilterBar';
 import useFilters from '../../hooks/useFilters';
+import useNotify from '../../hooks/useNotify';
 import { F } from '../filters/filterFields';
 
 moment.tz.setDefault('America/Guatemala');
@@ -131,6 +130,7 @@ const UsageStatisticsTab = () => {
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const notify = useNotify();
     const reportRef = useRef();
 
     // Controles TOP-N
@@ -156,11 +156,12 @@ const UsageStatisticsTab = () => {
             });
         } catch (err) {
             console.error('Error fetching report data', err);
-            setError('Error al obtener datos de reportes. Por favor, inténtalo de nuevo más tarde.');
+            setError(true);
+            notify.fromError(err, 'Error al obtener los datos de reportes');
         } finally {
             setLoading(false);
         }
-    }, [selectedCicloEscolar]);
+    }, [selectedCicloEscolar, notify]);
 
     useEffect(() => {
         fetchData();
@@ -316,11 +317,7 @@ const UsageStatisticsTab = () => {
                     <CircularProgress />
                 </div>
             ) : error ? (
-                <Snackbar open={Boolean(error)} autoHideDuration={6000} onClose={() => setError(null)}>
-                    <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>
-                        {error}
-                    </Alert>
-                </Snackbar>
+                null
             ) : (
                 <div ref={reportRef} style={{ backgroundColor: '#fff', padding: '16px', overflowX: 'auto' }}>
                     <Grid container spacing={4}>

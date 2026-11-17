@@ -1,7 +1,7 @@
 // src/components/CircularMasivaModal.jsx
 import { useEffect, useState } from 'react';
 import {
-    Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Snackbar,
+    Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField,
     Alert, Box, Checkbox, FormControl, FormHelperText, Typography, Stack, Divider,
     CircularProgress,
 } from '@mui/material';
@@ -10,6 +10,7 @@ import api from '../utils/axiosConfig';
 import AudienceTargetingPanel from './audience/AudienceTargetingPanel';
 import { EMPTY_AUDIENCE, validateAudience } from './audience/audienceModel';
 import ScheduleSection from './scheduling/ScheduleSection';
+import useNotify from '../hooks/useNotify';
 import {
     EMPTY_SCHEDULE, buildSchedulePayload, describeSchedule, scheduleFromPayload, validateSchedule,
 } from './scheduling/scheduleModel';
@@ -27,7 +28,7 @@ const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = nul
     const [sendEmail, setSendEmail] = useState(false);
     const [schedule, setSchedule] = useState(EMPTY_SCHEDULE);
     const [sending, setSending] = useState(false);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
 
     // Modo edición: precargar con el envío programado.
     useEffect(() => {
@@ -52,7 +53,7 @@ const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = nul
     const handleFileChange = (e) => {
         const selectedFile = e.target.files[0];
         if (selectedFile && selectedFile.size > MAX_FILE_SIZE) {
-            setSnackbar({ open: true, message: 'El archivo no puede superar los 5MB.', severity: 'error' });
+            notify.error('El archivo no puede superar los 5 MB');
             e.target.value = null;
             setFile(null);
             return;
@@ -74,15 +75,15 @@ const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = nul
 
     const handleSubmit = async () => {
         if (!subject || !message) {
-            setSnackbar({ open: true, message: 'Asunto y mensaje son requeridos.', severity: 'error' });
+            notify.warning('Asunto y mensaje son requeridos');
             return;
         }
         if (!audienceValidation.valid) {
-            setSnackbar({ open: true, message: audienceValidation.message, severity: 'error' });
+            notify.warning(audienceValidation.message);
             return;
         }
         if (!scheduleValidation.valid) {
-            setSnackbar({ open: true, message: scheduleValidation.message, severity: 'error' });
+            notify.warning(scheduleValidation.message);
             return;
         }
 
@@ -125,7 +126,7 @@ const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = nul
                 successMessage = 'Circular enviada correctamente.';
             }
 
-            setSnackbar({ open: true, message: successMessage, severity: 'success' });
+            notify.success(successMessage);
             if (onSuccess) {
                 onSuccess(successMessage);
             }
@@ -133,7 +134,7 @@ const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = nul
         } catch (error) {
             console.error('Error al enviar circular:', error);
             const fallback = isScheduled || editing ? 'Error al programar la circular.' : 'Error al enviar la circular.';
-            setSnackbar({ open: true, message: error?.response?.data?.message || fallback, severity: 'error' });
+            notify.fromError(error, fallback);
         } finally {
             setSending(false);
         }
@@ -239,21 +240,6 @@ const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = nul
                     </Button>
                 </DialogActions>
             </Dialog>
-
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert
-                    onClose={() => setSnackbar({ ...snackbar, open: false })}
-                    severity={snackbar.severity}
-                    sx={{ width: '100%' }}
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </>
     );
 };

@@ -19,8 +19,10 @@ import {
     Fab
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import useNotify from '../hooks/useNotify';
 
 const SimpleEditor = ({ editorData, setEditorData }) => {
+    const notify = useNotify();
     const [openPlaceholderDialog, setOpenPlaceholderDialog] = useState(false);
     const [placeholderName, setPlaceholderName] = useState('');
     const [placeholderType, setPlaceholderType] = useState('text');
@@ -36,7 +38,7 @@ const SimpleEditor = ({ editorData, setEditorData }) => {
     // Insertar placeholder
     const handleInsertPlaceholder = () => {
         if (!placeholderName.trim()) {
-            alert('Por favor, ingrese un nombre para el campo.');
+            notify.warning('Ingrese un nombre para el campo');
             return;
         }
 

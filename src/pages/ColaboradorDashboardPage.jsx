@@ -13,8 +13,6 @@ import {
   ToggleButton,
   Chip,
   Divider,
-  Snackbar,
-  Alert,
   Container,
   Avatar,
   Paper,
@@ -49,6 +47,7 @@ import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import ParentNavbar from '../components/ParentNavbar';
 import UpdateColaboradorInfoDialog from '../components/UpdateColaboradorInfoDialog';
+import useNotify from '../hooks/useNotify';
 
 const SectionCard = styled(Card)`width:100%;border-radius:10px;`;
 const LoaderBox   = styled(Box)`display:flex;align-items:center;justify-content:center;min-height:320px;`;
@@ -89,7 +88,7 @@ const ColaboradorDashboardPage = () => {
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
-  const [snackbar, setSnackbar] = useState({ open:false, sev:'success', msg:'' });
+  const notify = useNotify();
 
   const [colaboradorInfo, setColaboradorInfo] = useState(null);
   const [schedules, setSchedules] = useState([]);
@@ -227,7 +226,7 @@ const ColaboradorDashboardPage = () => {
       console.error('[ColaboradorDashboard] loadAll error:', e);
       setColaboradorInfo(null);
       setSchedules([]);
-      setSnackbar({ open:true, sev:'error', msg: 'No se pudo cargar información del colaborador.' });
+      notify.error('No se pudo cargar información del colaborador');
     } finally {
       setLoading(false);
     }
@@ -252,7 +251,7 @@ const ColaboradorDashboardPage = () => {
     } catch (err) {
       console.error('[ColaboradorDashboard] loadRequests error:', err);
       setRequests([]);
-      setSnackbar({ open:true, sev:'error', msg: 'No se pudieron cargar tus solicitudes.' });
+      notify.error('No se pudieron cargar tus solicitudes');
     } finally {
       setLoadingRequests(false);
     }
@@ -547,14 +546,11 @@ const ColaboradorDashboardPage = () => {
         </Grid>
       </Container>
 
-      <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={() => setSnackbar({ ...snackbar, open:false })} anchorOrigin={{ vertical:'bottom', horizontal:'center' }}>
-        <Alert severity={snackbar.sev} onClose={() => setSnackbar({ ...snackbar, open:false })} sx={{ width: '100%' }}>{snackbar.msg}</Alert>
-      </Snackbar>
       <UpdateColaboradorInfoDialog
         open={openEditDialog}
         onClose={() => setOpenEditDialog(false)}
         initialData={colaboradorInfo || {}}
-        onSaved={() => { setOpenEditDialog(false); loadAll(); setSnackbar({ open:true, sev:'success', msg: 'Datos actualizados correctamente.' }); }}
+        onSaved={() => { setOpenEditDialog(false); loadAll(); notify.success('Datos actualizados'); }}
       />
 
       {/* Dialog: Contáctanos */}
@@ -684,18 +680,18 @@ const ColaboradorDashboardPage = () => {
           <Button onClick={() => setOpenNewRequestDialog(false)}>Cancelar</Button>
           <Button variant="contained" onClick={async () => {
             try {
-              if (!newReason.trim()) { setSnackbar({ open:true, sev:'error', msg:'El motivo es requerido.' }); return; }
+              if (!newReason.trim()) { notify.error('El motivo es requerido'); return; }
               await api.post('/requests/service-cancellation', { reason: newReason.trim(), additionalNotes: newAdditionalNotes.trim() || undefined });
 
               setOpenNewRequestDialog(false);
               setNewReason(''); setNewAdditionalNotes('');
-              setSnackbar({ open:true, sev:'success', msg:'Solicitud de baja enviada correctamente.' });
+              notify.success('Solicitud de baja enviada');
               loadRequests();
               setOpenRequestsModal(true);
             } catch (err) {
               console.error('Error creating request', err);
               const msg = err?.response?.data?.message || 'No se pudo crear la solicitud.';
-              setSnackbar({ open:true, sev:'error', msg });
+              notify.error(msg);
             }
           }}>Enviar solicitud</Button>
         </DialogActions>
@@ -775,11 +771,11 @@ const ColaboradorDashboardPage = () => {
                       setOpenCancelConfirm(false);
                       setOpenRequestDetail(false);
                       setSelectedRequest(null);
-                      setSnackbar({ open:true, sev:'success', msg:'Solicitud cancelada.' });
+                      notify.success('Solicitud cancelada');
                       await loadRequests();
                     } catch (err) {
                       console.error('Error cancelling request', err);
-                      setSnackbar({ open:true, sev:'error', msg: err?.response?.data?.message || 'No se pudo cancelar la solicitud.' });
+                      notify.fromError(err, 'No se pudo cancelar la solicitud.');
                     } finally {
                       setCanceling(false);
                     }

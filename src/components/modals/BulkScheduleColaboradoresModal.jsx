@@ -3,8 +3,10 @@ import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typogra
 import ExcelJS from 'exceljs';
 import api from '../../utils/axiosConfig';
 import PermissionGuard from '../PermissionGuard';
+import useNotify from '../../hooks/useNotify';
 
 export default function BulkScheduleColaboradoresModal({ open, onClose, corporationId }) {
+  const notify = useNotify();
   const [colaboradores, setColaboradores] = useState([]);
   const [selected, setSelected] = useState(new Set());
   const [loading, setLoading] = useState(false);
@@ -193,7 +195,7 @@ export default function BulkScheduleColaboradoresModal({ open, onClose, corporat
       const a = document.createElement('a'); a.href = url; a.download = `plantilla_horarios_colaboradores_${new Date().toISOString().slice(0,10)}.xlsx`; document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Error generating template', err);
-      alert('Error generando plantilla');
+      notify.fromError(err, 'Error al generar la plantilla');
     } finally {
       setGenerating(false);
     }
@@ -201,10 +203,10 @@ export default function BulkScheduleColaboradoresModal({ open, onClose, corporat
 
   const handleUpload = async () => {
     if (!uploadFile) {
-        return alert('Selecciona un archivo Excel primero.');
+        return notify.warning('Selecciona un archivo Excel primero');
     }
     if (!corporationId) {
-        return alert('No hay corporación seleccionada');
+        return notify.warning('No hay corporación seleccionada');
     }
     setUploading(true);
     setResults(null);
@@ -220,7 +222,7 @@ export default function BulkScheduleColaboradoresModal({ open, onClose, corporat
       setResults(payload);
     } catch (err) {
       console.error('Upload error', err);
-      alert('Error subiendo archivo: ' + (err?.response?.data?.message || err.message));
+      notify.fromError(err, 'Error al subir el archivo');
     } finally {
       setUploading(false);
     }

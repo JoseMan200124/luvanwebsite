@@ -58,6 +58,8 @@ import { F, YES_NO_OPTIONS, toPlateOptions, toRouteOptions } from '../components
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
 import FailureMappingFormDialog from '../components/FailureMappingFormDialog';
 import { AuthContext } from '../context/AuthProvider';
 
@@ -71,6 +73,8 @@ const FAILURE_TYPE_OPTIONS = [
 ];
 
 const FailureMappingPage = () => {
+    const notify = useNotify();
+    const confirm = useConfirm();
     const removeDiacritics = (s = '') => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const normalizeLabel = (s = '') => removeDiacritics(String(s)).toLowerCase().trim();
 
@@ -133,8 +137,6 @@ const FailureMappingPage = () => {
     const [loadingDetails, setLoadingDetails] = useState(false);
 
     // Modal de eliminación
-    const [deleteOpen, setDeleteOpen] = useState(false);
-    const [deleteId, setDeleteId] = useState(null);
 
     // Estadísticas
     const [statistics, setStatistics] = useState({
@@ -315,6 +317,7 @@ const FailureMappingPage = () => {
             });
         } catch (error) {
             console.error('Error al cargar mapeos de fallas:', error);
+            notify.fromError(error, 'Error al cargar los mapeos de fallas');
         } finally {
             setLoading(false);
         }
@@ -421,11 +424,11 @@ const FailureMappingPage = () => {
 
     const handleExportPDF = async () => {
         if (!pdfModalSchoolId && !pdfModalCorporationId) {
-            alert('Selecciona un cliente para generar el reporte.');
+            notify.warning('Selecciona un cliente para generar el reporte');
             return;
         }
         if (!pdfModalMonth?.isValid()) {
-            alert('Selecciona un mes para generar el reporte.');
+            notify.warning('Selecciona un mes para generar el reporte');
             return;
         }
         setExportingPdf(true);
@@ -451,7 +454,7 @@ const FailureMappingPage = () => {
                 const txt = await blob.text();
                 let message = 'No se pudo generar el PDF.';
                 try { const parsed = JSON.parse(txt); message = parsed?.message || parsed?.error || message; } catch (_) { message = (txt || '').slice(0, 240); }
-                alert(`Error generando PDF: ${message}`);
+                notify.error(`Error al generar el PDF: ${message}`);
                 return;
             }
 
@@ -460,7 +463,8 @@ const FailureMappingPage = () => {
             const header = new TextDecoder('utf-8').decode(headerBuf);
             if (header !== '%PDF-') {
                 const txt = await blob.text();
-                alert('El archivo recibido no es un PDF válido. ' + (txt || '').slice(0, 240));
+                console.error('Respuesta del reporte PDF que no es un PDF:', (txt || '').slice(0, 240));
+                notify.error('El archivo recibido no es un PDF válido');
                 return;
             }
 
@@ -479,7 +483,7 @@ const FailureMappingPage = () => {
             setPdfModalOpen(false);
         } catch (error) {
             console.error('Error descargando PDF:', error);
-            alert('Error al descargar el PDF. Revisar consola.');
+            notify.fromError(error, 'Error al descargar el PDF');
         } finally {
             setExportingPdf(false);
         }
@@ -493,7 +497,7 @@ const FailureMappingPage = () => {
             setSelectedIncident(data);
         } catch (error) {
             console.error('Error al cargar detalles del mapeo:', error);
-            alert('Error al cargar los detalles del mapeo de fallas');
+            notify.fromError(error, 'Error al cargar los detalles del mapeo de fallas');
         } finally {
             setLoadingDetails(false);
         }
@@ -515,6 +519,7 @@ const FailureMappingPage = () => {
     };
 
     const handleFormSaved = () => {
+        notify.success(formRecord ? 'Registro actualizado' : 'Registro creado');
         setFormOpen(false);
         setFormRecord(null);
         fetchIncidents();
@@ -529,25 +534,18 @@ const FailureMappingPage = () => {
         setOrderBy(column);
     };
 
-    const handleOpenDelete = (id) => {
-        setDeleteId(id);
-        setDeleteOpen(true);
-    };
-
-    const handleCancelDelete = () => {
-        setDeleteOpen(false);
-        setDeleteId(null);
-    };
-
-    const handleConfirmDelete = async () => {
-        try {
-            await deleteFailureMapping(deleteId);
-            setDeleteOpen(false);
-            setDeleteId(null);
+    const handleDelete = async (id) => {
+        const ok = await confirm({
+            title: 'Eliminar registro de mapeo de fallas',
+            message: 'Se eliminará el registro. Esta acción no se puede deshacer.',
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: () => deleteFailureMapping(id),
+            errorMessage: 'Error al eliminar el mapeo de fallas',
+        });
+        if (ok) {
+            notify.success('Registro eliminado');
             fetchIncidents();
-        } catch (error) {
-            console.error('Error al eliminar mapeo:', error);
-            alert('Error al eliminar el mapeo de fallas');
         }
     };
 
@@ -851,7 +849,7 @@ const FailureMappingPage = () => {
                                                     <Tooltip title="Eliminar" >
                                                         <IconButton
                                                             size="small"
-                                                            onClick={() => handleOpenDelete(incident.id)}
+                                                            onClick={() => handleDelete(incident.id)}
                                                             color="error"
                                                         >
                                                             <DeleteIcon />
@@ -1251,28 +1249,6 @@ const FailureMappingPage = () => {
                     </DialogActions>
                 </Dialog>
 
-                {/* Modal de Confirmación de Eliminación */}
-                <Dialog
-                    open={deleteOpen}
-                    onClose={handleCancelDelete}
-                    maxWidth="xs"
-                    fullWidth
-                >
-                    <DialogTitle>Confirmar Eliminación</DialogTitle>
-                    <DialogContent>
-                        <Typography>
-                            ¿Estás seguro de que deseas eliminar este registro? Esta acción no se puede deshacer.
-                        </Typography>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCancelDelete} color="inherit">
-                            Cancelar
-                        </Button>
-                        <Button onClick={handleConfirmDelete} color="error" variant="contained">
-                            Eliminar
-                        </Button>
-                    </DialogActions>
-                </Dialog>
                 <FailureMappingFormDialog
                     open={formOpen}
                     onClose={() => { setFormOpen(false); setFormRecord(null); }}

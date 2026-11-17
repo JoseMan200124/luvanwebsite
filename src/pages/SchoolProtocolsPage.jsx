@@ -10,8 +10,6 @@ import {
     DialogContent,
     Typography,
     IconButton,
-    Snackbar,
-    Alert,
     TextField,
     Grid,
     Pagination,
@@ -45,6 +43,8 @@ import styled from 'styled-components';
 
 import api from '../utils/axiosConfig';
 import PermissionGuard from '../components/PermissionGuard';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
 import usePermissions from '../hooks/usePermissions';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { getCicloEscolarYear } from '../services/cicloEscolarService';
@@ -76,11 +76,8 @@ const SchoolProtocolsPage = () => {
     // Estados principales
     const [protocols, setProtocols] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [snackbar, setSnackbar] = useState({
-        open: false,
-        message: '',
-        severity: 'success'
-    });
+    const notify = useNotify();
+    const confirm = useConfirm();
 
     // Estados para paginación y filtros
     const [page, setPage] = useState(1);
@@ -110,8 +107,6 @@ const SchoolProtocolsPage = () => {
     const [fileError, setFileError] = useState('');
 
     // Estados para confirmación de eliminación
-    const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
-    const [protocolToDelete, setProtocolToDelete] = useState(null);
 
     // Estados para información del colegio
     const [schoolData, setSchoolData] = useState(null);
@@ -143,11 +138,11 @@ const SchoolProtocolsPage = () => {
             setTotalPages(response.data.meta.totalPages);
         } catch (error) {
             console.error('Error al obtener protocolos:', error);
-            showSnackbar('Error al obtener protocolos.', 'error');
+            notify.fromError(error, 'Error al obtener los protocolos');
         } finally {
             setLoading(false);
         }
-    }, [page, limit, search, typeFilter, schoolId]);
+    }, [page, limit, search, typeFilter, schoolId, notify]);
 
     // ---------------------------
     // useEffect para cargar datos del colegio
@@ -185,11 +180,7 @@ const SchoolProtocolsPage = () => {
     // Funciones auxiliares
     // ---------------------------
     const showSnackbar = (message, severity = 'info') => {
-        setSnackbar({ open: true, message, severity });
-    };
-
-    const closeSnackbar = () => {
-        setSnackbar({ ...snackbar, open: false });
+        (notify[severity] || notify.info)(message);
     };
 
     const resetForm = () => {
@@ -299,25 +290,18 @@ const SchoolProtocolsPage = () => {
         }
     };
 
-    const handleOpenDeleteDialog = (protocol) => {
-        setProtocolToDelete(protocol);
-        setOpenDeleteDialog(true);
-    };
-
-    const handleDelete = async () => {
-        if (!protocolToDelete) {
-            return;
-        }
-
-        try {
-            await api.delete(`/protocols/${protocolToDelete.uuid}`);
-            showSnackbar('Protocolo/Reglamento eliminado exitosamente.', 'info');
-            setOpenDeleteDialog(false);
-            setProtocolToDelete(null);
+    const handleDelete = async (protocol) => {
+        const ok = await confirm({
+            title: 'Eliminar protocolo/reglamento',
+            message: `Se eliminará "${protocol.title}". Esta acción no se puede deshacer.`,
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: () => api.delete(`/protocols/${protocol.uuid}`),
+            errorMessage: 'Error al eliminar el protocolo/reglamento',
+        });
+        if (ok) {
+            notify.success('Protocolo/Reglamento eliminado');
             fetchProtocols();
-        } catch (error) {
-            console.error('Error al eliminar protocolo:', error);
-            showSnackbar('Error al eliminar el protocolo/reglamento.', 'error');
         }
     };
 
@@ -410,7 +394,7 @@ const SchoolProtocolsPage = () => {
                     </IconButton>
                 </PermissionGuard>
                 <PermissionGuard permission="protocolos-eliminar">
-                    <IconButton size="small" onClick={() => handleOpenDeleteDialog(protocol)}>
+                    <IconButton size="small" onClick={() => handleDelete(protocol)}>
                         <DeleteIcon />
                     </IconButton>
                 </PermissionGuard>
@@ -472,7 +456,7 @@ const SchoolProtocolsPage = () => {
                     </IconButton>
                 </PermissionGuard>
                 <PermissionGuard permission="protocolos-eliminar">
-                    <IconButton onClick={() => handleOpenDeleteDialog(protocol)}>
+                    <IconButton onClick={() => handleDelete(protocol)}>
                         <DeleteIcon />
                     </IconButton>
                 </PermissionGuard>
@@ -622,45 +606,7 @@ const SchoolProtocolsPage = () => {
                     </DialogActions>
                 </Dialog>
 
-                {/* Diálogo de confirmación para eliminar */}
-                <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)}>
-                    <DialogTitle>Confirmar Eliminación</DialogTitle>
-                    <DialogContent>
-                        <Typography>
-                            ¿Está seguro de que desea eliminar este protocolo/reglamento?
-                            <br />
-                            <strong>{protocolToDelete?.title}</strong>
-                            <br />
-                            Esta acción no se puede deshacer.
-                        </Typography>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={() => setOpenDeleteDialog(false)}>
-                            Cancelar
-                        </Button>
-                        <PermissionGuard permission="protocolos-eliminar">
-                            <Button onClick={handleDelete} color="error" variant="contained">
-                                Eliminar
-                            </Button>
-                        </PermissionGuard>
-                    </DialogActions>
-                </Dialog>
 
-                {/* Snackbar */}
-                <Snackbar
-                    open={snackbar.open}
-                    autoHideDuration={6000}
-                    onClose={closeSnackbar}
-                    anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-                >
-                    <Alert
-                        onClose={closeSnackbar}
-                        severity={snackbar.severity}
-                        sx={{ width: '100%' }}
-                    >
-                        {snackbar.message}
-                    </Alert>
-                </Snackbar>
             </>
         </PageContainer>
     );
