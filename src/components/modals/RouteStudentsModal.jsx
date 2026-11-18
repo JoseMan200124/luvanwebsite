@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import {
+    Paper,
     Dialog,
     DialogTitle,
     DialogContent,
@@ -10,28 +11,34 @@ import {
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    Paper,
     Typography,
     CircularProgress,
     Box,
     IconButton,
-    TableSortLabel,
     Grid,
-    TextField,
-    useMediaQuery,
-    useTheme
+    TextField
 } from '@mui/material';
 import { Close as CloseIcon, DirectionsBus } from '@mui/icons-material';
 import { AuthContext } from '../../context/AuthProvider';
 import api from '../../utils/axiosConfig';
 import { getScheduleLabel } from '../../utils/scheduleConfig';
+import useTableState from '../../hooks/useTableState';
+import useIsMobile from '../../hooks/useIsMobile';
+import SortableTableHead from '../table/SortableTableHead';
+import AppTableContainer from '../table/AppTableContainer';
+
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'lastName', label: 'Apellidos Familia', sortable: true },
+    { id: 'studentName', label: 'Nombres (Estudiante)', sortable: true },
+    { id: 'grade', label: 'Grado', sortable: true },
+    { id: 'stopTime', label: 'Horario Parada', sortable: true },
+    { id: 'note', label: 'Nota Parada', sortable: true },
+];
 
 const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId, cicloEscolarId, selectedDay }) => {
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
     const { auth } = useContext(AuthContext);
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -45,29 +52,8 @@ const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId
         note: ''
     });
     // Sorting
-    const [sortBy, setSortBy] = useState(null); // 'lastName' | 'studentName' | 'grade' | 'stopTime' | 'note'
-    const [sortOrder, setSortOrder] = useState('asc');
-
-    // Toggle sorting: asc -> desc -> none
-    const handleSortChange = (field) => {
-        if (sortBy !== field) {
-            setSortBy(field);
-            setSortOrder('asc');
-            return;
-        }
-
-        // same field: cycle asc -> desc -> none
-        if (sortOrder === 'asc') {
-            setSortOrder('desc');
-            return;
-        }
-
-        if (sortOrder === 'desc') {
-            // clear sorting
-            setSortBy(null);
-            setSortOrder('asc');
-        }
-    };
+    const table = useTableState({ clearable: true });
+    const { orderBy: sortBy, order: sortOrder } = table;
 
     const parseTimeToMinutes = (timeStr) => {
         if (!timeStr) {
@@ -357,57 +343,9 @@ const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId
                             </Grid>
                         </Box>
 
-                        <TableContainer component={Paper} sx={{ maxHeight: { xs: 'calc(100dvh - 260px)', sm: 500 }, overflowX: 'auto' }}>
+                        <AppTableContainer component={Paper} maxHeight={{ xs: 'calc(100dvh - 260px)', sm: 500 }}>
                             <Table stickyHeader sx={{ minWidth: 720 }}>
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.50' }}>
-                                            <TableSortLabel
-                                                active={sortBy === 'lastName'}
-                                                direction={sortBy === 'lastName' ? sortOrder : 'asc'}
-                                                onClick={() => handleSortChange('lastName')}
-                                            >
-                                                Apellidos Familia
-                                            </TableSortLabel>
-                                        </TableCell>
-                                        <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.50' }}>
-                                            <TableSortLabel
-                                                active={sortBy === 'studentName'}
-                                                direction={sortBy === 'studentName' ? sortOrder : 'asc'}
-                                                onClick={() => handleSortChange('studentName')}
-                                            >
-                                                Nombres (Estudiante)
-                                            </TableSortLabel>
-                                        </TableCell>
-                                        <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.50' }}>
-                                            <TableSortLabel
-                                                active={sortBy === 'grade'}
-                                                direction={sortBy === 'grade' ? sortOrder : 'asc'}
-                                                onClick={() => handleSortChange('grade')}
-                                            >
-                                                Grado
-                                            </TableSortLabel>
-                                        </TableCell>
-                                        <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.50' }}>
-                                            <TableSortLabel
-                                                active={sortBy === 'stopTime'}
-                                                direction={sortBy === 'stopTime' ? sortOrder : 'asc'}
-                                                onClick={() => handleSortChange('stopTime')}
-                                            >
-                                                Horario Parada
-                                            </TableSortLabel>
-                                        </TableCell>
-                                        <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.50' }}>
-                                            <TableSortLabel
-                                                active={sortBy === 'note'}
-                                                direction={sortBy === 'note' ? sortOrder : 'asc'}
-                                                onClick={() => handleSortChange('note')}
-                                            >
-                                                Nota Parada
-                                            </TableSortLabel>
-                                        </TableCell>
-                                    </TableRow>
-                                </TableHead>
+                                <SortableTableHead columns={COLUMNS} cellSx={{ fontWeight: 'bold', backgroundColor: 'grey.50' }} {...table.sortProps} />
                                 <TableBody>
                                     {visibleStudents.length === 0 ? (
                                         <TableRow>
@@ -456,7 +394,7 @@ const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId
                                     )}
                                 </TableBody>
                             </Table>
-                        </TableContainer>
+                        </AppTableContainer>
                     </>
                 )}
             </DialogContent>

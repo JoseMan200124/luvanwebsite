@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Paper,
   Alert,
   Box,
   Button,
@@ -13,13 +14,9 @@ import {
   DialogTitle,
   Grid,
   IconButton,
-  Paper,
   Table,
   TableBody,
   TableCell,
-  TableContainer,
-  TableHead,
-  TablePagination,
   TableRow,
   TextField,
   Tooltip,
@@ -33,7 +30,6 @@ import {
   Replay as ReplayIcon,
   Visibility as VisibilityIcon,
 } from '@mui/icons-material';
-import TableSortLabel from '@mui/material/TableSortLabel';
 import moment from 'moment-timezone';
 import parse from 'html-react-parser';
 
@@ -51,6 +47,11 @@ import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import RowActions from '../components/table/RowActions';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -197,6 +198,16 @@ const getRecipientRoleLabel = (role) => {
   return safeStr(role) || 'Sin rol';
 };
 
+// Columnas de la tabla
+const COLUMNS = [
+  { id: 'sentAt', label: 'Enviada', sortable: true },
+  { id: 'subject', label: 'Asunto', sortable: true },
+  { id: 'audiencia', label: 'Audiencia' },
+  { id: 'correo', label: 'Correo' },
+  { id: 'archivo_adjunto', label: 'Archivo adjunto', align: 'center' },
+  { id: 'acciones', label: 'Acciones', align: 'right' },
+];
+
 const CircularHistoryPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -204,8 +215,9 @@ const CircularHistoryPage = () => {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
 
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(25);
+  // Paginación y orden (en el servidor)
+  const table = useTableState({ defaultOrderBy: 'sentAt', defaultOrder: 'desc' });
+  const { page, rowsPerPage, orderBy: sortBy, order: sortDirection } = table;
 
   const [schools, setSchools] = useState([]);
 
@@ -216,12 +228,10 @@ const CircularHistoryPage = () => {
       F.search('q', { placeholder: 'Asunto o contenido' }),
       F.dateRange('dates'),
     ],
-    onApplied: () => setPage(0),
+    onApplied: table.resetPage,
   });
   const { cycle: selectedCicloEscolar, client: selectedClient, q, dates } = pageFilters.applied;
   const draftCycle = pageFilters.draft.cycle;
-  const [sortBy, setSortBy] = useState('sentAt');
-  const [sortDirection, setSortDirection] = useState('desc');
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -304,13 +314,6 @@ const CircularHistoryPage = () => {
   useEffect(() => {
     fetchSchools();
   }, [fetchSchools]);
-
-  const handleRequestSort = (property) => {
-    const isAsc = sortBy === property && sortDirection === 'asc';
-    setSortDirection(isAsc ? 'desc' : 'asc');
-    setSortBy(property);
-    setPage(0);
-  };
 
   const filteredRecipientGroups = useMemo(() => {
     const groups = Array.isArray(detail?.recipientGroups) ? detail.recipientGroups : [];
@@ -508,34 +511,9 @@ const CircularHistoryPage = () => {
       <FilterBar {...pageFilters.barProps} loading={loading} />
 
       <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
-        <TableContainer>
+        <AppTableContainer>
           <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 800 }} sortDirection={sortBy === 'sentAt' ? sortDirection : false}>
-                  <TableSortLabel
-                    active={sortBy === 'sentAt'}
-                    direction={sortBy === 'sentAt' ? sortDirection : 'desc'}
-                    onClick={() => handleRequestSort('sentAt')}
-                  >
-                    Enviada
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 800 }} sortDirection={sortBy === 'subject' ? sortDirection : false}>
-                  <TableSortLabel
-                    active={sortBy === 'subject'}
-                    direction={sortBy === 'subject' ? sortDirection : 'asc'}
-                    onClick={() => handleRequestSort('subject')}
-                  >
-                    Asunto
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 800 }}>Audiencia</TableCell>
-                <TableCell sx={{ fontWeight: 800 }}>Correo</TableCell>
-                <TableCell sx={{ fontWeight: 800 }} align="center">Archivo adjunto</TableCell>
-                <TableCell sx={{ fontWeight: 800 }} align="right">Acciones</TableCell>
-              </TableRow>
-            </TableHead>
+            <SortableTableHead columns={COLUMNS} cellSx={{ fontWeight: 800 }} {...table.sortProps} />
 
             <TableBody>
               {loading ? (
@@ -570,61 +548,21 @@ const CircularHistoryPage = () => {
                     <TableCell>{renderEmailStatus(r)}</TableCell>
                     <TableCell align="center">{r.hasAttachment ? 'Sí' : 'No'}</TableCell>
                     <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
-                      {r.canResend && (
-                        <PermissionGuard permission="mail-enviar-circular">
-                          <Tooltip title="Reenviar el correo solo a quienes no lo recibieron">
-                            <IconButton
-                              onClick={() => handleResend(r)}
-                              size="small"
-                              color="warning"
-                              sx={{ mr: 1 }}
-                              aria-label="Reenviar a fallidos"
-                            >
-                              <ReplayIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </PermissionGuard>
-                      )}
-                      <Tooltip title="Ver detalle">
-                        <span>
-                          <IconButton
-                            onClick={() => openDetail(r.uuid)}
-                            size="small"
-                            sx={{
-                              color: 'primary.main',
-                              backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                              transition: 'all 200ms ease-in-out',
-                              '&:hover': {
-                                backgroundColor: 'rgba(25, 118, 210, 0.16)',
-                                color: 'primary.dark',
-                                transform: 'scale(1.1)',
-                              },
-                            }}
-                          >
-                            <VisibilityIcon fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
+                      <RowActions
+                        actions={[
+                          { key: 'view', kind: 'view', label: 'Ver detalle', icon: <VisibilityIcon fontSize="small" />, onClick: () => openDetail(r.uuid) },
+                          r.canResend && { key: 'resend', kind: 'other', color: 'warning', label: 'Reenviar a fallidos', tooltip: 'Reenviar el correo solo a quienes no lo recibieron', icon: <ReplayIcon fontSize="small" />, permission: 'mail-enviar-circular', onClick: () => handleResend(r) },
+                        ]}
+                      />
                     </TableCell>
                   </TableRow>
                 ))
               )}
             </TableBody>
           </Table>
-        </TableContainer>
+        </AppTableContainer>
 
-        <TablePagination
-          component="div"
-          count={total}
-          page={page}
-          onPageChange={(_, newPage) => setPage(newPage)}
-          rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={(e) => {
-            setRowsPerPage(Number.parseInt(e.target.value, 10));
-            setPage(0);
-          }}
-          rowsPerPageOptions={[10, 25, 50, 100]}
-        />
+        <AppTablePagination count={total} {...table.paginationProps} />
       </Paper>
 
       <Dialog open={detailOpen} onClose={closeDetail} fullWidth maxWidth="md">

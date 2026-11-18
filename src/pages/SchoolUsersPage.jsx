@@ -17,16 +17,12 @@ import {
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
     Paper,
     FormControl,
     InputLabel,
     Select,
     MenuItem,
-    TablePagination,
-    TableSortLabel,
     TextField,
     IconButton,
     Dialog,
@@ -54,6 +50,10 @@ import { AuthContext } from '../context/AuthProvider';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import api from '../utils/axiosConfig';
 import PermissionGuard from '../components/PermissionGuard';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
 import usePermissions from '../hooks/usePermissions';
 import useManageableRoles from '../hooks/useManageableRoles';
 import { normalizeKey } from '../utils/stringHelpers';
@@ -110,6 +110,18 @@ const toBulkServerDraft = ({ _key, hadIssues, skip, autoSkipped, analyzedCorreo,
     ...getServerPairing({ ...draft, existing })
 });
 
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'serviceStatus', label: 'Estado del Servicio', sortable: true, align: 'center' },
+    { id: 'familyLastName', label: 'Apellido Familia', sortable: true },
+    { id: 'students', label: 'Cant. Hijos', sortable: true },
+    { id: 'email', label: 'Correo', sortable: true },
+    { id: 'createdAt', label: 'Inscrito el', sortable: true },
+    { id: 'updatedAt', label: 'Fecha de actualización', sortable: true },
+    { id: 'status', label: 'Estado', sortable: true },
+    { id: 'acciones', label: 'Acciones' },
+];
+
 const SchoolUsersPage = () => {
     const { hasPermission, hasAnyPermission } = usePermissions();
     // Pirámide de roles: el alta y la carga masiva de familias solo para quien gestiona Padres (rol 3)
@@ -126,10 +138,9 @@ const SchoolUsersPage = () => {
     const [filteredUsers, setFilteredUsers] = useState([]);
     const [loading, setLoading] = useState(false);
     // Sorting state
-    const [sortBy, setSortBy] = useState(null); // 'status' | 'updatedAt' | 'familyLastName' | 'name' | 'email' | 'role' | 'students'
-    const [sortOrder, setSortOrder] = useState('asc');
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
+    // Paginación y orden (el orden se calcula en sortedUsers con su lógica propia)
+    const table = useTableState();
+    const { page, rowsPerPage, orderBy: sortBy, order: sortOrder } = table;
     const [selectedUser, setSelectedUser] = useState(null);
     const notify = useNotify();
     const confirm = useConfirm();
@@ -141,7 +152,7 @@ const SchoolUsersPage = () => {
             F.select('status', { label: 'Estado', options: FAMILY_STATUS_OPTIONS }),
             F.serviceStatus(),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const { search: searchQuery, status: statusFilter, serviceStatus: serviceStatusFilter } = pageFilters.applied;
 
@@ -1265,15 +1276,6 @@ const SchoolUsersPage = () => {
 
     
 
-    const handleSortChange = (field) => {
-        if (sortBy === field) {
-            setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
-        } else {
-            setSortBy(field);
-            setSortOrder('asc');
-        }
-        setPage(0);
-    };
 
     // Restore action handlers for table actions
     const handleEditClick = async (user) => {
@@ -2331,9 +2333,6 @@ const SchoolUsersPage = () => {
 
     const paginatedUsers = sortedUsers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
 
     // Fuente de la lista para las consultas asíncronas: así una respuesta tardía puede descartarse si el correo ya cambió.
     const bulkDraftsRef = useRef([]);
@@ -2395,11 +2394,6 @@ const SchoolUsersPage = () => {
         refreshBulkDraftAccount(key, normalizedEmail);
     }, [refreshBulkDraftAccount]);
 
-    const handleChangeRowsPerPage = (event) => {
-    const v = Number.parseInt(event.target.value, 10);
-    setRowsPerPage(Number.isNaN(v) ? 10 : v);
-    setPage(0);
-    };
 
     const totalStudentsLabel = (() => {
         try {
@@ -2510,78 +2504,9 @@ const SchoolUsersPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer component={Paper} sx={{ maxHeight: 600 }}>
+                            <AppTableContainer component={Paper} maxHeight={600}>
                                 <Table stickyHeader>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell align="center">
-                                                <TableSortLabel
-                                                    active={sortBy === 'serviceStatus'}
-                                                    direction={sortBy === 'serviceStatus' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('serviceStatus')}
-                                                >
-                                                    Estado del Servicio
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'familyLastName'}
-                                                    direction={sortBy === 'familyLastName' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('familyLastName')}
-                                                >
-                                                    Apellido Familia
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'students'}
-                                                    direction={sortBy === 'students' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('students')}
-                                                >
-                                                    Cant. Hijos
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'email'}
-                                                    direction={sortBy === 'email' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('email')}
-                                                >
-                                                    Correo
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'createdAt'}
-                                                    direction={sortBy === 'createdAt' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('createdAt')}
-                                                >
-                                                    Inscrito el
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'updatedAt'}
-                                                    direction={sortBy === 'updatedAt' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('updatedAt')}
-                                                >
-                                                    Fecha de actualización
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'status'}
-                                                    direction={sortBy === 'status' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('status')}
-                                                >
-                                                    Estado
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                Acciones
-                                            </TableCell>
-                                        </TableRow>
-                                    </TableHead>
+                                    <SortableTableHead columns={COLUMNS} {...table.sortProps} />
                                     <TableBody>
                                         {paginatedUsers.map((user) => {
                                             const serviceStatus = user.familyServiceStatus?.status || 'ACTIVE';
@@ -2762,17 +2687,9 @@ const SchoolUsersPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                                </TableContainer>
+                                </AppTableContainer>
 
-                                <TablePagination
-                                    component="div"
-                                    count={sortedUsers.length}
-                                    page={page}
-                                    onPageChange={handleChangePage}
-                                    rowsPerPage={rowsPerPage}
-                                    onRowsPerPageChange={handleChangeRowsPerPage}
-                                    rowsPerPageOptions={[5,10,25,50]}
-                                />
+                                <AppTablePagination count={sortedUsers.length} {...table.paginationProps} />
                         </>
                     )}
                 </CardContent>

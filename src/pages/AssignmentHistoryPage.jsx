@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import {
+    Paper,
     Box,
     Card,
     CardContent,
@@ -7,11 +8,7 @@ import {
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    TablePagination,
-    Paper,
     Chip,
     CircularProgress,
     Alert
@@ -27,6 +24,10 @@ import { F } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -273,13 +274,23 @@ const renderChangeDetailCell = (ctype, fromText, toText) => {
     return <Typography variant="body2" color="text.secondary">—</Typography>;
 };
 
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'fecha', label: 'Fecha' },
+    { id: 'tipo', label: 'Tipo' },
+    { id: 'sujeto', label: 'Sujeto' },
+    { id: 'detalle_del_cambio', label: 'Detalle del Cambio' },
+    { id: 'modificado_por', label: 'Modificado Por' },
+];
+
 const AssignmentHistoryPage = () => {
     const { auth } = useContext(AuthContext);
     const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(25);
+    // Paginación (en el servidor)
+    const table = useTableState();
+    const { page, rowsPerPage } = table;
     const [totalRecords, setTotalRecords] = useState(0);
     const [clientBreakdown, setClientBreakdown] = useState({ colegios: 0, corporativos: 0 });
 
@@ -301,7 +312,7 @@ const AssignmentHistoryPage = () => {
             }),
             F.dateRange('dates'),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const { cycle: selectedCicloEscolar, client: selectedClient, assignmentType, busId, dates } = pageFilters.applied;
     const schoolId = getClientSchoolId(selectedClient);
@@ -406,15 +417,6 @@ const AssignmentHistoryPage = () => {
         }
     };
 
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
-
     return (
         <PageContainer width="xl">
             <PageHeader
@@ -453,17 +455,9 @@ const AssignmentHistoryPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
+                            <AppTableContainer component={Paper} variant="outlined">
                                 <Table sx={{ minWidth: 900 }}>
-                                    <TableHead>
-                                        <TableRow sx={{ bgcolor: 'grey.50' }}>
-                                            <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Fecha</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold' }}>Tipo</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold' }}>Sujeto</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold' }}>Detalle del Cambio</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Modificado Por</TableCell>
-                                        </TableRow>
-                                    </TableHead>
+                                    <SortableTableHead columns={COLUMNS} cellSx={{ fontWeight: 'bold' }} rowSx={{ bgcolor: 'grey.50' }} />
                                     <TableBody>
                                         {history.length === 0 ? (
                                             <TableRow>
@@ -516,18 +510,8 @@ const AssignmentHistoryPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={totalRecords}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                rowsPerPageOptions={[10, 25, 50, 100]}
-                                labelRowsPerPage="Filas por página:"
-                                labelDisplayedRows={({ from, to, count }) => `${from}-${to} de ${count}`}
-                            />
+                            </AppTableContainer>
+                            <AppTablePagination count={totalRecords} {...table.paginationProps} />
                         </>
                     )}
                 </CardContent>

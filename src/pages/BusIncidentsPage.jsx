@@ -7,11 +7,7 @@ import {
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    TablePagination,
-    TableSortLabel,
     CircularProgress,
     Box,
     Grid,
@@ -49,6 +45,11 @@ import api from '../utils/axiosConfig';
 import { getClientSchoolId, getClientCorporationId } from '../utils/clientValue';
 import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
 import PermissionGuard from '../components/PermissionGuard';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import RowActions from '../components/table/RowActions';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F, toPlateOptions, toRouteOptions } from '../components/filters/filterFields';
@@ -67,13 +68,28 @@ const FAILURE_TYPE_OPTIONS = [
     ...Object.entries(FAILURE_TYPES).map(([value, label]) => ({ value, label })),
 ];
 
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'fecha', label: 'Fecha', sortable: true },
+    { id: 'tipo', label: 'Tipo', sortable: true },
+    { id: 'tipoFalla', label: 'Tipo de Falla', sortable: true },
+    { id: 'placaBus', label: 'Placa', sortable: true },
+    { id: 'numeroRuta', label: 'Ruta', sortable: true },
+    { id: 'colegio', label: 'Colegio/Corp.', sortable: true },
+    { id: 'piloto', label: 'Piloto' },
+    { id: 'routeAffected', label: 'Afectó Recorrido', sortable: true, align: 'center' },
+    { id: 'pudoContinuarRuta', label: 'Continuó Ruta', sortable: true, align: 'center' },
+    { id: 'acciones', label: 'Acciones', align: 'center' },
+];
+
 const BusIncidentsPage = () => {
     const notify = useNotify();
     const confirm = useConfirm();
     const [incidents, setIncidents] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(25);
+    // Paginación y orden (en el servidor)
+    const table = useTableState({ defaultOrderBy: 'fecha', defaultOrder: 'desc' });
+    const { page, rowsPerPage, orderBy, order } = table;
     const [totalCount, setTotalCount] = useState(0);
 
     // Filtros
@@ -93,7 +109,7 @@ const BusIncidentsPage = () => {
             F.select('tipo', { label: 'Tipo', options: INCIDENT_EVENT_TYPES }),
             F.dateRange('dates'),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const {
         cycle: selectedCicloEscolar,
@@ -111,8 +127,6 @@ const BusIncidentsPage = () => {
     const draftCorporationId = getClientCorporationId(pageFilters.draft.client);
 
     // Ordenamiento
-    const [orderBy, setOrderBy] = useState('fecha');
-    const [order, setOrder] = useState('desc');
 
     // Modal de detalles
     const [detailsOpen, setDetailsOpen] = useState(false);
@@ -335,14 +349,6 @@ const BusIncidentsPage = () => {
         await fetchIncidents();
     }, [fetchIncidents]);
 
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
 
     const handleViewDetails = async (incidentId) => {
         setLoadingDetails(true);
@@ -425,11 +431,6 @@ const BusIncidentsPage = () => {
         }
     };
 
-    const handleSort = (column) => {
-        const isAsc = orderBy === column && order === 'asc';
-        setOrder(isAsc ? 'desc' : 'asc');
-        setOrderBy(column);
-    };
 
     const handleDelete = async (id) => {
         const ok = await confirm({
@@ -565,86 +566,9 @@ const BusIncidentsPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer sx={{ overflowX: 'auto' }}>
+                            <AppTableContainer>
                                 <Table sx={{ minWidth: 1100 }}>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'fecha'}
-                                                    direction={orderBy === 'fecha' ? order : 'asc'}
-                                                    onClick={() => handleSort('fecha')}
-                                                >
-                                                    Fecha
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'tipo'}
-                                                    direction={orderBy === 'tipo' ? order : 'asc'}
-                                                    onClick={() => handleSort('tipo')}
-                                                >
-                                                    Tipo
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'tipoFalla'}
-                                                    direction={orderBy === 'tipoFalla' ? order : 'asc'}
-                                                    onClick={() => handleSort('tipoFalla')}
-                                                >
-                                                    Tipo de Falla
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'placaBus'}
-                                                    direction={orderBy === 'placaBus' ? order : 'asc'}
-                                                    onClick={() => handleSort('placaBus')}
-                                                >
-                                                    Placa
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'numeroRuta'}
-                                                    direction={orderBy === 'numeroRuta' ? order : 'asc'}
-                                                    onClick={() => handleSort('numeroRuta')}
-                                                >
-                                                    Ruta
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'colegio'}
-                                                    direction={orderBy === 'colegio' ? order : 'asc'}
-                                                    onClick={() => handleSort('colegio')}
-                                                >
-                                                    Colegio/Corp.
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>Piloto</TableCell>
-                                            <TableCell align="center">
-                                                <TableSortLabel
-                                                    active={orderBy === 'routeAffected'}
-                                                    direction={orderBy === 'routeAffected' ? order : 'asc'}
-                                                    onClick={() => handleSort('routeAffected')}
-                                                >
-                                                    Afectó Recorrido
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="center">
-                                                <TableSortLabel
-                                                    active={orderBy === 'pudoContinuarRuta'}
-                                                    direction={orderBy === 'pudoContinuarRuta' ? order : 'asc'}
-                                                    onClick={() => handleSort('pudoContinuarRuta')}
-                                                >
-                                                    Continuó Ruta
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="center">Acciones</TableCell>
-                                        </TableRow>
-                                    </TableHead>
+                                    <SortableTableHead columns={COLUMNS} {...table.sortProps} />
                                     <TableBody>
                                         {incidents.map((incident) => (
                                             <TableRow key={incident.id}>
@@ -704,26 +628,12 @@ const BusIncidentsPage = () => {
                                                     )}
                                                 </TableCell>
                                                 <TableCell align="center">
-                                                    <Tooltip title="Ver detalles">
-                                                        <IconButton
-                                                            size="small"
-                                                            onClick={() => handleViewDetails(incident.id)}
-                                                            color="primary"
-                                                        >
-                                                            <VisibilityIcon />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                    <PermissionGuard permission="incidentes-buses-eliminar">
-                                                        <Tooltip title="Eliminar">
-                                                            <IconButton
-                                                                size="small"
-                                                                onClick={() => handleDelete(incident.id)}
-                                                                color="error"
-                                                            >
-                                                                <DeleteIcon />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    </PermissionGuard>
+                                                    <RowActions
+                                                        actions={[
+                                                            { key: 'view', kind: 'view', color: 'primary', label: 'Ver detalles', icon: <VisibilityIcon fontSize="small" />, onClick: () => handleViewDetails(incident.id) },
+                                                            { key: 'delete', kind: 'delete', label: 'Eliminar', icon: <DeleteIcon fontSize="small" />, permission: 'incidentes-buses-eliminar', onClick: () => handleDelete(incident.id) },
+                                                        ]}
+                                                    />
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -736,19 +646,8 @@ const BusIncidentsPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={totalCount}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                labelRowsPerPage="Registros por página:"
-                                labelDisplayedRows={({ from, to, count }) =>
-                                    `${from}-${to} de ${count !== -1 ? count : `más de ${to}`}`
-                                }
-                            />
+                            </AppTableContainer>
+                            <AppTablePagination count={totalCount} {...table.paginationProps} />
                         </>
                     )}
                 </Paper>

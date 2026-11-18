@@ -2,6 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import PermissionGuard from '../components/PermissionGuard';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import RowActions from '../components/table/RowActions';
 import usePermissions from '../hooks/usePermissions';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import {
@@ -10,11 +15,7 @@ import {
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    TablePagination,
-    TableSortLabel,
     CircularProgress,
     Box,
     Grid,
@@ -94,6 +95,22 @@ const SHOW_NEW_FUEL_METRIC = false;
 // Tamaño dinámico de las tarjetas para evitar huecos en la fila
 const cardMd = SHOW_NEW_FUEL_METRIC ? 2.4 : 3;
 
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'recordDate', label: 'Fecha', sortable: true },
+    { id: 'client', label: 'Cliente', sortable: true },
+    { id: 'routeNumber', label: 'Ruta', sortable: true },
+    { id: 'plate', label: 'Placa', sortable: true },
+    { id: 'pilotName', label: 'Piloto', sortable: true },
+    { id: 'fuelingReason', label: 'Razón', sortable: true },
+    { id: 'fuelType', label: 'Tipo Combustible', sortable: true },
+    { id: 'anotacion', label: 'Anotación', align: 'center' },
+    { id: 'gallonage', label: 'Galones', sortable: true, align: 'right' },
+    { id: 'pricePerGallon', label: 'Precio/Galón', sortable: true, align: 'right' },
+    { id: 'totalAmount', label: 'Total', sortable: true, align: 'right' },
+    { id: 'acciones', label: 'Acciones', align: 'center' },
+];
+
 const FuelRecordsPage = () => {
     const { hasPermission } = usePermissions();
     const notify = useNotify();
@@ -101,12 +118,11 @@ const FuelRecordsPage = () => {
     const [fuelRecords, setFuelRecords] = useState([]);
     const [loading, setLoading] = useState(false);
     const [exporting, setExporting] = useState(false);
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(25);
+    // Paginación y orden (en el servidor)
+    const table = useTableState({ defaultOrderBy: 'recordDate', defaultOrder: 'desc' });
+    const { page, rowsPerPage, orderBy, order } = table;
     const [totalCount, setTotalCount] = useState(0);
     // Ordenamiento
-    const [orderBy, setOrderBy] = useState('recordDate');
-    const [order, setOrder] = useState('desc');
 
     // Filtros
     const [schools, setSchools] = useState([]);
@@ -145,7 +161,7 @@ const FuelRecordsPage = () => {
             F.select('fuelType', { label: 'Tipo de combustible', options: FUEL_TYPES }),
             F.dateRange('dates'),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     draftClientRef.current = pageFilters.draft.client;
     const {
@@ -456,12 +472,6 @@ const FuelRecordsPage = () => {
         }
     };
 
-    const handleRequestSort = (field) => {
-        const isAsc = orderBy === field && order === 'asc';
-        setOrder(isAsc ? 'desc' : 'asc');
-        setOrderBy(field);
-        setPage(0);
-    };
 
     const fetchStatistics = async () => {
         try {
@@ -570,14 +580,6 @@ const FuelRecordsPage = () => {
         }
     };
 
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
 
     const handleDownloadExcel = async () => {
         if (!totalCount || totalCount === 0) {
@@ -948,7 +950,7 @@ const FuelRecordsPage = () => {
             if (response?.success) {
                 handleCloseCreate();
                 // Refresh list and stats
-                setPage(0);
+                table.resetPage();
                 fetchFuelRecords();
                 fetchStatistics();
                 notify.success('Registro creado');
@@ -1078,104 +1080,9 @@ const FuelRecordsPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer sx={{ overflowX: 'auto' }}>
+                            <AppTableContainer>
                                 <Table sx={{ minWidth: 1200 }}>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell sortDirection={orderBy === 'recordDate' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'recordDate'}
-                                                    direction={orderBy === 'recordDate' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('recordDate')}
-                                                >
-                                                    Fecha
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'client' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'client'}
-                                                    direction={orderBy === 'client' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('client')}
-                                                >
-                                                    Cliente
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'routeNumber' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'routeNumber'}
-                                                    direction={orderBy === 'routeNumber' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('routeNumber')}
-                                                >
-                                                    Ruta
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'plate' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'plate'}
-                                                    direction={orderBy === 'plate' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('plate')}
-                                                >
-                                                    Placa
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'pilotName' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'pilotName'}
-                                                    direction={orderBy === 'pilotName' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('pilotName')}
-                                                >
-                                                    Piloto
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'fuelingReason' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'fuelingReason'}
-                                                    direction={orderBy === 'fuelingReason' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('fuelingReason')}
-                                                >
-                                                    Razón
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'fuelType' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'fuelType'}
-                                                    direction={orderBy === 'fuelType' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('fuelType')}
-                                                >
-                                                    Tipo Combustible
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="center">Anotación</TableCell>
-                                            <TableCell align="right" sortDirection={orderBy === 'gallonage' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'gallonage'}
-                                                    direction={orderBy === 'gallonage' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('gallonage')}
-                                                >
-                                                    Galones
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="right" sortDirection={orderBy === 'pricePerGallon' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'pricePerGallon'}
-                                                    direction={orderBy === 'pricePerGallon' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('pricePerGallon')}
-                                                >
-                                                    Precio/Galón
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="right" sortDirection={orderBy === 'totalAmount' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'totalAmount'}
-                                                    direction={orderBy === 'totalAmount' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('totalAmount')}
-                                                >
-                                                    Total
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="center">Acciones</TableCell>
-                                        </TableRow>
-                                    </TableHead>
+                                    <SortableTableHead columns={COLUMNS} {...table.sortProps} />
                                     <TableBody>
                                         {fuelRecords.map((record) => (
                                             <TableRow key={record.id}>
@@ -1234,37 +1141,13 @@ const FuelRecordsPage = () => {
                                                     </Typography>
                                                 </TableCell>
                                                 <TableCell align="center">
-                                                    <Tooltip title="Ver detalles">
-                                                        <IconButton
-                                                            size="small"
-                                                            onClick={() => handleViewDetails(record.id)}
-                                                            color="primary"
-                                                        >
-                                                            <VisibilityIcon />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                    {record.canEdit && hasPermission('combustible-editar') && (
-                                                        <Tooltip title="Editar registro">
-                                                            <IconButton
-                                                                size="small"
-                                                                onClick={() => handleOpenEdit(record)}
-                                                                color="secondary"
-                                                            >
-                                                                <EditIcon />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    )}
-                                                    <PermissionGuard permission="combustible-eliminar">
-                                                        <Tooltip title="Eliminar registro">
-                                                            <IconButton
-                                                                size="small"
-                                                                onClick={() => handleDelete(record.id)}
-                                                                color="error"
-                                                            >
-                                                                <DeleteIcon />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    </PermissionGuard>
+                                                    <RowActions
+                                                        actions={[
+                                                            { key: 'view', kind: 'view', color: 'primary', label: 'Ver detalles', icon: <VisibilityIcon fontSize="small" />, onClick: () => handleViewDetails(record.id) },
+                                                            record.canEdit && { key: 'edit', kind: 'edit', color: 'secondary', label: 'Editar registro', icon: <EditIcon fontSize="small" />, permission: 'combustible-editar', onClick: () => handleOpenEdit(record) },
+                                                            { key: 'delete', kind: 'delete', label: 'Eliminar registro', icon: <DeleteIcon fontSize="small" />, permission: 'combustible-eliminar', onClick: () => handleDelete(record.id) },
+                                                        ]}
+                                                    />
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -1277,19 +1160,8 @@ const FuelRecordsPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={totalCount}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                labelRowsPerPage="Registros por página:"
-                                labelDisplayedRows={({ from, to, count }) =>
-                                    `${from}-${to} de ${count !== -1 ? count : `más de ${to}`}`
-                                }
-                            />
+                            </AppTableContainer>
+                            <AppTablePagination count={totalCount} {...table.paginationProps} />
                         </>
                     )}
                 </Paper>

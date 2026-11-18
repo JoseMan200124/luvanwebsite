@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Paper,
   Alert,
   Box,
   Button,
@@ -10,16 +11,11 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
-  Paper,
   Stack,
   Table,
   TableBody,
   TableCell,
-  TableContainer,
-  TableHead,
-  TablePagination,
   TableRow,
-  TableSortLabel,
   TextField,
   Tooltip,
   Typography,
@@ -41,6 +37,11 @@ import { F } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import RowActions from '../components/table/RowActions';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -133,6 +134,17 @@ const renderRecipientsCount = (count) => {
   return count;
 };
 
+// Columnas de la tabla
+const COLUMNS = [
+  { id: 'createdAt', label: 'Enviada', sortable: true },
+  { id: 'title', label: 'Título', sortable: true },
+  { id: 'mensaje', label: 'Mensaje' },
+  { id: 'audiencia', label: 'Audiencia' },
+  { id: 'destinatarios', label: 'Destinatarios', align: 'center' },
+  { id: 'enviada_por', label: 'Enviada por' },
+  { id: 'acciones', label: 'Acciones', align: 'right' },
+];
+
 const NotificationHistoryPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -140,8 +152,9 @@ const NotificationHistoryPage = () => {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
 
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(25);
+  // Paginación y orden (en el servidor)
+  const table = useTableState({ defaultOrderBy: 'createdAt', defaultOrder: 'desc' });
+  const { page, rowsPerPage, orderBy: sortBy, order: sortDirection } = table;
 
   const pageFilters = useFilters({
     fields: [
@@ -149,11 +162,9 @@ const NotificationHistoryPage = () => {
       F.search('q', { placeholder: 'Título o mensaje' }),
       F.dateRange('dates'),
     ],
-    onApplied: () => setPage(0),
+    onApplied: table.resetPage,
   });
   const { cycle: selectedCicloEscolar, q, dates } = pageFilters.applied;
-  const [sortBy, setSortBy] = useState('createdAt');
-  const [sortDirection, setSortDirection] = useState('desc');
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -209,13 +220,6 @@ const NotificationHistoryPage = () => {
   useEffect(() => {
     fetchRows();
   }, [fetchRows]);
-
-  const handleRequestSort = (property) => {
-    const isAsc = sortBy === property && sortDirection === 'asc';
-    setSortDirection(isAsc ? 'desc' : 'asc');
-    setSortBy(property);
-    setPage(0);
-  };
 
   const filteredRecipientGroups = useMemo(() => {
     const groups = Array.isArray(detail?.recipientGroups) ? detail.recipientGroups : [];
@@ -288,35 +292,9 @@ const NotificationHistoryPage = () => {
       <FilterBar {...pageFilters.barProps} loading={loading} />
 
       <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
-        <TableContainer>
+        <AppTableContainer>
           <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 800 }} sortDirection={sortBy === 'createdAt' ? sortDirection : false}>
-                  <TableSortLabel
-                    active={sortBy === 'createdAt'}
-                    direction={sortBy === 'createdAt' ? sortDirection : 'desc'}
-                    onClick={() => handleRequestSort('createdAt')}
-                  >
-                    Enviada
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 800 }} sortDirection={sortBy === 'title' ? sortDirection : false}>
-                  <TableSortLabel
-                    active={sortBy === 'title'}
-                    direction={sortBy === 'title' ? sortDirection : 'asc'}
-                    onClick={() => handleRequestSort('title')}
-                  >
-                    Título
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 800 }}>Mensaje</TableCell>
-                <TableCell sx={{ fontWeight: 800 }}>Audiencia</TableCell>
-                <TableCell sx={{ fontWeight: 800 }} align="center">Destinatarios</TableCell>
-                <TableCell sx={{ fontWeight: 800 }}>Enviada por</TableCell>
-                <TableCell sx={{ fontWeight: 800 }} align="right">Acciones</TableCell>
-              </TableRow>
-            </TableHead>
+            <SortableTableHead columns={COLUMNS} cellSx={{ fontWeight: 800 }} {...table.sortProps} />
 
             <TableBody>
               {loading ? (
@@ -356,47 +334,20 @@ const NotificationHistoryPage = () => {
                     <TableCell align="center">{renderRecipientsCount(r.recipientsCount)}</TableCell>
                     <TableCell>{safeStr(r.sender?.name) || '—'}</TableCell>
                     <TableCell align="right">
-                      <Tooltip title="Ver detalle">
-                        <span>
-                          <IconButton
-                            onClick={() => openDetail(r.uuid)}
-                            size="small"
-                            aria-label="Ver detalle"
-                            sx={{
-                              color: 'primary.main',
-                              backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                              transition: 'all 200ms ease-in-out',
-                              '&:hover': {
-                                backgroundColor: 'rgba(25, 118, 210, 0.16)',
-                                color: 'primary.dark',
-                                transform: 'scale(1.1)',
-                              },
-                            }}
-                          >
-                            <VisibilityIcon fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
+                      <RowActions
+                        actions={[
+                          { key: 'view', kind: 'view', label: 'Ver detalle', icon: <VisibilityIcon fontSize="small" />, onClick: () => openDetail(r.uuid) },
+                        ]}
+                      />
                     </TableCell>
                   </TableRow>
                 ))
               )}
             </TableBody>
           </Table>
-        </TableContainer>
+        </AppTableContainer>
 
-        <TablePagination
-          component="div"
-          count={total}
-          page={page}
-          onPageChange={(_, newPage) => setPage(newPage)}
-          rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={(e) => {
-            setRowsPerPage(Number.parseInt(e.target.value, 10));
-            setPage(0);
-          }}
-          rowsPerPageOptions={[10, 25, 50, 100]}
-        />
+        <AppTablePagination count={total} {...table.paginationProps} />
       </Paper>
 
       <Dialog open={detailOpen} onClose={closeDetail} fullWidth maxWidth="md">

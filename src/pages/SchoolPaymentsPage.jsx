@@ -11,7 +11,6 @@ import {
     CardContent,
     Button,
     Paper,
-    TablePagination,
     Grid,
     Chip,
     Alert,
@@ -74,6 +73,9 @@ import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import useClientScope from '../hooks/useClientScope';
 import useNotify from '../hooks/useNotify';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import { sortRows } from '../utils/tableSort';
 
 moment.locale('es'); // Configurar moment en español
 const SectionCard = styled(Card)`
@@ -156,12 +158,10 @@ const SchoolPaymentsPage = () => {
     const [paymentsAll, setPaymentsAll] = useState([]);
     // (paymentsAll is the complete dataset; avoid relying on deprecated global `payments` identifier)
     const [filtered, setFiltered] = useState([]);
-    // Sorting (moved to parent so sorting applies to full filtered set before pagination)
-    const [orderBy, setOrderBy] = useState('familyLastName');
-    const [order, setOrder] = useState('asc');
+    // Orden y paginación: el orden se aplica a todo el conjunto filtrado antes de paginar
+    const table = useTableState({ defaultOrderBy: 'familyLastName' });
+    const { page, rowsPerPage, order, orderBy, setPage } = table;
     const [countersView, setCountersView] = useState('payment'); // 'payment' o 'service'
-    const [page, setPage] = useState(0); 
-    const [rowsPerPage, setRowsPerPage] = useState(25);
 
     // Cargos de inscripción del ciclo indexados por userId ({ status, amountDue }). Vacío si el colegio
     // no cobra inscripción o el usuario no tiene el permiso para verlos.
@@ -185,7 +185,7 @@ const SchoolPaymentsPage = () => {
             F.switch('showInactive', { label: 'Mostrar inactivas', disabled: isServiceInactiveDraft }),
             F.switch('showDeleted', { label: 'Mostrar eliminadas', disabled: isServiceInactiveDraft }),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const {
         search,
@@ -761,14 +761,6 @@ const SchoolPaymentsPage = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [search, statusFilter, paymentsAll, autoDebitFilter, showDeleted, showInactive, serviceStatusFilter, rowsPerPage, enrollmentFilter, enrollmentByUser]);
 
-    const handleRequestSort = (property) => {
-        const isAsc = orderBy === property && order === 'asc';
-        setOrder(isAsc ? 'desc' : 'asc');
-        setOrderBy(property);
-        // reset to first page when sorting changes
-        setPage(0);
-    };
-
     // Client-side pagination: slice the filtered array for the current page
     // Sorting helpers (parent-level)
     const getValueForKey = (p, key) => {
@@ -817,34 +809,11 @@ const SchoolPaymentsPage = () => {
         return '';
     };
 
-    const stableSort = (array, comparator) => {
-        const stabilized = array.map((el, index) => [el, index]);
-        stabilized.sort((a, b) => {
-            const orderRes = comparator(a[0], b[0]);
-            if (orderRes !== 0) {
-                return orderRes;
-            }
-            return a[1] - b[1];
-        });
-        return stabilized.map(el => el[0]);
-    };
-
     const sortedFiltered = React.useMemo(() => {
         if (!Array.isArray(filtered)) {
             return [];
         }
-        const comparator = (a, b) => {
-            const va = getValueForKey(a, orderBy);
-            const vb = getValueForKey(b, orderBy);
-            if (va < vb) {
-                return order === 'asc' ? -1 : 1;
-            }
-            if (va > vb) {
-                return order === 'asc' ? 1 : -1;
-            }
-            return 0;
-        };
-        return stableSort(filtered.slice(), comparator);
+        return sortRows(filtered, { orderBy, order, getValue: getValueForKey });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filtered, order, orderBy, enrollmentByUser]);
 
@@ -4180,8 +4149,7 @@ const SchoolPaymentsPage = () => {
                                             // Cada vista tiene su propio filtro de pago: limpiar ambos para no dejar uno aplicado y oculto
                                             pageFilters.applyValues({ status: '', enrollment: '' });
                                             // El orden actual puede no existir en la otra vista: volver al orden por apellido
-                                            setOrderBy('familyLastName');
-                                            setOrder('asc');
+                                            table.setSort('familyLastName', 'asc');
                                         }}
                                     />
                                 )}
@@ -4204,7 +4172,7 @@ const SchoolPaymentsPage = () => {
                             onDownloadHistory={hasPermission('pagos-ver-detalle') ? handleDownloadHistory : undefined}
                             order={order}
                             orderBy={orderBy}
-                            onRequestSort={handleRequestSort}
+                            onRequestSort={table.onSort}
                         />
 
                         <ManagePaymentsModal
@@ -6162,22 +6130,7 @@ const SchoolPaymentsPage = () => {
                         </Dialog>
 
                         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-                            <TablePagination
-                                component="div"
-                                count={paginationCount}
-                                page={page}
-                                onPageChange={(e, newPage) => {
-                                    // local pagination: just change page, data is already loaded client-side
-                                    setPage(newPage);
-                                }}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={(e) => {
-                                    const rp = Number.parseInt(e.target.value, 10);
-                                    setRowsPerPage(rp);
-                                    setPage(0);
-                                }}
-                                rowsPerPageOptions={[10,25,50]}
-                            />
+                            <AppTablePagination count={paginationCount} {...table.paginationProps} />
                         </Box>
                     </Paper>
                 </Grid>

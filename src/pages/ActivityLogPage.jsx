@@ -23,18 +23,13 @@ import {
     AccordionActions,
     Divider,
     TextField,
-    TablePagination,
     FormControl,
     InputLabel,
     Select,
     MenuItem,
     FormControlLabel,
     Switch,
-    useTheme,
-    useMediaQuery,
-    Box,
-    TableSortLabel,
-    TableContainer
+    Box
 } from '@mui/material';
 import {
     ExpandMore as ExpandMoreIcon,
@@ -65,6 +60,13 @@ import api from '../utils/axiosConfig';
 import usePermissions from '../hooks/usePermissions';
 import useNotify from '../hooks/useNotify';
 import moment from 'moment-timezone';
+import useTableState from '../hooks/useTableState';
+import useIsMobile from '../hooks/useIsMobile';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import { MobileCard, MobileField } from '../components/table/MobileCard';
+import { sortRows } from '../utils/tableSort';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -147,66 +149,7 @@ const FiltersRow = tw.div`
     items-center
 `;
 
-const MobileCard = styled(Paper)(() => [
-    tw`p-4 mb-4`,
-    { backgroundColor: '#fff' }
-]);
-const MobileField = styled(Box)(() => [
-    tw`mb-2`
-]);
-const MobileLabel = styled(Typography)(() => [
-    tw`font-bold text-sm`,
-    { color: '#555' }
-]);
-const MobileValue = styled(Typography)(() => [
-    tw`text-base`
-]);
-
-// =================== Código para ordenamiento ===================
-function descendingComparator(a, b, orderBy, type) {
-    const aValue = getFieldValue(a, orderBy, type);
-    const bValue = getFieldValue(b, orderBy, type);
-
-    if (aValue == null && bValue == null) {
-        return 0;
-    }
-    if (aValue == null) {
-        return 1;
-    }
-    if (bValue == null) {
-        return -1;
-    }
-
-    if (typeof aValue === 'string' && typeof bValue === 'string') {
-        return bValue.localeCompare(aValue);
-    }
-    if (bValue < aValue) {
-        return -1;
-    }
-    if (bValue > aValue) {
-        return 1;
-    }
-    return 0;
-}
-
-function getComparator(order, orderBy, type) {
-    return order === 'desc'
-        ? (a, b) => descendingComparator(a, b, orderBy, type)
-        : (a, b) => -descendingComparator(a, b, orderBy, type);
-}
-
-function stableSort(array, comparator) {
-    const stabilizedThis = array.map((el, index) => [el, index]);
-    stabilizedThis.sort((a, b) => {
-        const order = comparator(a[0], b[0]);
-        if (order !== 0) {
-            return order;
-        }
-        return a[1] - b[1];
-    });
-    return stabilizedThis.map((el) => el[0]);
-}
-
+// =================== Valores para ordenamiento ===================
 function getFieldValue(item, field, type) {
     if (type === 'buses') {
         switch (field) {
@@ -269,9 +212,45 @@ function getFieldValue(item, field, type) {
 }
 // =================== Fin código para ordenamiento ===================
 
+// Columnas de la tabla
+const BUS_COLUMNS = [
+    { id: 'plate', label: 'Placa', sortable: true },
+    { id: 'pilot', label: 'Piloto', sortable: true },
+    { id: 'monitora', label: 'Monitora', sortable: true },
+    { id: 'description', label: 'Descripción', sortable: true },
+];
+
+// Columnas de la tabla
+const INCIDENT_COLUMNS = [
+    { id: 'fecha', label: 'Fecha', sortable: true },
+    { id: 'piloto', label: 'Piloto', sortable: true },
+    { id: 'tipo_gravedad', label: 'Tipo (Gravedad)' },
+    { id: 'tipoFalla', label: 'Tipo de Falla', sortable: true },
+    { id: 'descripcion', label: 'Descripción', sortable: true },
+    { id: 'continuo', label: '¿Continuó?' },
+    { id: 'bus_suplente', label: '¿Bus Suplente?' },
+];
+
+// Columnas de la tabla
+const EMERGENCY_COLUMNS = [
+    { id: 'fecha', label: 'Fecha', sortable: true },
+    { id: 'piloto', label: 'Piloto', sortable: true },
+    { id: 'mensaje', label: 'Mensaje' },
+    { id: 'ubicacion_lat_lng', label: 'Ubicación (Lat,Lng)' },
+];
+
+// Columnas de la tabla
+const PAYMENT_COLUMNS = [
+    { id: 'padre_usuario', label: 'Padre (Usuario)' },
+    { id: 'email', label: 'Email' },
+    { id: 'finalStatus', label: 'Estado', sortable: true },
+    { id: 'nextPaymentDate', label: 'Próximo Pago', sortable: true },
+    { id: 'leftover', label: 'Saldo', sortable: true },
+    { id: 'acciones', label: 'Acciones' },
+];
+
 const ActivityLogPage = () => {
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
 
     const { hasPermission } = usePermissions();
     const puedeVerPagos = hasPermission('pagos-listar');
@@ -315,65 +294,27 @@ const ActivityLogPage = () => {
     const [busPilotFilter, setBusPilotFilter] = useState('');
     const [busMonitoraFilter, setBusMonitoraFilter] = useState('');
     const [busDescriptionFilter, setBusDescriptionFilter] = useState('');
-    const [busPage, setBusPage] = useState(0);
-    const [busRowsPerPage, setBusRowsPerPage] = useState(5);
 
     const [incDateFrom, setIncDateFrom] = useState('');
     const [incDateTo, setIncDateTo] = useState('');
     const [incPilotFilter, setIncPilotFilter] = useState('');
     const [incDescriptionFilter, setIncDescriptionFilter] = useState('');
-    const [incPage, setIncPage] = useState(0);
-    const [incRowsPerPage, setIncRowsPerPage] = useState(5);
 
     const [emeDateFrom, setEmeDateFrom] = useState('');
     const [emeDateTo, setEmeDateTo] = useState('');
     const [emePilotFilter, setEmePilotFilter] = useState('');
-    const [emePage, setEmePage] = useState(0);
-    const [emeRowsPerPage, setEmeRowsPerPage] = useState(5);
 
     const [payDateFrom, setPayDateFrom] = useState('');
     const [payDateTo, setPayDateTo] = useState('');
     const [payBalanceMin, setPayBalanceMin] = useState('');
     const [payBalanceMax, setPayBalanceMax] = useState('');
-    const [payPage, setPayPage] = useState(0);
-    const [payRowsPerPage, setPayRowsPerPage] = useState(10);
     
 
-    // Orden Buses
-    const [busOrder, setBusOrder] = useState('asc');
-    const [busOrderBy, setBusOrderBy] = useState('plate');
-    const handleRequestBusSort = (property) => {
-        const isAsc = busOrderBy === property && busOrder === 'asc';
-        setBusOrder(isAsc ? 'desc' : 'asc');
-        setBusOrderBy(property);
-    };
-
-    // Orden Incidentes
-    const [incOrder, setIncOrder] = useState('asc');
-    const [incOrderBy, setIncOrderBy] = useState('');
-    const handleRequestIncSort = (property) => {
-        const isAsc = incOrderBy === property && incOrder === 'asc';
-        setIncOrder(isAsc ? 'desc' : 'asc');
-        setIncOrderBy(property);
-    };
-
-    // Orden Emergencias
-    const [emeOrder, setEmeOrder] = useState('asc');
-    const [emeOrderBy, setEmeOrderBy] = useState('');
-    const handleRequestEmeSort = (property) => {
-        const isAsc = emeOrderBy === property && emeOrder === 'asc';
-        setEmeOrder(isAsc ? 'desc' : 'asc');
-        setEmeOrderBy(property);
-    };
-
-    // Orden Pagos
-    const [payOrder, setPayOrder] = useState('asc');
-    const [payOrderBy, setPayOrderBy] = useState('');
-    const handleRequestPaySort = (property) => {
-        const isAsc = payOrderBy === property && payOrder === 'asc';
-        setPayOrder(isAsc ? 'desc' : 'asc');
-        setPayOrderBy(property);
-    };
+    const busTable = useTableState({ defaultOrderBy: 'plate' });
+    const incTable = useTableState();
+    const emeTable = useTableState();
+    const payTable = useTableState();
+    const { page: payPage, rowsPerPage: payRowsPerPage, order: payOrder, orderBy: payOrderBy } = payTable;
 
     useEffect(() => {
         fetchAllData();
@@ -567,22 +508,9 @@ const ActivityLogPage = () => {
         }
         return true;
     });
-    const sortedBuses = stableSort(
-        filteredBuses,
-        getComparator(busOrder, busOrderBy, 'buses')
-    );
-    const busesPaginated = sortedBuses.slice(
-        busPage * busRowsPerPage,
-        busPage * busRowsPerPage + busRowsPerPage
-    );
+    const sortedBuses = sortRows(filteredBuses, { orderBy: busTable.orderBy, order: busTable.order, getValue: (row, field) => getFieldValue(row, field, 'buses') });
+    const busesPaginated = busTable.paginate(sortedBuses);
 
-    const handleChangeBusPage = (event, newPage) => {
-        setBusPage(newPage);
-    };
-    const handleChangeBusRowsPerPage = (event) => {
-        setBusRowsPerPage(Number.parseInt(event.target.value, 10));
-        setBusPage(0);
-    };
 
     // === Filtrado y Ordenamiento Incidentes ===
     const filteredIncidents = incidents.filter((inc) => {
@@ -614,21 +542,8 @@ const ActivityLogPage = () => {
         }
         return true;
     });
-    const sortedIncidents = stableSort(
-        filteredIncidents,
-        getComparator(incOrder, incOrderBy, 'incidents')
-    );
-    const incPaginated = sortedIncidents.slice(
-        incPage * incRowsPerPage,
-        incPage * incRowsPerPage + incRowsPerPage
-    );
-    const handleChangeIncPage = (event, newPage) => {
-        setIncPage(newPage);
-    };
-    const handleChangeIncRowsPerPage = (event) => {
-        setIncRowsPerPage(Number.parseInt(event.target.value, 10));
-        setIncPage(0);
-    };
+    const sortedIncidents = sortRows(filteredIncidents, { orderBy: incTable.orderBy, order: incTable.order, getValue: (row, field) => getFieldValue(row, field, 'incidents') });
+    const incPaginated = incTable.paginate(sortedIncidents);
 
     // === Filtrado y Ordenamiento Emergencias ===
     const filteredEmergencies = emergencies.filter((eme) => {
@@ -654,30 +569,10 @@ const ActivityLogPage = () => {
         }
         return true;
     });
-    const sortedEmergencies = stableSort(
-        filteredEmergencies,
-        getComparator(emeOrder, emeOrderBy, 'emergencies')
-    );
-    const emePaginated = sortedEmergencies.slice(
-        emePage * emeRowsPerPage,
-        emePage * emeRowsPerPage + emeRowsPerPage
-    );
-    const handleChangeEmePage = (event, newPage) => {
-        setEmePage(newPage);
-    };
-    const handleChangeEmeRowsPerPage = (event) => {
-        setEmeRowsPerPage(Number.parseInt(event.target.value, 10));
-        setEmePage(0);
-    };
+    const sortedEmergencies = sortRows(filteredEmergencies, { orderBy: emeTable.orderBy, order: emeTable.order, getValue: (row, field) => getFieldValue(row, field, 'emergencies') });
+    const emePaginated = emeTable.paginate(sortedEmergencies);
 
     // === Filtrado y Ordenamiento Pagos (no supervisor) ===
-    const handleChangePayPage = (event, newPage) => {
-        setPayPage(newPage);
-    };
-    const handleChangePayRowsPerPage = (event) => {
-        setPayRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPayPage(0);
-    };
     
     // Colores para segmentos: CONFIRMADO, ADELANTADO, EN_PROCESO, PENDIENTE, MORA
         const COLORS = ['#2E7D32', '#1976D2', '#2196f3', '#FFC107', '#F44336'];
@@ -797,54 +692,7 @@ const ActivityLogPage = () => {
 
                         {!isMobile && filteredBuses.length > 0 && (
                             <Table size="small" sx={{ mb: 2 }}>
-                                <TableHead>
-                                    <TableRow>
-                                        <TableHeaderCell sortDirection={busOrderBy === 'plate' ? busOrder : false}>
-                                            <TableSortLabel
-                                                active={busOrderBy === 'plate'}
-                                                direction={busOrderBy === 'plate' ? busOrder : 'asc'}
-                                                onClick={() => handleRequestBusSort('plate')}
-                                                hideSortIcon={false}
-                                                sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                            >
-                                                Placa
-                                            </TableSortLabel>
-                                        </TableHeaderCell>
-                                        <TableHeaderCell sortDirection={busOrderBy === 'pilot' ? busOrder : false}>
-                                            <TableSortLabel
-                                                active={busOrderBy === 'pilot'}
-                                                direction={busOrderBy === 'pilot' ? busOrder : 'asc'}
-                                                onClick={() => handleRequestBusSort('pilot')}
-                                                hideSortIcon={false}
-                                                sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                            >
-                                                Piloto
-                                            </TableSortLabel>
-                                        </TableHeaderCell>
-                                        <TableHeaderCell sortDirection={busOrderBy === 'monitora' ? busOrder : false}>
-                                            <TableSortLabel
-                                                active={busOrderBy === 'monitora'}
-                                                direction={busOrderBy === 'monitora' ? busOrder : 'asc'}
-                                                onClick={() => handleRequestBusSort('monitora')}
-                                                hideSortIcon={false}
-                                                sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                            >
-                                                Monitora
-                                            </TableSortLabel>
-                                        </TableHeaderCell>
-                                        <TableHeaderCell sortDirection={busOrderBy === 'description' ? busOrder : false}>
-                                            <TableSortLabel
-                                                active={busOrderBy === 'description'}
-                                                direction={busOrderBy === 'description' ? busOrder : 'asc'}
-                                                onClick={() => handleRequestBusSort('description')}
-                                                hideSortIcon={false}
-                                                sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                            >
-                                                Descripción
-                                            </TableSortLabel>
-                                        </TableHeaderCell>
-                                    </TableRow>
-                                </TableHead>
+                                <SortableTableHead columns={BUS_COLUMNS} {...busTable.sortProps} cellSx={{ fontWeight: 600, backgroundColor: '#DCF3FF', color: '#333' }} showSortIcons />
                             </Table>
                         )}
 
@@ -858,50 +706,43 @@ const ActivityLogPage = () => {
                                     <>
                                         {busesPaginated.map((bus) => (
                                             <MobileCard key={bus.id}>
-                                                <MobileField>
-                                                    <MobileLabel>Placa:</MobileLabel>
-                                                    <MobileValue>{bus.plate}</MobileValue>
+                                                <MobileField label="Placa">
+                                                    <div>{bus.plate}</div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Piloto:</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="Piloto">
+                                                    <div>
                                                         {bus.pilot ? bus.pilot.name : '—'}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Monitora:</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="Monitora">
+                                                    <div>
                                                         {bus.monitora ? bus.monitora.name : '—'}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Número de ruta:</MobileLabel>
-                                                    <MobileValue>{bus.routeNumber || '—'}</MobileValue>
+                                                <MobileField label="Número de ruta">
+                                                    <div>{bus.routeNumber || '—'}</div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Descripción:</MobileLabel>
-                                                    <MobileValue>{bus.description || '—'}</MobileValue>
+                                                <MobileField label="Descripción">
+                                                    <div>{bus.description || '—'}</div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Estado de Ruta:</MobileLabel>
+                                                <MobileField label="Estado de Ruta">
                                                     {!bus.currentRoute && (
-                                                        <MobileValue>Sin ruta activa</MobileValue>
+                                                        <div>Sin ruta activa</div>
                                                     )}
                                                     {bus.currentRoute && !bus.currentRoute.endTime && (
-                                                        <MobileValue>
+                                                        <div>
                                                             En Ruta (Inicio:{' '}
                                                             {formatGuatemalaDatetime(bus.currentRoute.startTime)})
-                                                        </MobileValue>
+                                                        </div>
                                                     )}
                                                     {bus.currentRoute?.endTime && (
-                                                        <MobileValue>
+                                                        <div>
                                                             Finalizada a las{' '}
                                                             {formatGuatemalaDatetime(bus.currentRoute.endTime)}
-                                                        </MobileValue>
+                                                        </div>
                                                     )}
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Paradas:</MobileLabel>
+                                                <MobileField label="Paradas">
                                                     {Array.isArray(bus.stops) && bus.stops.length > 0 ? (
                                                         <>
                                                             {bus.stops.map((stop) => (
@@ -909,44 +750,38 @@ const ActivityLogPage = () => {
                                                                     key={stop.stopId}
                                                                     sx={{ p: 2, mb: 1 }}
                                                                 >
-                                                                    <MobileField>
-                                                                        <MobileLabel>Horario:</MobileLabel>
-                                                                        <MobileValue>{stop.time}</MobileValue>
+                                                                    <MobileField label="Horario">
+                                                                        <div>{stop.time}</div>
                                                                     </MobileField>
-                                                                    <MobileField>
-                                                                        <MobileLabel>Nota:</MobileLabel>
-                                                                        <MobileValue>
+                                                                    <MobileField label="Nota">
+                                                                        <div>
                                                                             {stop.note || ''}
-                                                                        </MobileValue>
+                                                                        </div>
                                                                     </MobileField>
-                                                                    <MobileField>
-                                                                        <MobileLabel>Padre:</MobileLabel>
-                                                                        <MobileValue>
+                                                                    <MobileField label="Padre">
+                                                                        <div>
                                                                             {stop.parentName}
-                                                                        </MobileValue>
+                                                                        </div>
                                                                     </MobileField>
-                                                                    <MobileField>
-                                                                        <MobileLabel>Estudiantes:</MobileLabel>
-                                                                        <MobileValue>
+                                                                    <MobileField label="Estudiantes">
+                                                                        <div>
                                                                             {stop.students}
-                                                                        </MobileValue>
+                                                                        </div>
                                                                     </MobileField>
                                                                 </MobileCard>
                                                             ))}
                                                         </>
                                                     ) : (
-                                                        <MobileValue>No hay paradas registradas.</MobileValue>
+                                                        <div>No hay paradas registradas.</div>
                                                     )}
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>ID Bus:</MobileLabel>
-                                                    <MobileValue>{bus.id}</MobileValue>
+                                                <MobileField label="ID Bus">
+                                                    <div>{bus.id}</div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Estado Taller:</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="Estado Taller">
+                                                    <div>
                                                         {bus.inWorkshop ? 'En Taller' : 'Disponible'}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
 
                                                 <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
@@ -986,15 +821,7 @@ const ActivityLogPage = () => {
                                                 </Box>
                                             </MobileCard>
                                         ))}
-                                        <TablePagination
-                                            component="div"
-                                            count={filteredBuses.length}
-                                            page={busPage}
-                                            onPageChange={handleChangeBusPage}
-                                            rowsPerPage={busRowsPerPage}
-                                            onRowsPerPageChange={handleChangeBusRowsPerPage}
-                                            labelRowsPerPage="Filas por página"
-                                        />
+                                        <AppTablePagination count={filteredBuses.length} {...busTable.paginationProps} />
                                     </>
                                 ) : (
                                     <>
@@ -1140,15 +967,7 @@ const ActivityLogPage = () => {
                                                 </AccordionActions>
                                             </AccordionStyled>
                                         ))}
-                                        <TablePagination
-                                            component="div"
-                                            count={filteredBuses.length}
-                                            page={busPage}
-                                            onPageChange={handleChangeBusPage}
-                                            rowsPerPage={busRowsPerPage}
-                                            onRowsPerPageChange={handleChangeBusRowsPerPage}
-                                            labelRowsPerPage="Filas por página"
-                                        />
+                                        <AppTablePagination count={filteredBuses.length} {...busTable.paginationProps} />
                                     </>
                                 )}
                             </>
@@ -1217,123 +1036,57 @@ const ActivityLogPage = () => {
                                     <>
                                         {incPaginated.map((incident) => (
                                             <MobileCard key={incident.id}>
-                                                <MobileField>
-                                                    <MobileLabel>Fecha:</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="Fecha">
+                                                    <div>
                                                         {formatGuatemalaDatetime(incident.fecha)}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Piloto:</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="Piloto">
+                                                    <div>
                                                         {incident.piloto ? incident.piloto.name : '—'}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Tipo (Gravedad):</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="Tipo (Gravedad)">
+                                                    <div>
                                                         {incident.tipo === 'incidente'
                                                             ? 'Problema menor'
                                                             : 'Problema mayor'}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Tipo de Falla:</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="Tipo de Falla">
+                                                    <div>
                                                         {incident.tipoFalla || '—'}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
                                                 {incident.tipoFalla === 'otro' && incident.otroFallaDetalle && (
-                                                    <MobileField>
-                                                        <MobileLabel>Otro (Detalle):</MobileLabel>
-                                                        <MobileValue>{incident.otroFallaDetalle}</MobileValue>
+                                                    <MobileField label="Otro (Detalle)">
+                                                        <div>{incident.otroFallaDetalle}</div>
                                                     </MobileField>
                                                 )}
-                                                <MobileField>
-                                                    <MobileLabel>Descripción:</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="Descripción">
+                                                    <div>
                                                         {incident.descripcion || '—'}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>¿Pudo continuar la ruta?</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="¿Pudo continuar la ruta?">
+                                                    <div>
                                                         {incident.pudoContinuarRuta ? 'Sí' : 'No'}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>¿Bus Suplente?</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="¿Bus Suplente?">
+                                                    <div>
                                                         {incident.seUtilizoBusSuplente ? 'Sí' : 'No'}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
                                             </MobileCard>
                                         ))}
-                                        <TablePagination
-                                            component="div"
-                                            count={filteredIncidents.length}
-                                            page={incPage}
-                                            onPageChange={handleChangeIncPage}
-                                            rowsPerPage={incRowsPerPage}
-                                            onRowsPerPageChange={handleChangeIncRowsPerPage}
-                                            labelRowsPerPage="Filas por página"
-                                        />
+                                        <AppTablePagination count={filteredIncidents.length} {...incTable.paginationProps} />
                                     </>
                                 )}
                                 {filteredIncidents.length > 0 && !isMobile && (
-                                    <TableContainer sx={{ overflowX: 'auto' }}>
+                                    <AppTableContainer>
                                         <Table size="small">
-                                            <TableHead>
-                                                <TableRow>
-                                                    <TableHeaderCell sortDirection={incOrderBy === 'fecha' ? incOrder : false}>
-                                                        <TableSortLabel
-                                                            active={incOrderBy === 'fecha'}
-                                                            direction={incOrderBy === 'fecha' ? incOrder : 'asc'}
-                                                            onClick={() => handleRequestIncSort('fecha')}
-                                                            hideSortIcon={false}
-                                                            sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                        >
-                                                            Fecha
-                                                        </TableSortLabel>
-                                                    </TableHeaderCell>
-                                                    <TableHeaderCell sortDirection={incOrderBy === 'piloto' ? incOrder : false}>
-                                                        <TableSortLabel
-                                                            active={incOrderBy === 'piloto'}
-                                                            direction={incOrderBy === 'piloto' ? incOrder : 'asc'}
-                                                            onClick={() => handleRequestIncSort('piloto')}
-                                                            hideSortIcon={false}
-                                                            sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                        >
-                                                            Piloto
-                                                        </TableSortLabel>
-                                                    </TableHeaderCell>
-                                                    <TableHeaderCell>Tipo (Gravedad)</TableHeaderCell>
-                                                    <TableHeaderCell sortDirection={incOrderBy === 'tipoFalla' ? incOrder : false}>
-                                                        <TableSortLabel
-                                                            active={incOrderBy === 'tipoFalla'}
-                                                            direction={incOrderBy === 'tipoFalla' ? incOrder : 'asc'}
-                                                            onClick={() => handleRequestIncSort('tipoFalla')}
-                                                            hideSortIcon={false}
-                                                            sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                        >
-                                                            Tipo de Falla
-                                                        </TableSortLabel>
-                                                    </TableHeaderCell>
-                                                    <TableHeaderCell sortDirection={incOrderBy === 'descripcion' ? incOrder : false}>
-                                                        <TableSortLabel
-                                                            active={incOrderBy === 'descripcion'}
-                                                            direction={incOrderBy === 'descripcion' ? incOrder : 'asc'}
-                                                            onClick={() => handleRequestIncSort('descripcion')}
-                                                            hideSortIcon={false}
-                                                            sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                        >
-                                                            Descripción
-                                                        </TableSortLabel>
-                                                    </TableHeaderCell>
-                                                    <TableHeaderCell>¿Continuó?</TableHeaderCell>
-                                                    <TableHeaderCell>¿Bus Suplente?</TableHeaderCell>
-                                                </TableRow>
-                                            </TableHead>
+                                            <SortableTableHead columns={INCIDENT_COLUMNS} {...incTable.sortProps} cellSx={{ fontWeight: 600, backgroundColor: '#DCF3FF', color: '#333' }} />
                                             <TableBody>
                                                 {incPaginated.map((incident) => (
                                                     <TableRow key={incident.id} hover>
@@ -1366,7 +1119,7 @@ const ActivityLogPage = () => {
                                                 ))}
                                             </TableBody>
                                         </Table>
-                                    </TableContainer>
+                                    </AppTableContainer>
                                 )}
                             </Grid2>
 
@@ -1415,29 +1168,25 @@ const ActivityLogPage = () => {
                                     <>
                                         {emePaginated.map((eme) => (
                                             <MobileCard key={eme.id}>
-                                                <MobileField>
-                                                    <MobileLabel>Fecha:</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="Fecha">
+                                                    <div>
                                                         {formatGuatemalaDatetime(eme.fecha)}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Piloto:</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="Piloto">
+                                                    <div>
                                                         {eme.piloto ? eme.piloto.name : '—'}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Mensaje:</MobileLabel>
-                                                    <MobileValue>{eme.mensaje}</MobileValue>
+                                                <MobileField label="Mensaje">
+                                                    <div>{eme.mensaje}</div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Ubicación (Lat,Lng):</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="Ubicación (Lat,Lng)">
+                                                    <div>
                                                         {eme.latitud && eme.longitud
                                                             ? `${Number.parseFloat(eme.latitud).toFixed(6)}, ${Number.parseFloat(eme.longitud).toFixed(6)}`
                                                             : '—'}
-                                                    </MobileValue>
+                                                    </div>
                                                     {eme.latitud && eme.longitud && (
                                                         <Tooltip title="Ver mapa">
                                                             <IconButton
@@ -1456,48 +1205,13 @@ const ActivityLogPage = () => {
                                                 </MobileField>
                                             </MobileCard>
                                         ))}
-                                        <TablePagination
-                                            component="div"
-                                            count={filteredEmergencies.length}
-                                            page={emePage}
-                                            onPageChange={handleChangeEmePage}
-                                            rowsPerPage={emeRowsPerPage}
-                                            onRowsPerPageChange={handleChangeEmeRowsPerPage}
-                                            labelRowsPerPage="Filas por página"
-                                        />
+                                        <AppTablePagination count={filteredEmergencies.length} {...emeTable.paginationProps} />
                                     </>
                                 )}
                                 {filteredEmergencies.length > 0 && !isMobile && (
-                                    <TableContainer sx={{ overflowX: 'auto' }}>
+                                    <AppTableContainer>
                                         <Table size="small">
-                                            <TableHead>
-                                                <TableRow>
-                                                    <TableHeaderCell sortDirection={emeOrderBy === 'fecha' ? emeOrder : false}>
-                                                        <TableSortLabel
-                                                            active={emeOrderBy === 'fecha'}
-                                                            direction={emeOrderBy === 'fecha' ? emeOrder : 'asc'}
-                                                            onClick={() => handleRequestEmeSort('fecha')}
-                                                            hideSortIcon={false}
-                                                            sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                        >
-                                                            Fecha
-                                                        </TableSortLabel>
-                                                    </TableHeaderCell>
-                                                    <TableHeaderCell sortDirection={emeOrderBy === 'piloto' ? emeOrder : false}>
-                                                        <TableSortLabel
-                                                            active={emeOrderBy === 'piloto'}
-                                                            direction={emeOrderBy === 'piloto' ? emeOrder : 'asc'}
-                                                            onClick={() => handleRequestEmeSort('piloto')}
-                                                            hideSortIcon={false}
-                                                            sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                        >
-                                                            Piloto
-                                                        </TableSortLabel>
-                                                    </TableHeaderCell>
-                                                    <TableHeaderCell>Mensaje</TableHeaderCell>
-                                                    <TableHeaderCell>Ubicación (Lat,Lng)</TableHeaderCell>
-                                                </TableRow>
-                                            </TableHead>
+                                            <SortableTableHead columns={EMERGENCY_COLUMNS} {...emeTable.sortProps} cellSx={{ fontWeight: 600, backgroundColor: '#DCF3FF', color: '#333' }} />
                                             <TableBody>
                                                 {emePaginated.map((eme) => (
                                                     <TableRow key={eme.id} hover>
@@ -1536,7 +1250,7 @@ const ActivityLogPage = () => {
                                                 ))}
                                             </TableBody>
                                         </Table>
-                                    </TableContainer>
+                                    </AppTableContainer>
                                 )}
                             </Grid2>
                         </Grid2>
@@ -1552,7 +1266,7 @@ const ActivityLogPage = () => {
                                     label="Próximo Pago Desde"
                                     type="date"
                                     value={payDateFrom}
-                                    onChange={(e) => { setPayDateFrom(e.target.value); setPayPage(0); }}
+                                    onChange={(e) => { setPayDateFrom(e.target.value); payTable.resetPage(); }}
                                     InputLabelProps={{ shrink: true }}
                                     size="small"
                                 />
@@ -1560,7 +1274,7 @@ const ActivityLogPage = () => {
                                     label="Próximo Pago Hasta"
                                     type="date"
                                     value={payDateTo}
-                                    onChange={(e) => { setPayDateTo(e.target.value); setPayPage(0); }}
+                                    onChange={(e) => { setPayDateTo(e.target.value); payTable.resetPage(); }}
                                     InputLabelProps={{ shrink: true }}
                                     size="small"
                                 />
@@ -1569,14 +1283,14 @@ const ActivityLogPage = () => {
                                     variant="outlined"
                                     size="small"
                                     value={payBalanceMin}
-                                    onChange={(e) => { setPayBalanceMin(e.target.value); setPayPage(0); }}
+                                    onChange={(e) => { setPayBalanceMin(e.target.value); payTable.resetPage(); }}
                                 />
                                 <TextField
                                     label="Saldo Máximo"
                                     variant="outlined"
                                     size="small"
                                     value={payBalanceMax}
-                                    onChange={(e) => { setPayBalanceMax(e.target.value); setPayPage(0); }}
+                                    onChange={(e) => { setPayBalanceMax(e.target.value); payTable.resetPage(); }}
                                 />
                             </FiltersRow>
 
@@ -1594,28 +1308,22 @@ const ActivityLogPage = () => {
                                 <>
                                     {payments.map((pay) => (
                                         <MobileCard key={pay.id}>
-                                            <MobileField>
-                                                <MobileLabel>Padre (Usuario):</MobileLabel>
-                                                <MobileValue>{pay.User ? pay.User.name : '—'}</MobileValue>
+                                            <MobileField label="Padre (Usuario)">
+                                                <div>{pay.User ? pay.User.name : '—'}</div>
                                             </MobileField>
-                                            <MobileField>
-                                                <MobileLabel>Email:</MobileLabel>
-                                                <MobileValue>{pay.User ? pay.User.email : '—'}</MobileValue>
+                                            <MobileField label="Email">
+                                                <div>{pay.User ? pay.User.email : '—'}</div>
                                             </MobileField>
-                                            <MobileField>
-                                                <MobileLabel>Estado:</MobileLabel>
-                                                <MobileValue>{pay.finalStatus || pay.status}</MobileValue>
+                                            <MobileField label="Estado">
+                                                <div>{pay.finalStatus || pay.status}</div>
                                             </MobileField>
-                                            <MobileField>
-                                                <MobileLabel>Próximo Pago:</MobileLabel>
-                                                <MobileValue>{formatGuatemalaDate(pay.nextPaymentDate)}</MobileValue>
+                                            <MobileField label="Próximo Pago">
+                                                <div>{formatGuatemalaDate(pay.nextPaymentDate)}</div>
                                             </MobileField>
-                                            <MobileField>
-                                                <MobileLabel>Saldo:</MobileLabel>
-                                                <MobileValue>Q {pay.leftover ?? 0}</MobileValue>
+                                            <MobileField label="Saldo">
+                                                <div>Q {pay.leftover ?? 0}</div>
                                             </MobileField>
-                                            <MobileField>
-                                                <MobileLabel>Acciones:</MobileLabel>
+                                            <MobileField label="Acciones">
                                                 {pay.User && (
                                                     <Tooltip title="Ver boletas de pago">
                                                         <IconButton
@@ -1633,68 +1341,13 @@ const ActivityLogPage = () => {
                                             </MobileField>
                                         </MobileCard>
                                     ))}
-                                    <TablePagination
-                                        component="div"
-                                        count={totalPaymentsCount}
-                                        page={payPage}
-                                        onPageChange={handleChangePayPage}
-                                        rowsPerPage={payRowsPerPage}
-                                        onRowsPerPageChange={handleChangePayRowsPerPage}
-                                        labelRowsPerPage="Filas por página"
-                                    />
+                                    <AppTablePagination count={totalPaymentsCount} {...payTable.paginationProps} />
                                 </>
                             )}
                             {!loadingPayments && payments.length > 0 && !isMobile && (
                                 <>
                                     <Table size="small">
-                                        <TableHead>
-                                            <TableRow>
-                                                <TableHeaderCell sortDirection={payOrderBy === 'userName' ? payOrder : false}>
-                                                    <TableSortLabel>
-                                                        Padre (Usuario)
-                                                    </TableSortLabel>
-                                                </TableHeaderCell>
-                                                <TableHeaderCell sortDirection={payOrderBy === 'userEmail' ? payOrder : false}>
-                                                    <TableSortLabel>
-                                                        Email
-                                                    </TableSortLabel>
-                                                </TableHeaderCell>
-                                                <TableHeaderCell sortDirection={payOrderBy === 'finalStatus' ? payOrder : false}>
-                                                    <TableSortLabel
-                                                        active={payOrderBy === 'finalStatus'}
-                                                        direction={payOrderBy === 'finalStatus' ? payOrder : 'asc'}
-                                                        onClick={() => handleRequestPaySort('finalStatus')}
-                                                        hideSortIcon={false}
-                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                    >
-                                                        Estado
-                                                    </TableSortLabel>
-                                                </TableHeaderCell>
-                                                <TableHeaderCell sortDirection={payOrderBy === 'nextPaymentDate' ? payOrder : false}>
-                                                    <TableSortLabel
-                                                        active={payOrderBy === 'nextPaymentDate'}
-                                                        direction={payOrderBy === 'nextPaymentDate' ? payOrder : 'asc'}
-                                                        onClick={() => handleRequestPaySort('nextPaymentDate')}
-                                                        hideSortIcon={false}
-                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                    >
-                                                        Próximo Pago
-                                                    </TableSortLabel>
-                                                </TableHeaderCell>
-                                                <TableHeaderCell sortDirection={payOrderBy === 'leftover' ? payOrder : false}>
-                                                    <TableSortLabel
-                                                        active={payOrderBy === 'leftover'}
-                                                        direction={payOrderBy === 'leftover' ? payOrder : 'asc'}
-                                                        onClick={() => handleRequestPaySort('leftover')}
-                                                        hideSortIcon={false}
-                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                    >
-                                                        Saldo
-                                                    </TableSortLabel>
-                                                </TableHeaderCell>
-                                                <TableHeaderCell>Acciones</TableHeaderCell>
-                                            </TableRow>
-                                        </TableHead>
+                                        <SortableTableHead columns={PAYMENT_COLUMNS} {...payTable.sortProps} cellSx={{ fontWeight: 600, backgroundColor: '#DCF3FF', color: '#333' }} />
                                         <TableBody>
                                             {payments.map((pay) => (
                                                 <TableRow key={pay.id} hover>
@@ -1731,15 +1384,7 @@ const ActivityLogPage = () => {
                                             ))}
                                         </TableBody>
                                     </Table>
-                                    <TablePagination
-                                        component="div"
-                                        count={totalPaymentsCount}
-                                        page={payPage}
-                                        onPageChange={handleChangePayPage}
-                                        rowsPerPage={payRowsPerPage}
-                                        onRowsPerPageChange={handleChangePayRowsPerPage}
-                                        labelRowsPerPage="Filas por página"
-                                    />
+                                    <AppTablePagination count={totalPaymentsCount} {...payTable.paginationProps} />
                                 </>
                             )}
 

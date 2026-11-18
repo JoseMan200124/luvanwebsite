@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import {
+    Paper,
     Dialog,
     DialogTitle,
     DialogContent,
@@ -10,21 +11,28 @@ import {
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    Paper,
     Typography,
     CircularProgress,
     Box,
     IconButton,
-    TableSortLabel,
     Grid,
     TextField
 } from '@mui/material';
 import { Close as CloseIcon, DirectionsBus } from '@mui/icons-material';
 import { AuthContext } from '../../context/AuthProvider';
 import api from '../../utils/axiosConfig';
+import useTableState from '../../hooks/useTableState';
+import SortableTableHead from '../table/SortableTableHead';
+import AppTableContainer from '../table/AppTableContainer';
+
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'name', label: 'Nombre', sortable: true },
+    { id: 'email', label: 'Email', sortable: true },
+    { id: 'stopTime', label: 'Hora de Parada', sortable: true },
+    { id: 'note', label: 'Notas', sortable: true },
+];
 
 const RouteColaboradoresModal = ({ 
     open, 
@@ -51,26 +59,8 @@ const RouteColaboradoresModal = ({
     });
     
     // Sorting
-    const [sortBy, setSortBy] = useState(null);
-    const [sortOrder, setSortOrder] = useState('asc');
-
-    const handleSortChange = (field) => {
-        if (sortBy !== field) {
-            setSortBy(field);
-            setSortOrder('asc');
-            return;
-        }
-
-        if (sortOrder === 'asc') {
-            setSortOrder('desc');
-            return;
-        }
-
-        if (sortOrder === 'desc') {
-            setSortBy(null);
-            setSortOrder('asc');
-        }
-    };
+    const table = useTableState({ clearable: true });
+    const { orderBy: sortBy, order: sortOrder } = table;
 
     const parseTimeToMinutes = (timeStr) => {
         if (!timeStr) {
@@ -281,48 +271,9 @@ const RouteColaboradoresModal = ({
                         </Box>
 
                         {/* Table */}
-                        <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                        <AppTableContainer component={Paper} maxHeight={500}>
                             <Table stickyHeader size="small">
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell>
-                                            <TableSortLabel
-                                                active={sortBy === 'name'}
-                                                direction={sortBy === 'name' ? sortOrder : 'asc'}
-                                                onClick={() => handleSortChange('name')}
-                                            >
-                                                Nombre
-                                            </TableSortLabel>
-                                        </TableCell>
-                                        <TableCell>
-                                            <TableSortLabel
-                                                active={sortBy === 'email'}
-                                                direction={sortBy === 'email' ? sortOrder : 'asc'}
-                                                onClick={() => handleSortChange('email')}
-                                            >
-                                                Email
-                                            </TableSortLabel>
-                                        </TableCell>
-                                        <TableCell>
-                                            <TableSortLabel
-                                                active={sortBy === 'stopTime'}
-                                                direction={sortBy === 'stopTime' ? sortOrder : 'asc'}
-                                                onClick={() => handleSortChange('stopTime')}
-                                            >
-                                                Hora de Parada
-                                            </TableSortLabel>
-                                        </TableCell>
-                                        <TableCell>
-                                            <TableSortLabel
-                                                active={sortBy === 'note'}
-                                                direction={sortBy === 'note' ? sortOrder : 'asc'}
-                                                onClick={() => handleSortChange('note')}
-                                            >
-                                                Notas
-                                            </TableSortLabel>
-                                        </TableCell>
-                                    </TableRow>
-                                </TableHead>
+                                <SortableTableHead columns={COLUMNS} {...table.sortProps} />
                                 <TableBody>
                                     {sortedColaboradores.length === 0 ? (
                                         <TableRow>
@@ -360,7 +311,7 @@ const RouteColaboradoresModal = ({
                                     )}
                                 </TableBody>
                             </Table>
-                        </TableContainer>
+                        </AppTableContainer>
                     </>
                 )}
             </DialogContent>

@@ -4,8 +4,8 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import moment from 'moment-timezone';
 import {
     Accordion, AccordionDetails, AccordionSummary, Box, Button, Chip, CircularProgress, Dialog,
-    DialogActions, DialogContent, DialogTitle, IconButton,
-    Alert, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination,
+    DialogActions, DialogContent, DialogTitle,
+    Alert, Stack, Table, TableBody, TableCell, TableHead,
     TableRow, Tooltip, Typography,
 } from '@mui/material';
 import {
@@ -22,6 +22,11 @@ import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import PermissionGuard from '../components/PermissionGuard';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import RowActions from '../components/table/RowActions';
 import CircularMasivaModal from '../components/CircularMasivaModal';
 import SendNotificationModal from '../components/SendNotificationModal';
 import { SCHEDULE_TIMEZONE, describeSchedule } from '../components/scheduling/scheduleModel';
@@ -86,12 +91,24 @@ const normalizeSchools = (raw) => (Array.isArray(raw) ? raw : []).map((school) =
 // Una sección desplegable por estado. Carga su propia lista (con su paginación) aunque esté cerrada,
 // para mostrar siempre cuántos envíos tiene.
 const StatusSection = ({ section, kind, refreshKey, expanded, onToggle, onError, onView, onEdit, onCancel }) => {
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
+    // Paginación (en el servidor), propia de cada sección
+    const table = useTableState();
+    const { page, rowsPerPage, setPage } = table;
     const [data, setData] = useState({ total: null, items: [] });
     const [loading, setLoading] = useState(true);
     const showNext = section.status === 'active';
-    const columns = showNext ? 9 : 8;
+    const tableColumns = [
+        { id: 'kind', label: 'Tipo' },
+        { id: 'title', label: 'Asunto / Título' },
+        { id: 'audience', label: 'Audiencia' },
+        { id: 'schedule', label: 'Programación' },
+        showNext && { id: 'nextRunAt', label: 'Próximo envío' },
+        { id: 'runCount', label: 'Envíos hechos' },
+        { id: 'status', label: 'Estado' },
+        { id: 'createdBy', label: 'Creado por' },
+        { id: 'actions', label: 'Acciones', align: 'right' },
+    ].filter(Boolean);
+    const columns = tableColumns.length;
 
     useEffect(() => {
         let ignore = false;
@@ -124,7 +141,7 @@ const StatusSection = ({ section, kind, refreshKey, expanded, onToggle, onError,
             }
         })();
         return () => { ignore = true; };
-    }, [page, rowsPerPage, section.status, kind, refreshKey, onError]);
+    }, [page, rowsPerPage, setPage, section.status, kind, refreshKey, onError]);
 
     const hasItems = (data.total || 0) > 0;
 
@@ -147,21 +164,9 @@ const StatusSection = ({ section, kind, refreshKey, expanded, onToggle, onError,
                 </Stack>
             </AccordionSummary>
             <AccordionDetails sx={{ p: 0 }}>
-                <TableContainer>
+                <AppTableContainer>
                     <Table size="small">
-                        <TableHead>
-                            <TableRow>
-                                <TableCell>Tipo</TableCell>
-                                <TableCell>Asunto / Título</TableCell>
-                                <TableCell>Audiencia</TableCell>
-                                <TableCell>Programación</TableCell>
-                                {showNext && <TableCell>Próximo envío</TableCell>}
-                                <TableCell>Envíos hechos</TableCell>
-                                <TableCell>Estado</TableCell>
-                                <TableCell>Creado por</TableCell>
-                                <TableCell align="right">Acciones</TableCell>
-                            </TableRow>
-                        </TableHead>
+                        <SortableTableHead columns={tableColumns} />
                         <TableBody>
                             {loading && (
                                 <TableRow><TableCell colSpan={columns} align="center"><CircularProgress size={24} /></TableCell></TableRow>
@@ -199,37 +204,20 @@ const StatusSection = ({ section, kind, refreshKey, expanded, onToggle, onError,
                                     </TableCell>
                                     <TableCell>{item.createdBy?.name || '—'}</TableCell>
                                     <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
-                                        <Tooltip title="Ver detalle y envíos realizados">
-                                            <IconButton size="small" onClick={() => onView(item.uuid)}><VisibilityIcon fontSize="small" /></IconButton>
-                                        </Tooltip>
-                                        {item.status === 'active' && (
-                                            <PermissionGuard permission={KIND_PERMISSION[item.kind]}>
-                                                <>
-                                                    <Tooltip title="Editar">
-                                                        <IconButton size="small" onClick={() => onEdit(item.uuid)}><EditIcon fontSize="small" /></IconButton>
-                                                    </Tooltip>
-                                                    <Tooltip title="Cancelar envío programado">
-                                                        <IconButton size="small" color="error" onClick={() => onCancel(item)}><CancelIcon fontSize="small" /></IconButton>
-                                                    </Tooltip>
-                                                </>
-                                            </PermissionGuard>
-                                        )}
+                                        <RowActions
+                                            actions={[
+                                                { key: 'view', kind: 'view', label: 'Ver detalle y envíos realizados', icon: <VisibilityIcon fontSize="small" />, onClick: () => onView(item.uuid) },
+                                                item.status === 'active' && { key: 'edit', kind: 'edit', label: 'Editar', icon: <EditIcon fontSize="small" />, permission: KIND_PERMISSION[item.kind], onClick: () => onEdit(item.uuid) },
+                                                item.status === 'active' && { key: 'cancel', kind: 'delete', label: 'Cancelar envío programado', icon: <CancelIcon fontSize="small" />, permission: KIND_PERMISSION[item.kind], onClick: () => onCancel(item) },
+                                            ]}
+                                        />
                                     </TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
                     </Table>
-                    <TablePagination
-                        component="div"
-                        count={data.total || 0}
-                        page={page}
-                        onPageChange={(_, p) => setPage(p)}
-                        rowsPerPage={rowsPerPage}
-                        onRowsPerPageChange={(e) => { setRowsPerPage(Number(e.target.value)); setPage(0); }}
-                        rowsPerPageOptions={[10, 20, 50]}
-                        labelRowsPerPage="Filas por página"
-                    />
-                </TableContainer>
+                    <AppTablePagination count={data.total || 0} {...table.paginationProps} />
+                </AppTableContainer>
             </AccordionDetails>
         </Accordion>
     );

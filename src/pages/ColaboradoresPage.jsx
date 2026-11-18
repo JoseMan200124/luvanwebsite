@@ -1,6 +1,7 @@
 // src/pages/ColaboradoresPage.jsx
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import {
+    Paper,
     Typography,
     Box,
     Card,
@@ -12,12 +13,7 @@ import {
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    Paper,
-    TablePagination,
-    TableSortLabel,
     TextField,
     IconButton,
     Dialog,
@@ -57,6 +53,10 @@ import moment from 'moment-timezone';
 import { normalizeKey } from '../utils/stringHelpers';
 import UserServiceStatusModal from '../components/UserServiceStatusModal';
 import PermissionGuard from '../components/PermissionGuard';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
 import usePermissions from '../hooks/usePermissions';
 import useManageableRoles from '../hooks/useManageableRoles';
 import FilterBar from '../components/filters/FilterBar';
@@ -132,6 +132,17 @@ const translateServiceStatus = (status) => {
     }
 };
 
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'serviceStatus', label: 'Estado del Servicio', sortable: true },
+    { id: 'name', label: 'Nombre', sortable: true },
+    { id: 'email', label: 'Email', sortable: true },
+    { id: 'horario', label: 'Horario' },
+    { id: 'updatedAt', label: 'Fecha de actualización', sortable: true },
+    { id: 'status', label: 'Estado', sortable: true },
+    { id: 'acciones', label: 'Acciones', align: 'center' },
+];
+
 const ColaboradoresPage = () => {
     const { auth } = useContext(AuthContext);
     const { hasPermission, hasAnyPermission } = usePermissions();
@@ -154,17 +165,16 @@ const ColaboradoresPage = () => {
     const [colaboradores, setColaboradores] = useState([]);
     const [filteredColaboradores, setFilteredColaboradores] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [sortBy, setSortBy] = useState(null);
-    const [sortOrder, setSortOrder] = useState('asc');
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
+    // Paginación y orden (el orden se calcula en sortedUsers con su lógica propia)
+    const table = useTableState();
+    const { page, rowsPerPage, orderBy: sortBy, order: sortOrder } = table;
     const pageFilters = useFilters({
         fields: [
             F.search('search', { placeholder: 'Nombre o correo' }),
             F.select('status', { label: 'Estado', options: COLABORADOR_STATUS_OPTIONS }),
             F.serviceStatus({ options: COLABORADOR_SERVICE_OPTIONS }),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const { search: searchQuery, status: statusFilter, serviceStatus: serviceStatusFilter } = pageFilters.applied;
     const [selectedColaborador, setSelectedColaborador] = useState(null);
@@ -530,15 +540,6 @@ const ColaboradoresPage = () => {
         setFilteredColaboradores(filtered);
     }, [colaboradores, searchQuery, statusFilter, serviceStatusFilter, getColaboradorStatus]);
 
-    const handleSortChange = (field) => {
-        if (sortBy === field) {
-            setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
-        } else {
-            setSortBy(field);
-            setSortOrder('asc');
-        }
-        setPage(0);
-    };
 
     const handleOpenCreateDialog = () => {
         setColaboradorForm({
@@ -1849,59 +1850,9 @@ const ColaboradoresPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer component={Paper} sx={{ maxHeight: 600, overflowX: 'auto' }}>
+                            <AppTableContainer component={Paper} maxHeight={600}>
                                 <Table stickyHeader sx={{ minWidth: 980 }}>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'serviceStatus'}
-                                                    direction={sortBy === 'serviceStatus' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('serviceStatus')}
-                                                >
-                                                    Estado del Servicio
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'name'}
-                                                    direction={sortBy === 'name' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('name')}
-                                                >
-                                                    Nombre
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'email'}
-                                                    direction={sortBy === 'email' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('email')}
-                                                >
-                                                    Email
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>Horario</TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'updatedAt'}
-                                                    direction={sortBy === 'updatedAt' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('updatedAt')}
-                                                >
-                                                    Fecha de actualización
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'status'}
-                                                    direction={sortBy === 'status' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('status')}
-                                                >
-                                                    Estado
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="center">Acciones</TableCell>
-                                        </TableRow>
-                                    </TableHead>
+                                    <SortableTableHead columns={COLUMNS} {...table.sortProps} />
                                     <TableBody>
                                         {paginatedColaboradores.map((colaborador) => (
                                             <TableRow key={colaborador.id} hover>
@@ -2058,20 +2009,9 @@ const ColaboradoresPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
+                            </AppTableContainer>
 
-                            <TablePagination
-                                component="div"
-                                count={sortedColaboradores.length}
-                                page={page}
-                                onPageChange={(e, newPage) => setPage(newPage)}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={(e) => {
-                                    setRowsPerPage(Number.parseInt(e.target.value, 10));
-                                    setPage(0);
-                                }}
-                                rowsPerPageOptions={[5, 10, 25, 50]}
-                            />
+                            <AppTablePagination count={sortedColaboradores.length} {...table.paginationProps} />
                         </>
                     )}
                 </CardContent>

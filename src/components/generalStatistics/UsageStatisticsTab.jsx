@@ -8,8 +8,6 @@ import {
     CardContent,
     Button,
     CircularProgress,
-    useTheme,
-    useMediaQuery,
     FormControl,
     InputLabel,
     Select,
@@ -36,6 +34,7 @@ import FilterBar from '../filters/FilterBar';
 import useFilters from '../../hooks/useFilters';
 import useNotify from '../../hooks/useNotify';
 import { F } from '../filters/filterFields';
+import useIsMobile from '../../hooks/useIsMobile';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -119,8 +118,7 @@ const calcDynamicHeight = (rowsCount, { min = 280, max = 620, perRow = 34 } = {}
 };
 
 const UsageStatisticsTab = () => {
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
 
     const [data, setData] = useState({
         schools: [],

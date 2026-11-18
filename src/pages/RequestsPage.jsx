@@ -7,22 +7,17 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import {
+    Paper,
     Box,
     Typography,
-    Paper,
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    TablePagination,
     TextField,
     MenuItem,
     Grid,
     Chip,
-    IconButton,
-    Tooltip,
     CircularProgress,
     Card,
     CardContent,
@@ -30,8 +25,7 @@ import {
     DialogTitle,
     DialogContent,
     DialogActions,
-    Button,
-    TableSortLabel
+    Button
 } from '@mui/material';
 import {
     Visibility as VisibilityIcon,
@@ -64,6 +58,11 @@ import {
     Create as CreateIcon,
 } from '@mui/icons-material';
 import PermissionGuard from '../components/PermissionGuard';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import RowActions from '../components/table/RowActions';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
@@ -115,6 +114,18 @@ const StatsCard = styled(Card)`
  * @returns {JSX.Element} Interfaz completa para listar y gestionar solicitudes.
  * @see {@link https://mui.com/material-ui/icons/} Para ver otros iconos disponibles (paquete @mui/icons-material).
  */
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'createdAt', label: 'Fecha', sortable: true },
+    { id: 'prioridad', label: 'Prioridad' },
+    { id: 'tipo', label: 'Tipo' },
+    { id: 'titulo', label: 'Título' },
+    { id: 'solicitante', label: 'Solicitante' },
+    { id: 'creada_por', label: 'Creada por' },
+    { id: 'estado', label: 'Estado' },
+    { id: 'acciones', label: 'Acciones', align: 'right' },
+];
+
 const RequestsPage = () => {
     const location = useLocation();
     const { schoolId, fiscalYear, corporationId } = useParams();
@@ -136,8 +147,9 @@ const RequestsPage = () => {
     const [loading, setLoading] = useState(true);
     const [statistics, setStatistics] = useState(null);
 
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
+    // Paginación y orden (en el servidor)
+    const table = useTableState({ defaultOrderBy: 'createdAt', defaultOrder: 'desc' });
+    const { page, rowsPerPage, orderBy: sortBy, order: sortOrder } = table;
     const [totalCount, setTotalCount] = useState(0);
 
     const pageFilters = useFilters({
@@ -151,15 +163,13 @@ const RequestsPage = () => {
             F.search('userName', { label: 'Solicitante', width: 'md' }),
             F.dateRange('dates'),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const { requestType, status, userName, dates } = pageFilters.applied;
     const filters = useMemo(
         () => ({ userName, status, requestType, startDate: dates.from, endDate: dates.to }),
         [userName, status, requestType, dates.from, dates.to]
     );
-    const [sortBy, setSortBy] = useState('createdAt');
-    const [sortOrder, setSortOrder] = useState('desc');
 
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [requestEvents, setRequestEvents] = useState([]);
@@ -245,18 +255,10 @@ const RequestsPage = () => {
         fetchScopeData();
     }, [schoolId, corporationId, stateSchool, stateCorporation]);
 
-    const handleChangePage = (event, newPage) => setPage(newPage);
-    const handleChangeRowsPerPage = (event) => { setRowsPerPage(Number.parseInt(event.target.value, 10)); setPage(0); };
-
-    const handleSort = (column) => {
-        const isAsc = sortBy === column && sortOrder === 'asc';
-        setSortOrder(isAsc ? 'desc' : 'asc');
-        setSortBy(column);
-    };
 
     // Register global refresh handler so the global button triggers this page's refresh
     useRegisterPageRefresh(async () => {
-        setPage(0);
+        table.resetPage();
         await Promise.all([fetchRequests(), fetchStatistics()]);
     }, [fetchRequests, fetchStatistics]);
 
@@ -802,22 +804,9 @@ const RequestsPage = () => {
 
             <FilterBar {...pageFilters.barProps} loading={loading} />
 
-            <TableContainer component={Paper} sx={{ borderRadius: 2, boxShadow: 1, overflowX: 'auto' }}>
+            <AppTableContainer component={Paper} sx={{ borderRadius: 2, boxShadow: 1 }}>
                 <Table size="small" sx={{ minWidth: 900 }}>
-                        <TableHead>
-                            <TableRow>
-                                <TableCell>
-                                    <TableSortLabel active={sortBy==='createdAt'} direction={sortOrder} onClick={() => handleSort('createdAt')}>Fecha</TableSortLabel>
-                                </TableCell>
-                                <TableCell>Prioridad</TableCell>
-                                <TableCell>Tipo</TableCell>
-                                <TableCell>Título</TableCell>
-                                <TableCell>Solicitante</TableCell>
-                                <TableCell>Creada por</TableCell>
-                                <TableCell>Estado</TableCell>
-                                <TableCell align="right">Acciones</TableCell>
-                            </TableRow>
-                        </TableHead>
+                        <SortableTableHead columns={COLUMNS} {...table.sortProps} />
                         <TableBody>
                             {loading ? (
                                 <TableRow><TableCell colSpan={8} align="center"><CircularProgress size={24} /></TableCell></TableRow>
@@ -833,40 +822,30 @@ const RequestsPage = () => {
                                         <TableCell>{r.createdBy?.name || r.createdBy?.email || r.requester?.name || '-'}</TableCell>
                                         <TableCell>{getStatusChip(r.status)}</TableCell>
                                     <TableCell align="right">
-                                        <Tooltip title="Ver detalle"><IconButton size="small" onClick={() => handleViewDetail(r)}><VisibilityIcon fontSize="small" /></IconButton></Tooltip>
-                                        <PermissionGuard permission="solicitudes-actualizar-estado">
-                                            <Tooltip title={isFinalStatus(r.status) || r.status === 'cancelled' ? 'Solicitud ya resuelta' : 'Cambiar estado'}>
-                                                <span>
-                                                    <IconButton size="small" color="primary" onClick={() => handleOpenStatusModal(r)} disabled={isFinalStatus(r.status) || r.status === 'cancelled'}>
-                                                        <EditIcon fontSize="small" />
-                                                    </IconButton>
-                                                </span>
-                                            </Tooltip>
-                                        </PermissionGuard>
-                                         <PermissionGuard permission="solicitudes-eliminar">
-                                            <Tooltip title={'Eliminar'}>
-                                                <IconButton size="small" color="error" onClick={() => handleOpenDeleteModal(r)}>
-                                                    <DeleteIcon fontSize="small" />
-                                                </IconButton>
-                                            </Tooltip>
-                                        </PermissionGuard>
+                                        <RowActions
+                                            actions={[
+                                                { key: 'view', kind: 'view', label: 'Ver detalle', icon: <VisibilityIcon fontSize="small" />, onClick: () => handleViewDetail(r) },
+                                                {
+                                                    key: 'status',
+                                                    kind: 'edit',
+                                                    color: 'primary',
+                                                    label: 'Cambiar estado',
+                                                    tooltip: isFinalStatus(r.status) || r.status === 'cancelled' ? 'Solicitud ya resuelta' : 'Cambiar estado',
+                                                    icon: <EditIcon fontSize="small" />,
+                                                    permission: 'solicitudes-actualizar-estado',
+                                                    disabled: isFinalStatus(r.status) || r.status === 'cancelled',
+                                                    onClick: () => handleOpenStatusModal(r),
+                                                },
+                                                { key: 'delete', kind: 'delete', label: 'Eliminar', icon: <DeleteIcon fontSize="small" />, permission: 'solicitudes-eliminar', onClick: () => handleOpenDeleteModal(r) },
+                                            ]}
+                                        />
                                     </TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
                     </Table>
-                </TableContainer>
-                <TablePagination
-                    component="div"
-                    count={totalCount}
-                    page={page}
-                    onPageChange={handleChangePage}
-                    rowsPerPage={rowsPerPage}
-                    onRowsPerPageChange={handleChangeRowsPerPage}
-                    rowsPerPageOptions={[5, 10, 25, 50]}
-                    labelRowsPerPage="Filas por página"
-                    labelDisplayedRows={({ from, to, count }) => `${from}-${to} de ${count !== -1 ? count : `más de ${to}`}`}
-                />
+                </AppTableContainer>
+                <AppTablePagination count={totalCount} {...table.paginationProps} />
 
             {/* Detail modal */}
             <Dialog

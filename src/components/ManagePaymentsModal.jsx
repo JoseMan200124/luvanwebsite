@@ -12,7 +12,6 @@ import {
     Button,
     Box,
     Table,
-    TableHead,
     TableRow,
     TableCell,
     TableBody,
@@ -25,14 +24,14 @@ import {
     Chip,
     Stack,
     Paper,
-    useMediaQuery,
-    useTheme,
     InputAdornment,
     Select,
     MenuItem
 } from '@mui/material';
-import TableSortLabel from '@mui/material/TableSortLabel';
-import TablePagination from '@mui/material/TablePagination';
+import useTableState from '../hooks/useTableState';
+import useIsMobile from '../hooks/useIsMobile';
+import AppTablePagination from './table/AppTablePagination';
+import SortableTableHead from './table/SortableTableHead';
 import { 
     ReceiptLong as ReceiptIcon, 
     Pause as PauseIcon, 
@@ -425,11 +424,22 @@ const HistoryMobileCard = ({ history, onToggleInvoiceRow, onOpenNotes, onOpenExp
     );
 };
 
+// Columnas del historial de transacciones
+const HISTORY_COLUMNS = [
+    { id: 'date', label: 'Fecha', sortable: true, align: 'center' },
+    { id: 'type', label: 'Tipo', sortable: true, align: 'center' },
+    { id: 'source', label: 'Fuente', sortable: true, align: 'center' },
+    { id: 'monto', label: 'Monto', align: 'center' },
+    { id: 'desc_extra', label: 'Desc. Extra', align: 'center' },
+    { id: 'n_boleta', label: 'N° Boleta', align: 'center' },
+    { id: 'factura', label: 'Factura', align: 'center' },
+    { id: 'notas', label: 'Notas' },
+];
+
 const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {}, onToggleInvoiceSent = () => {} }) => {
     const { hasPermission } = usePermissions();
     const puedeVerHistorial = hasPermission('pagos-ver-historial');
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
     const [localPayment, setLocalPayment] = useState(payment);
     useEffect(() => setLocalPayment(payment), [payment]);
     const family = localPayment?.User?.FamilyDetail || payment?.User?.FamilyDetail || {};
@@ -479,24 +489,16 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     // Prefer Sequelize included PaymentTransactions (backend includes them as PaymentTransactions)
     const [histories, setHistories] = useState([]);
     const [histLoading, setHistLoading] = useState(false);
-    const [histPage, setHistPage] = useState(0);
-    const [histLimit, setHistLimit] = useState(10);
+    // Paginación (en el servidor) y orden de la página actual del historial
+    const histTable = useTableState({ defaultOrderBy: 'date', defaultOrder: 'desc' });
+    const { page: histPage, rowsPerPage: histLimit, orderBy: histOrderBy, order: histOrder } = histTable;
     const [histTotal, setHistTotal] = useState(0);
-    // Sorting for history table
-    const [histOrderBy, setHistOrderBy] = useState('date'); // 'date' | 'type' | 'source'
-    const [histOrder, setHistOrder] = useState('desc'); // 'asc' | 'desc'
 
     // module-level cache (persists across renders)
     if (!global.__paymentHistCache) {
         global.__paymentHistCache = new Map();
     }
     const histCacheRef = React.useRef(global.__paymentHistCache);
-
-    const handleHistRequestSort = (property) => {
-        const isAsc = histOrderBy === property && histOrder === 'asc';
-        setHistOrder(isAsc ? 'desc' : 'asc');
-        setHistOrderBy(property);
-    };
 
     const sortedHistories = React.useMemo(() => {
         if (!Array.isArray(histories)) {
@@ -1300,15 +1302,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                             />
                         ))}
                         <Box sx={{ display: 'flex', justifyContent: 'flex-start', maxWidth: '100%' }}>
-                            <TablePagination
-                                component="div"
+                            <AppTablePagination
                                 count={histTotal}
-                                page={histPage}
-                                onPageChange={(e, newPage) => setHistPage(newPage)}
-                                rowsPerPage={histLimit}
-                                onRowsPerPageChange={(e) => { setHistLimit(Number.parseInt(e.target.value, 10)); setHistPage(0); }}
-                                rowsPerPageOptions={[5,10,25,50]}
-                                labelRowsPerPage="Filas"
+                                {...histTable.paginationProps}
                                 sx={{
                                     '& .MuiTablePagination-toolbar': { justifyContent: 'flex-start', paddingLeft: 0, flexWrap: 'wrap' },
                                     '& .MuiTablePagination-spacer': { display: 'none' }
@@ -1318,42 +1314,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                     </Stack>
                 ) : (
                 <Table size="small" sx={{ width: '100%' }}>
-                    <TableHead>
-                        <TableRow>
-                            <TableCell align="center">
-                                <TableSortLabel
-                                    active={histOrderBy === 'date'}
-                                    direction={histOrderBy === 'date' ? histOrder : 'desc'}
-                                    onClick={() => handleHistRequestSort('date')}
-                                >
-                                    Fecha
-                                </TableSortLabel>
-                            </TableCell>
-                            <TableCell align="center">
-                                <TableSortLabel
-                                    active={histOrderBy === 'type'}
-                                    direction={histOrderBy === 'type' ? histOrder : 'asc'}
-                                    onClick={() => handleHistRequestSort('type')}
-                                >
-                                    Tipo
-                                </TableSortLabel>
-                            </TableCell>
-                            <TableCell align="center">
-                                <TableSortLabel
-                                    active={histOrderBy === 'source'}
-                                    direction={histOrderBy === 'source' ? histOrder : 'asc'}
-                                    onClick={() => handleHistRequestSort('source')}
-                                >
-                                    Fuente
-                                </TableSortLabel>
-                            </TableCell>
-                            <TableCell align="center">Monto</TableCell>
-                            <TableCell align="center">Desc. Extra</TableCell>
-                            <TableCell align="center">N° Boleta</TableCell>
-                            <TableCell align="center">Factura</TableCell>
-                            <TableCell align="left">Notas</TableCell>
-                        </TableRow>
-                    </TableHead>
+                    <SortableTableHead columns={HISTORY_COLUMNS} {...histTable.sortProps} />
                     <TableBody>
                         {(!histLoading && sortedHistories.length === 0) && (
                             <TableRow>
@@ -1415,15 +1376,9 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                         <TableRow>
                             <TableCell colSpan={8} sx={{ border: 'none', py: 1 }}>
                                 <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
-                                    <TablePagination
-                                        component="div"
+                                    <AppTablePagination
                                         count={histTotal}
-                                        page={histPage}
-                                        onPageChange={(e, newPage) => setHistPage(newPage)}
-                                        rowsPerPage={histLimit}
-                                        onRowsPerPageChange={(e) => { setHistLimit(Number.parseInt(e.target.value, 10)); setHistPage(0); }}
-                                        rowsPerPageOptions={[5,10,25,50]}
-                                        labelRowsPerPage="Filas"
+                                        {...histTable.paginationProps}
                                         sx={{
                                             '& .MuiTablePagination-toolbar': { justifyContent: 'flex-start', paddingLeft: 0, flexWrap: 'wrap' },
                                             '& .MuiTablePagination-spacer': { display: 'none' }

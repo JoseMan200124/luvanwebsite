@@ -20,12 +20,7 @@ import {
     InputLabel,
     Select,
     MenuItem,
-    useTheme,
-    useMediaQuery,
     Chip,
-    Card,
-    CardContent,
-    CardActions,
     FormControlLabel,
     Switch
 } from '@mui/material';
@@ -39,10 +34,12 @@ import {
     Description as DocumentIcon
 } from '@mui/icons-material';
 import { useParams, useLocation } from 'react-router-dom';
-import styled from 'styled-components';
 
 import api from '../utils/axiosConfig';
 import PermissionGuard from '../components/PermissionGuard';
+import useIsMobile from '../hooks/useIsMobile';
+import { MobileCard, MobileField } from '../components/table/MobileCard';
+import RowActions from '../components/table/RowActions';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
 import usePermissions from '../hooks/usePermissions';
@@ -60,16 +57,9 @@ const PROTOCOL_TYPE_OPTIONS = [
     { value: 'reglamento', label: 'Reglamentos' },
 ];
 
-// Mobile view: Tarjeta para protocolo/reglamento
-const MobileProtocolCard = styled(Card)`
-    margin-bottom: 12px;
-    border-radius: 8px;
-`;
-
 const SchoolProtocolsPage = () => {
     const { hasPermission } = usePermissions();
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
     const { schoolId } = useParams();
     const location = useLocation();
 
@@ -340,66 +330,62 @@ const SchoolProtocolsPage = () => {
     // Renderizado
     // ---------------------------
     const renderProtocolCard = (protocol) => (
-        <MobileProtocolCard key={protocol.id}>
-            <CardContent>
-                <Box display="flex" alignItems="center" mb={1}>
-                    <DocumentIcon color="primary" sx={{ mr: 1 }} />
-                    <Typography variant="h6" component="div">
-                        {protocol.title}
-                    </Typography>
-                </Box>
-
-                <Box display="flex" gap={1} mb={1} flexWrap="wrap">
-                    <Chip
-                        label={protocol.type === 'protocolo' ? 'Protocolo' : 'Reglamento'}
-                        color={protocol.type === 'protocolo' ? 'primary' : 'secondary'}
+        <MobileCard
+            key={protocol.id}
+            sx={{ mb: 1.5, borderRadius: '8px' }}
+            actions={(
+                <>
+                    <Button
                         size="small"
-                    />
-                    <Chip
-                        label={protocol.isActive ? 'Activo' : 'Inactivo'}
-                        color={protocol.isActive ? 'success' : 'error'}
+                        onClick={() => handleViewPdf(protocol)}
+                        startIcon={<VisibilityIcon />}
+                    >
+                        Ver PDF
+                    </Button>
+                    <Button
                         size="small"
+                        onClick={() => handleDownloadPdf(protocol)}
+                        startIcon={<DownloadIcon />}
+                    >
+                        Descargar
+                    </Button>
+                    <RowActions
+                        actions={[
+                            { key: 'edit', kind: 'edit', label: 'Editar', icon: <EditIcon fontSize="small" />, permission: 'protocolos-editar', onClick: () => handleEdit(protocol) },
+                            { key: 'delete', kind: 'delete', label: 'Eliminar', icon: <DeleteIcon fontSize="small" />, permission: 'protocolos-eliminar', onClick: () => handleDelete(protocol) },
+                        ]}
                     />
-                </Box>
-
-                {protocol.description && (
-                    <Typography variant="body2" color="text.secondary" mb={1}>
-                        {protocol.description}
-                    </Typography>
-                )}
-
-                <Typography variant="body2" color="text.secondary">
-                    <strong>Creado:</strong> {new Date(protocol.createdAt).toLocaleDateString()}
+                </>
+            )}
+        >
+            <Box display="flex" alignItems="center" mb={1}>
+                <DocumentIcon color="primary" sx={{ mr: 1 }} />
+                <Typography variant="h6" component="div">
+                    {protocol.title}
                 </Typography>
-            </CardContent>
+            </Box>
 
-            <CardActions>
-                <Button
+            <Box display="flex" gap={1} mb={1} flexWrap="wrap">
+                <Chip
+                    label={protocol.type === 'protocolo' ? 'Protocolo' : 'Reglamento'}
+                    color={protocol.type === 'protocolo' ? 'primary' : 'secondary'}
                     size="small"
-                    onClick={() => handleViewPdf(protocol)}
-                    startIcon={<VisibilityIcon />}
-                >
-                    Ver PDF
-                </Button>
-                <Button
+                />
+                <Chip
+                    label={protocol.isActive ? 'Activo' : 'Inactivo'}
+                    color={protocol.isActive ? 'success' : 'error'}
                     size="small"
-                    onClick={() => handleDownloadPdf(protocol)}
-                    startIcon={<DownloadIcon />}
-                >
-                    Descargar
-                </Button>
-                <PermissionGuard permission="protocolos-editar">
-                    <IconButton size="small" onClick={() => handleEdit(protocol)}>
-                        <EditIcon />
-                    </IconButton>
-                </PermissionGuard>
-                <PermissionGuard permission="protocolos-eliminar">
-                    <IconButton size="small" onClick={() => handleDelete(protocol)}>
-                        <DeleteIcon />
-                    </IconButton>
-                </PermissionGuard>
-            </CardActions>
-        </MobileProtocolCard>
+                />
+            </Box>
+
+            {protocol.description && (
+                <Typography variant="body2" color="text.secondary" mb={1}>
+                    {protocol.description}
+                </Typography>
+            )}
+
+            <MobileField label="Creado">{new Date(protocol.createdAt).toLocaleDateString()}</MobileField>
+        </MobileCard>
     );
 
     const renderProtocolListItem = (protocol) => (

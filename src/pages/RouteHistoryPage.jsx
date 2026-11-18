@@ -27,7 +27,6 @@ import {
     TableCell,
     TableContainer,
     useTheme,
-    useMediaQuery,
     MobileStepper,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
@@ -57,6 +56,7 @@ import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, Cell, LabelList, CartesianGrid } from 'recharts';
 import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
+import useIsMobile from '../hooks/useIsMobile';
 
 const RouteHistoryPage = () => {
     const [loading, setLoading] = useState(false);
@@ -444,7 +444,7 @@ const RouteHistoryPage = () => {
 
     const contentMinHeight = 320;
     const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
     const chartPrimary = theme.palette.primary.main;
     const chartPrimaryLight = theme.palette.primary.light;
 

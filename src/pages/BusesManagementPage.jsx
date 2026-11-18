@@ -2,19 +2,16 @@
 
 import React, { useState, useEffect, useContext } from 'react';
 import {
+    Paper,
     Typography,
     Table,
     TableBody,
     TableCell,
-    TableHead,
     TableRow,
     Button,
     TextField,
     IconButton,
     Tooltip,
-    Paper,
-    TableContainer,
-    TablePagination,
     Dialog,
     DialogActions,
     DialogContent,
@@ -27,10 +24,7 @@ import {
     Link,
     Box,
     FormControlLabel,
-    Switch,
-    useTheme,
-    useMediaQuery,
-    TableSortLabel
+    Switch
 } from '@mui/material';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import {
@@ -44,7 +38,6 @@ import {
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import { getCiclosEscolares } from '../services/cicloEscolarService';
-import styled from 'styled-components';
 import * as XLSX from 'xlsx';
 import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
@@ -57,6 +50,14 @@ import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { matchSearchTokens } from '../utils/clientFilter';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
+import useTableState from '../hooks/useTableState';
+import useIsMobile from '../hooks/useIsMobile';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import { MobileCard, MobileField } from '../components/table/MobileCard';
+import RowActions from '../components/table/RowActions';
+import { sortRows } from '../utils/tableSort';
 
 const AVAILABILITY_OPTIONS = [
     { value: 'assigned', label: 'Asignados' },
@@ -82,94 +83,17 @@ const getFormattedDateTime = () => {
     return `${year}${month}${day}_${hours}${minutes}${seconds}`;
 };
 
-// ======== Estilos para vista desktop (tabla) ========
-
-const ResponsiveTableCell = styled(TableCell)`
-    @media (max-width: 600px) {
-        display: block;
-        text-align: right;
-        position: relative;
-        padding-left: 50%;
-        white-space: nowrap;
-        &:before {
-            content: attr(data-label);
-            position: absolute;
-            left: 0;
-            width: 45%;
-            padding-left: 15px;
-            font-weight: bold;
-            text-align: left;
-            white-space: nowrap;
-        }
-    }
-`;
-
-// ======== Estilos para vista móvil (tarjetas) ========
-const MobileCard = styled(Paper)`
-    padding: 16px;
-    margin-bottom: 16px;
-`;
-
-const MobileField = styled(Box)`
-    margin-bottom: 8px;
-    display: flex;
-    flex-direction: column;
-`;
-
-const MobileLabel = styled(Typography)`
-    font-weight: bold;
-    font-size: 0.875rem;
-    color: #555;
-`;
-
-const MobileValue = styled(Typography)`
-    font-size: 1rem;
-`;
-
-/* =================== Código para ordenamiento =================== */
-function descendingComparator(a, b, orderBy) {
-    const aValue = getFieldValue(a, orderBy);
-    const bValue = getFieldValue(b, orderBy);
-
-    if (aValue == null && bValue == null) {
-        return 0;
-    }
-    if (aValue == null) {
-        return 1;
-    }
-    if (bValue == null) {
-        return -1;
-    }
-
-    if (typeof aValue === 'string' && typeof bValue === 'string') {
-        return bValue.localeCompare(aValue);
-    }
-    if (bValue < aValue) {
-        return -1;
-    }
-    if (bValue > aValue) {
-        return 1;
-    }
-    return 0;
-}
-
-function getComparator(order, orderBy) {
-    return order === 'desc'
-        ? (a, b) => descendingComparator(a, b, orderBy)
-        : (a, b) => -descendingComparator(a, b, orderBy);
-}
-
-function stableSort(array, comparator) {
-    const stabilizedThis = array.map((el, index) => [el, index]);
-    stabilizedThis.sort((a, b) => {
-        const order = comparator(a[0], b[0]);
-        if (order !== 0) {
-            return order;
-        }
-        return a[1] - b[1];
-    });
-    return stabilizedThis.map((el) => el[0]);
-}
+// Columnas de la tabla de buses
+const COLUMNS = [
+    { id: 'plate', label: 'Placa', sortable: true },
+    { id: 'capacity', label: 'Capacidad', sortable: true },
+    { id: 'description', label: 'Descripción', sortable: true },
+    { id: 'totalDistanceTraveled', label: 'Km acumulados', sortable: true },
+    { id: 'assignment', label: 'Asignación' },
+    { id: 'status', label: 'Estado' },
+    { id: 'files', label: 'Archivos', width: 200 },
+    { id: 'actions', label: 'Acciones', align: 'center' },
+];
 
 function getFieldValue(bus, field) {
     switch (field) {
@@ -205,11 +129,9 @@ function getAssignmentText(bus) {
     }
     return `Ruta ${routeNumber}`;
 }
-/* =================== Fin código para ordenamiento =================== */
 
 const BusesManagementPage = () => {
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
     const { hasPermission } = usePermissions();
     const notify = useNotify();
     const confirm = useConfirm();
@@ -220,8 +142,8 @@ const BusesManagementPage = () => {
     const [selectedBus, setSelectedBus] = useState(null);
     const [openDialog, setOpenDialog] = useState(false);
 
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
+    // Paginación y ordenamiento
+    const table = useTableState();
     const [loading, setLoading] = useState(false);
 
     // Removed: Assignment-related state variables (pilots, monitors, schools, route numbers)
@@ -233,17 +155,7 @@ const BusesManagementPage = () => {
     const [bulkResults, setBulkResults] = useState(null);
     const [bulkLoading, setBulkLoading] = useState(false);
 
-    // Ordenamiento
-    const [order, setOrder] = useState('asc');
-    const [orderBy, setOrderBy] = useState('');
-
-
     // =================== Efectos y funciones ===================
-    const handleRequestSort = (property) => {
-        const isAsc = orderBy === property && order === 'asc';
-        setOrder(isAsc ? 'desc' : 'asc');
-        setOrderBy(property);
-    };
 
     const fetchBuses = async () => {
         setLoading(true);
@@ -512,7 +424,7 @@ const BusesManagementPage = () => {
             F.select('availability', { label: 'Disponibilidad', width: 'sm', options: AVAILABILITY_OPTIONS }),
             F.select('workshop', { label: 'Estado', width: 'sm', options: WORKSHOP_OPTIONS }),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const {
         search: searchQuery,
@@ -573,16 +485,6 @@ const BusesManagementPage = () => {
 
         return true;
     });
-
-    // =================== Paginación ===================
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
 
     // ============== CARGA MASIVA ==============
     const handleOpenBulkDialog = () => {
@@ -668,8 +570,15 @@ const BusesManagementPage = () => {
         URL.revokeObjectURL(url);
     };
 
-    // Aplicar ordenamiento
-    const sortedBuses = stableSort(filteredBuses, getComparator(order, orderBy));
+    // Aplicar ordenamiento y paginación
+    const sortedBuses = sortRows(filteredBuses, { orderBy: table.orderBy, order: table.order, getValue: getFieldValue });
+    const pageBuses = table.paginate(sortedBuses);
+
+    // Acciones por fila
+    const rowActions = (bus) => [
+        { key: 'edit', kind: 'edit', label: 'Editar', icon: <Edit fontSize="small" />, permission: 'buses-editar', onClick: () => handleEditClick(bus) },
+        { key: 'delete', kind: 'delete', label: 'Eliminar', icon: <Delete fontSize="small" />, permission: 'buses-eliminar', onClick: () => handleDeleteClick(bus) },
+    ];
 
     // =================== RENDER ===================
     const selectedBusHasAssignment = Boolean(
@@ -701,52 +610,90 @@ const BusesManagementPage = () => {
                 <>
                     {isMobile ? (
                         <>
-                            {sortedBuses
-                                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                .map((bus) => (
-                                    <MobileCard key={bus.id} elevation={3}>
-                                        <MobileField>
-                                            <MobileLabel>Placa</MobileLabel>
-                                            <MobileValue>{bus.plate}</MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Capacidad</MobileLabel>
-                                            <MobileValue>{bus.capacity}</MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Descripción</MobileLabel>
-                                            <MobileValue>{bus.description}</MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Asignación</MobileLabel>
-                                            <MobileValue>{getAssignmentText(bus)}</MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Estado</MobileLabel>
-                                            <MobileValue>
-                                                {bus.decommissioned ? (
-                                                    <Typography sx={{ color: 'black', fontWeight: 'bold' }}>
-                                                        DADO DE BAJA
-                                                    </Typography>
-                                                ) : bus.inWorkshop ? (
-                                                    <Typography sx={{ color: 'red', fontWeight: 'bold' }}>
-                                                        EN TALLER
-                                                    </Typography>
-                                                ) : (
-                                                    <Typography sx={{ color: 'green', fontWeight: 'bold' }}>
-                                                        DISPONIBLE
-                                                    </Typography>
-                                                )}
-                                            </MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Kilómetros acumulados</MobileLabel>
-                                            <MobileValue>{Number(bus.totalDistanceTraveled || 0).toFixed(3)} km</MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Archivos</MobileLabel>
-                                            <MobileValue>
-                                                {bus.files && bus.files.length > 0 ? (
+                            {pageBuses.map((bus) => (
+                                <MobileCard key={bus.id} elevation={3} actions={<RowActions actions={rowActions(bus)} />}>
+                                    <MobileField label="Placa">{bus.plate}</MobileField>
+                                    <MobileField label="Capacidad">{bus.capacity}</MobileField>
+                                    <MobileField label="Descripción">{bus.description}</MobileField>
+                                    <MobileField label="Asignación">{getAssignmentText(bus)}</MobileField>
+                                    <MobileField label="Estado">
+                                        {bus.decommissioned ? (
+                                            <Typography sx={{ color: 'black', fontWeight: 'bold' }}>
+                                                DADO DE BAJA
+                                            </Typography>
+                                        ) : bus.inWorkshop ? (
+                                            <Typography sx={{ color: 'red', fontWeight: 'bold' }}>
+                                                EN TALLER
+                                            </Typography>
+                                        ) : (
+                                            <Typography sx={{ color: 'green', fontWeight: 'bold' }}>
+                                                DISPONIBLE
+                                            </Typography>
+                                        )}
+                                    </MobileField>
+                                    <MobileField label="Kilómetros acumulados">{Number(bus.totalDistanceTraveled || 0).toFixed(3)} km</MobileField>
+                                    <MobileField label="Archivos">
+                                        {bus.files && bus.files.length > 0 ? (
+                                            <List disablePadding>
+                                                {bus.files.map((file) => {
+                                                    const fileLabel = file.fileName.split('/').pop();
+                                                    return (
+                                                        <ListItem key={file.id} disableGutters sx={{ p: 0 }}>
+                                                            {file.fileType === 'application/pdf' ? (
+                                                                <InsertDriveFile sx={{ mr: 1 }} />
+                                                            ) : (
+                                                                <ImageIcon sx={{ mr: 1 }} />
+                                                            )}
+                                                            <Link
+                                                                href={file.fileUrl}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                underline="hover"
+                                                                variant="body2"
+                                                            >
+                                                                {fileLabel}
+                                                            </Link>
+                                                        </ListItem>
+                                                    );
+                                                })}
+                                            </List>
+                                        ) : (
+                                            'No hay archivos.'
+                                        )}
+                                    </MobileField>
+                                </MobileCard>
+                            ))}
+                            <AppTablePagination count={sortedBuses.length} {...table.paginationProps} />
+                        </>
+                    ) : (
+                        <Paper>
+                            <AppTableContainer>
+                                <Table stickyHeader sx={{ minWidth: 900 }}>
+                                    <SortableTableHead columns={COLUMNS} {...table.sortProps} showSortIcons />
+                                    <TableBody>
+                                        {pageBuses.map((bus) => (
+                                            <TableRow key={bus.id}>
+                                                <TableCell>{bus.plate}</TableCell>
+                                                <TableCell>{bus.capacity}</TableCell>
+                                                <TableCell>{bus.description}</TableCell>
+                                                <TableCell>{Number(bus.totalDistanceTraveled || 0).toFixed(3)} km</TableCell>
+                                                <TableCell>{getAssignmentText(bus)}</TableCell>
+                                                <TableCell>
+                                                    {bus.decommissioned ? (
+                                                        <Typography sx={{ color: 'black', fontWeight: 'bold' }}>
+                                                            DADO DE BAJA
+                                                        </Typography>
+                                                    ) : bus.inWorkshop ? (
+                                                        <Typography sx={{ color: 'red', fontWeight: 'bold' }}>
+                                                            EN TALLER
+                                                        </Typography>
+                                                    ) : (
+                                                        <Typography sx={{ color: 'green', fontWeight: 'bold' }}>
+                                                            DISPONIBLE
+                                                        </Typography>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell sx={{ maxWidth: 200, verticalAlign: 'top' }}>
                                                     <List disablePadding>
                                                         {bus.files.map((file) => {
                                                             const fileLabel = file.fileName.split('/').pop();
@@ -757,238 +704,57 @@ const BusesManagementPage = () => {
                                                                     ) : (
                                                                         <ImageIcon sx={{ mr: 1 }} />
                                                                     )}
-                                                                    <Link
-                                                                        href={file.fileUrl}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        underline="hover"
-                                                                        variant="body2"
-                                                                    >
-                                                                        {fileLabel}
-                                                                    </Link>
+                                                                    <Tooltip title={fileLabel}>
+                                                                        <ListItemText
+                                                                            primary={
+                                                                                <Link
+                                                                                    href={file.fileUrl}
+                                                                                    target="_blank"
+                                                                                    rel="noopener noreferrer"
+                                                                                >
+                                                                                    {fileLabel}
+                                                                                </Link>
+                                                                            }
+                                                                            primaryTypographyProps={{
+                                                                                noWrap: true,
+                                                                                sx: {
+                                                                                    overflow: 'hidden',
+                                                                                    textOverflow: 'ellipsis',
+                                                                                    maxWidth: '140px'
+                                                                                }
+                                                                            }}
+                                                                        />
+                                                                    </Tooltip>
                                                                 </ListItem>
                                                             );
                                                         })}
-                                                    </List>
-                                                ) : (
-                                                    'No hay archivos.'
-                                                )}
-                                            </MobileValue>
-                                        </MobileField>
-                                        <Box
-                                            sx={{
-                                                display: 'flex',
-                                                justifyContent: 'center',
-                                                gap: 1,
-                                                marginTop: 1
-                                            }}
-                                        >
-                                            <PermissionGuard permission="buses-editar">
-                                                <Tooltip title="Editar">
-                                                    <IconButton onClick={() => handleEditClick(bus)}>
-                                                        <Edit />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            </PermissionGuard>
-                                            <PermissionGuard permission="buses-eliminar">
-                                                <Tooltip title="Eliminar">
-                                                    <IconButton onClick={() => handleDeleteClick(bus)}>
-                                                        <Delete />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            </PermissionGuard>
-                                        </Box>
-                                    </MobileCard>
-                                ))}
-                            <TablePagination
-                                component="div"
-                                count={sortedBuses.length}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                rowsPerPageOptions={[5, 10, 25]}
-                                labelRowsPerPage="Filas por página"
-                            />
-                        </>
-                    ) : (
-                        <Paper>
-                            <TableContainer sx={{ overflowX: 'auto' }}>
-                                <Table stickyHeader sx={{ minWidth: 900 }}>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell sortDirection={orderBy === 'plate' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'plate'}
-                                                    direction={orderBy === 'plate' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('plate')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Placa
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'capacity' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'capacity'}
-                                                    direction={orderBy === 'capacity' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('capacity')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Capacidad
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'description' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'description'}
-                                                    direction={orderBy === 'description' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('description')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Descripción
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'totalDistanceTraveled' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'totalDistanceTraveled'}
-                                                    direction={orderBy === 'totalDistanceTraveled' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('totalDistanceTraveled')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Km acumulados
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>Asignación</TableCell>
-                                            <TableCell>Estado</TableCell>
-                                            <TableCell sx={{ maxWidth: 200 }}>Archivos</TableCell>
-                                            <TableCell align="center">Acciones</TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {sortedBuses
-                                            .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                            .map((bus) => (
-                                                <TableRow key={bus.id}>
-                                                    <ResponsiveTableCell data-label="Placa">
-                                                        {bus.plate}
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Capacidad">
-                                                        {bus.capacity}
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Descripción">
-                                                        {bus.description}
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Km acumulados">
-                                                        {Number(bus.totalDistanceTraveled || 0).toFixed(3)} km
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Asignación">
-                                                        {getAssignmentText(bus)}
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Estado">
-                                                        {bus.decommissioned ? (
-                                                            <Typography sx={{ color: 'black', fontWeight: 'bold' }}>
-                                                                DADO DE BAJA
-                                                            </Typography>
-                                                        ) : bus.inWorkshop ? (
-                                                            <Typography sx={{ color: 'red', fontWeight: 'bold' }}>
-                                                                EN TALLER
-                                                            </Typography>
-                                                        ) : (
-                                                            <Typography sx={{ color: 'green', fontWeight: 'bold' }}>
-                                                                DISPONIBLE
+                                                        {bus.files.length === 0 && (
+                                                            <Typography
+                                                                variant="body2"
+                                                                color="textSecondary"
+                                                                sx={{ fontStyle: 'italic' }}
+                                                            >
+                                                                No hay archivos.
                                                             </Typography>
                                                         )}
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell
-                                                        data-label="Archivos"
-                                                        sx={{ maxWidth: 200, verticalAlign: 'top' }}
-                                                    >
-                                                        <List disablePadding>
-                                                            {bus.files.map((file) => {
-                                                                const fileLabel = file.fileName.split('/').pop();
-                                                                return (
-                                                                    <ListItem key={file.id} disableGutters sx={{ p: 0 }}>
-                                                                        {file.fileType === 'application/pdf' ? (
-                                                                            <InsertDriveFile sx={{ mr: 1 }} />
-                                                                        ) : (
-                                                                            <ImageIcon sx={{ mr: 1 }} />
-                                                                        )}
-                                                                        <Tooltip title={fileLabel}>
-                                                                            <ListItemText
-                                                                                primary={
-                                                                                    <Link
-                                                                                        href={file.fileUrl}
-                                                                                        target="_blank"
-                                                                                        rel="noopener noreferrer"
-                                                                                    >
-                                                                                        {fileLabel}
-                                                                                    </Link>
-                                                                                }
-                                                                                primaryTypographyProps={{
-                                                                                    noWrap: true,
-                                                                                    sx: {
-                                                                                        overflow: 'hidden',
-                                                                                        textOverflow: 'ellipsis',
-                                                                                        maxWidth: '140px'
-                                                                                    }
-                                                                                }}
-                                                                            />
-                                                                        </Tooltip>
-                                                                    </ListItem>
-                                                                );
-                                                            })}
-                                                            {bus.files.length === 0 && (
-                                                                <Typography
-                                                                    variant="body2"
-                                                                    color="textSecondary"
-                                                                    sx={{ fontStyle: 'italic' }}
-                                                                >
-                                                                    No hay archivos.
-                                                                </Typography>
-                                                            )}
-                                                        </List>
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Acciones" align="center">
-                                                        <PermissionGuard permission="buses-editar">
-                                                            <Tooltip title="Editar">
-                                                                <IconButton onClick={() => handleEditClick(bus)}>
-                                                                    <Edit />
-                                                                </IconButton>
-                                                            </Tooltip>
-                                                        </PermissionGuard>
-                                                        <PermissionGuard permission="buses-eliminar">
-                                                            <Tooltip title="Eliminar">
-                                                                <IconButton onClick={() => handleDeleteClick(bus)}>
-                                                                    <Delete />
-                                                                </IconButton>
-                                                            </Tooltip>
-                                                        </PermissionGuard>
-                                                    </ResponsiveTableCell>
-                                                </TableRow>
-                                            ))}
+                                                    </List>
+                                                </TableCell>
+                                                <TableCell align="center">
+                                                    <RowActions actions={rowActions(bus)} />
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
                                         {sortedBuses.length === 0 && (
                                             <TableRow>
-                                                <ResponsiveTableCell colSpan={6} align="center">
+                                                <TableCell colSpan={8} align="center">
                                                     No se encontraron buses.
-                                                </ResponsiveTableCell>
+                                                </TableCell>
                                             </TableRow>
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={sortedBuses.length}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                rowsPerPageOptions={[5, 10, 25]}
-                                labelRowsPerPage="Filas por página"
-                            />
+                            </AppTableContainer>
+                            <AppTablePagination count={sortedBuses.length} {...table.paginationProps} />
                         </Paper>
                     )}
                 </>

@@ -2,23 +2,18 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Typography,
     Paper,
+    Typography,
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    TablePagination,
     CircularProgress,
     Box,
     Grid,
     Card,
     CardContent,
     Chip,
-    IconButton,
-    Tooltip,
     Dialog,
     DialogTitle,
     DialogContent,
@@ -48,14 +43,35 @@ import { F, toPlateOptions, toRouteOptions } from '../components/filters/filterF
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import RowActions from '../components/table/RowActions';
 
 moment.tz.setDefault('America/Guatemala');
+
+// Columnas de la tabla de asistencias
+const COLUMNS = [
+    { id: 'fecha', label: 'Fecha' },
+    { id: 'dia', label: 'Día' },
+    { id: 'horario', label: 'Horario' },
+    { id: 'monitora', label: 'Monitora' },
+    { id: 'placa', label: 'Placa' },
+    { id: 'ruta', label: 'Ruta' },
+    { id: 'colegio', label: 'Colegio' },
+    { id: 'total_alumnos', label: 'Total Alumnos', align: 'center' },
+    { id: 'presentes', label: 'Presentes', align: 'center' },
+    { id: 'asistencia', label: '% Asistencia', align: 'center' },
+    { id: 'acciones', label: 'Acciones', align: 'center' },
+];
 
 const AttendanceManagementPage = () => {
     const [attendances, setAttendances] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(25);
+    // Paginación (en el servidor)
+    const table = useTableState();
+    const { page, rowsPerPage } = table;
     const [totalCount, setTotalCount] = useState(0);
 
     // Modal de detalles
@@ -112,7 +128,7 @@ const AttendanceManagementPage = () => {
             F.schedule({ dependsOn: 'client', requireParent: false, options: availableScheduleCodes.map((code) => ({ value: code, label: getScheduleLabel(code) })) }),
             F.dateRange('dates'),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const {
         cycle: selectedCicloEscolar,
@@ -287,15 +303,6 @@ const AttendanceManagementPage = () => {
         setAttendanceDetails(null);
     };
 
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
-
     const getDayLabel = (day) => {
         const labels = {
             'monday': 'Lunes',
@@ -380,23 +387,9 @@ const AttendanceManagementPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer sx={{ overflowX: 'auto' }}>
+                            <AppTableContainer>
                                 <Table sx={{ minWidth: 980 }}>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>Fecha</TableCell>
-                                            <TableCell>Día</TableCell>
-                                            <TableCell>Horario</TableCell>
-                                            <TableCell>Monitora</TableCell>
-                                            <TableCell>Placa</TableCell>
-                                            <TableCell>Ruta</TableCell>
-                                            <TableCell>Colegio</TableCell>
-                                            <TableCell align="center">Total Alumnos</TableCell>
-                                            <TableCell align="center">Presentes</TableCell>
-                                            <TableCell align="center">% Asistencia</TableCell>
-                                            <TableCell align="center">Acciones</TableCell>
-                                        </TableRow>
-                                    </TableHead>
+                                    <SortableTableHead columns={COLUMNS} />
                                     <TableBody>
                                         {attendances.map((attendance) => {
                                             const percentage = attendance.totalAlumnos > 0
@@ -445,15 +438,11 @@ const AttendanceManagementPage = () => {
                                                         />
                                                     </TableCell>
                                                     <TableCell align="center">
-                                                        <Tooltip title="Ver lista de alumnos">
-                                                            <IconButton 
-                                                                size="small"
-                                                                color="primary"
-                                                                onClick={() => handleViewDetails(attendance)}
-                                                            >
-                                                                <VisibilityIcon />
-                                                            </IconButton>
-                                                        </Tooltip>
+                                                        <RowActions
+                                                            actions={[
+                                                                { key: 'view', kind: 'view', color: 'primary', label: 'Ver lista de alumnos', icon: <VisibilityIcon fontSize="small" />, onClick: () => handleViewDetails(attendance) },
+                                                            ]}
+                                                        />
                                                     </TableCell>
                                                 </TableRow>
                                             );
@@ -467,19 +456,8 @@ const AttendanceManagementPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={totalCount}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                labelRowsPerPage="Registros por página:"
-                                labelDisplayedRows={({ from, to, count }) =>
-                                    `${from}-${to} de ${count !== -1 ? count : `más de ${to}`}`
-                                }
-                            />
+                            </AppTableContainer>
+                            <AppTablePagination count={totalCount} {...table.paginationProps} />
                         </>
                     )}
                 </Paper>

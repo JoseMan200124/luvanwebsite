@@ -9,14 +9,11 @@ import {
     InputLabel,
     Select,
     Button,
-    TableContainer,
     Table,
-    TableHead,
     TableRow,
     TableCell,
     TableBody,
     Box,
-    TablePagination,
     Dialog,
     DialogTitle,
     DialogContent,
@@ -27,6 +24,19 @@ import api from '../utils/axiosConfig';
 import usePermissions from '../hooks/usePermissions';
 import moment from 'moment';
 import useNotify from '../hooks/useNotify';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from './table/AppTablePagination';
+import SortableTableHead from './table/SortableTableHead';
+import AppTableContainer from './table/AppTableContainer';
+
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'colegio', label: 'Colegio' },
+    { id: 'familia', label: 'Familia' },
+    { id: 'tipo_de_evento', label: 'Tipo de Evento' },
+    { id: 'fecha', label: 'Fecha' },
+    { id: 'monto', label: 'Monto' },
+];
 
 const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', hideSchoolSelect = false, noWrapper = false }) => {
     const { hasPermission } = usePermissions();
@@ -61,8 +71,9 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
     const [filterEndDate, setFilterEndDate] = useState(
         moment().endOf('month').format('YYYY-MM-DD')
     );
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
+    // Paginación (en el servidor)
+    const table = useTableState();
+    const { page, rowsPerPage, setPage } = table;
     const [totalExtraPayments, setTotalExtraPayments] = useState(0);
 
     // Snackbar para mensajes
@@ -215,14 +226,6 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
         fetchExtraordinaryPayments(filterStartDate, filterEndDate, 0, rowsPerPage);
     };
 
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
 
     const content = (
         <>
@@ -509,17 +512,9 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
                 {/* Tabla de pagos extraordinarios */}
                 <Box mt={2}>
                     {extraPayments.length > 0 ? (
-                        <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
+                        <AppTableContainer component={Paper}>
                             <Table size="small" sx={{ minWidth: 640 }}>
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell>Colegio</TableCell>
-                                        <TableCell>Familia</TableCell>
-                                        <TableCell>Tipo de Evento</TableCell>
-                                        <TableCell>Fecha</TableCell>
-                                        <TableCell>Monto</TableCell>
-                                    </TableRow>
-                                </TableHead>
+                                <SortableTableHead columns={COLUMNS} />
                                 <TableBody>
                                     {extraPayments.map((payment) => (
                                         <TableRow key={payment.id}>
@@ -538,23 +533,14 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
                                     ))}
                                 </TableBody>
                             </Table>
-                        </TableContainer>
+                        </AppTableContainer>
                     ) : (
                         <Typography variant="body2" color="textSecondary">
                             No se encontraron pagos extraordinarios para el período seleccionado.
                         </Typography>
                     )}
                 </Box>
-                <TablePagination
-                    component="div"
-                    count={totalExtraPayments}
-                    page={page}
-                    onPageChange={handleChangePage}
-                    rowsPerPage={rowsPerPage}
-                    onRowsPerPageChange={handleChangeRowsPerPage}
-                    rowsPerPageOptions={[5, 10, 25]}
-                    labelRowsPerPage="Filas por página"
-                />
+                <AppTablePagination count={totalExtraPayments} {...table.paginationProps} />
             </Box>
 
 

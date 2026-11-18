@@ -4,12 +4,9 @@ import {
     Table,
     TableBody,
     TableCell,
-    TableHead,
     TableRow,
     Button,
     Paper,
-    TableContainer,
-    TablePagination,
     Dialog,
     DialogTitle,
     DialogContent,
@@ -19,19 +16,14 @@ import {
     Grid,
     Box,
     // Link,
-    useMediaQuery,
-    useTheme,
     Chip,
-    TableSortLabel,
     Checkbox,
     FormControl,
     FormHelperText,
     InputLabel,
     Select,
     MenuItem,
-    TextField,
-    Tooltip,
-    IconButton
+    TextField
 } from '@mui/material';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
@@ -44,7 +36,6 @@ import { Autocomplete } from '@mui/material';
 import { ListItemText } from '@mui/material';
 import { Alert } from '@mui/material';
 import { Edit, Delete, Add, FileUpload, Lock } from '@mui/icons-material';
-import styled from 'styled-components';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import * as XLSX from 'xlsx';
@@ -52,6 +43,14 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
 import PermissionGuard from '../components/PermissionGuard';
+import useTableState from '../hooks/useTableState';
+import useIsMobile from '../hooks/useIsMobile';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import { MobileCard, MobileField } from '../components/table/MobileCard';
+import RowActions from '../components/table/RowActions';
+import { sortRows } from '../utils/tableSort';
 import usePermissions from '../hooks/usePermissions';
 import useManageableRoles from '../hooks/useManageableRoles';
 
@@ -82,49 +81,16 @@ const BULK_SHEET_ROLE_IDS = Object.freeze({
 // escolar. Must mirror `normalizeSchoolIdentityForStaffScope` in the backend.
 const normalizeSchoolName = (value) => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
 
-/* ================== Responsive Table & Mobile Cards =================== */
-// Contenedor principal de la página
-const ResponsiveTableHead = styled(TableHead)`
-    @media (max-width: 600px) {
-        display: none;
-    }
-`;
-const ResponsiveTableCell = styled(TableCell)`
-    @media (max-width: 600px) {
-        display: block;
-        text-align: right;
-        position: relative;
-        padding-left: 50%;
-        white-space: nowrap;
-        &:before {
-            content: attr(data-label);
-            position: absolute;
-            left: 0;
-            width: 45%;
-            padding-left: 15px;
-            font-weight: bold;
-            text-align: left;
-            white-space: nowrap;
-        }
-    }
-`;
-const MobileCard = styled(Paper)`
-    padding: 16px;
-    margin-bottom: 16px;
-`;
-const MobileField = styled(Box)`
-    margin-bottom: 8px;
-    display: flex;
-    flex-direction: column;
-`;
-const MobileLabel = styled(Typography)`
-    font-weight: bold;
-    font-size: 0.875rem;
-    color: #555;
-`;
-const MobileValue = styled(Typography)`
-    font-size: 1rem;
-`;
+// Columnas de la tabla de usuarios
+const COLUMNS = [
+    { id: 'familyLastName', label: 'Apellido Familia', sortable: true },
+    { id: 'name', label: 'Nombre', sortable: true },
+    { id: 'email', label: 'Correo', sortable: true },
+    { id: 'role', label: 'Rol', sortable: true },
+    { id: 'client', label: 'Cliente', sortable: true },
+    { id: 'updatedAt', label: 'Actualizado el', sortable: true },
+    { id: 'actions', label: 'Acciones', align: 'center' },
+];
 
 // Helper para saber si un usuario es "nuevo" (basado en fecha de creación)
 function isUserNew(user) {
@@ -137,48 +103,10 @@ function isUserNew(user) {
     return diffDays <= 21;
 }
 
-function descendingComparator(a, b, orderBy) {
-    const aValue = getFieldValue(a, orderBy);
-    const bValue = getFieldValue(b, orderBy);
-    if (aValue == null && bValue == null) {
-        return 0;
-    }
-    if (aValue == null) {
-        return 1;
-    }
-    if (bValue == null) {
-        return -1;
-    }
-    if (typeof aValue === 'string' && typeof bValue === 'string') {
-        return bValue.localeCompare(aValue);
-    }
-    if (bValue < aValue) {
-        return -1;
-    }
-    if (bValue > aValue) {
-        return 1;
-    }
-    return 0;
-}
-function getComparator(order, orderBy) {
-    return order === 'desc'
-        ? (a, b) => descendingComparator(a, b, orderBy)
-        : (a, b) => -descendingComparator(a, b, orderBy);
-}
-
-function stableSort(array, comparator) {
-    const stabilizedThis = array.map((el, index) => [el, index]);
-    stabilizedThis.sort((a, b) => {
-        const order = comparator(a[0], b[0]);
-        if (order !== 0) {
-            return order;
-        }
-        return a[1] - b[1];
-    });
-    return stabilizedThis.map((el) => el[0]);
-}
 function getFieldValue(user, field) {
     switch (field) {
+        case 'familyLastName':
+            return user.lastName;
         case 'name':
             return user.name;
         case 'email':
@@ -200,8 +128,7 @@ function getFieldValue(user, field) {
 const NO_AFFILIATION_OPTION = { type: 'none', id: 'none', label: 'Sin afiliación', groupLabel: 'Opciones' };
 
 const RolesManagementPage = () => {
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
     useContext(AuthContext);
     const { hasPermission } = usePermissions();
     const { loaded: manageableRolesLoaded, canManageRoleId, isSelf, canManageUser, canEditUser } = useManageableRoles();
@@ -228,8 +155,9 @@ const RolesManagementPage = () => {
 
     const notify = useNotify();
     const confirm = useConfirm();
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
+    // Paginación en el servidor; el orden se aplica sobre la página actual
+    const table = useTableState();
+    const { page, rowsPerPage } = table;
     const [totalUsers, setTotalUsers] = useState(0);
     const [loading, setLoading] = useState(false);
 
@@ -272,7 +200,7 @@ const RolesManagementPage = () => {
             }),
             F.client({ schools, corporations, extraOptions: [NO_AFFILIATION_OPTION], schoolsGroupLabel: 'Colegios' }),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const { search: searchQuery, roleId: roleFilter, client: clientFilter } = pageFilters.applied;
 
@@ -294,16 +222,6 @@ const RolesManagementPage = () => {
             return false;
         }
         return rolesWithoutSchoolOrCorp.has(String(r.name).toLowerCase());
-    };
-
-    // Orden
-    const [order, setOrder] = useState('asc');
-    const [orderBy, setOrderBy] = useState('');
-
-    const handleRequestSort = (property) => {
-        const isAsc = orderBy === property && order === 'asc';
-        setOrder(isAsc ? 'desc' : 'asc');
-        setOrderBy(property);
     };
 
     useEffect(() => {
@@ -595,43 +513,29 @@ const RolesManagementPage = () => {
         const puedeEliminar = canManageUser(user);
         if (!puedeEditar && !puedeEliminar) {
             return (
-                <Tooltip
-                    title={user.Role?.name
-                        ? `No tienes permitido gestionar usuarios con rol ${user.Role.name}`
-                        : 'No tienes permitido gestionar a este usuario'}
-                >
-                    <span>
-                        <IconButton disabled>
-                            <Lock fontSize="small" />
-                        </IconButton>
-                    </span>
-                </Tooltip>
+                <RowActions
+                    actions={[{
+                        key: 'locked',
+                        kind: 'other',
+                        label: 'Sin permiso',
+                        icon: <Lock fontSize="small" />,
+                        disabled: true,
+                        tooltip: user.Role?.name
+                            ? `No tienes permitido gestionar usuarios con rol ${user.Role.name}`
+                            : 'No tienes permitido gestionar a este usuario',
+                    }]}
+                />
             );
         }
         return (
-            <>
-                {puedeEditar && (
-                    <PermissionGuard permission="usuarios-editar">
-                        <Tooltip title="Editar">
-                            <IconButton onClick={() => handleEditClick(user)}>
-                                <Edit />
-                            </IconButton>
-                        </Tooltip>
-                    </PermissionGuard>
-                )}
-                {puedeEliminar && (
-                    <PermissionGuard permission="usuarios-eliminar">
-                        <Tooltip title="Eliminar">
-                            <IconButton onClick={() => handleDeleteClick(user)}>
-                                <Delete />
-                            </IconButton>
-                        </Tooltip>
-                    </PermissionGuard>
-                )}
-            </>
+            <RowActions
+                actions={[
+                    puedeEditar && { key: 'edit', kind: 'edit', label: 'Editar', icon: <Edit fontSize="small" />, permission: 'usuarios-editar', onClick: () => handleEditClick(user) },
+                    puedeEliminar && { key: 'delete', kind: 'delete', label: 'Eliminar', icon: <Delete fontSize="small" />, permission: 'usuarios-eliminar', onClick: () => handleDeleteClick(user) },
+                ]}
+            />
         );
     };
-
 
     const handleUserChange = (e) => {
         setSelectedUser(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -792,18 +696,10 @@ const RolesManagementPage = () => {
     });
     // --- FIN MODIFICACIÓN ---
 
-    const sortedUsers = stableSort(filteredUsers, getComparator(order, orderBy));
+    const sortedUsers = sortRows(filteredUsers, { orderBy: table.orderBy, order: table.order, getValue: getFieldValue });
     // Server provides pagination; `users` already contains the current page.
     // Keep sorting client-side for the current page only.
     const displayedUsers = sortedUsers;
-
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
 
     const handleOpenBulkDialog = () => {
         setBulkFile(null);
@@ -1209,159 +1105,40 @@ const RolesManagementPage = () => {
                     {isMobile ? (
                         <>
                             {displayedUsers.map((user) => (
-                                <MobileCard key={user.id} elevation={3}>
-                                    <Grid container spacing={1}>
-                                        <Grid item xs={12}>
-                                            <MobileField>
-                                                <MobileLabel>Apellido Familia</MobileLabel>
-                                                <MobileValue>{user.lastName || '—'}</MobileValue>
-                                            </MobileField>
-                                        </Grid>
-                                        <Grid item xs={12}>
-                                            <MobileField>
-                                                <MobileLabel>Nombre</MobileLabel>
-                                                <MobileValue>
-                                                    {user.name}{' '}
-                                                    {isUserNew(user) && (
-                                                        <Chip label="NUEVO" color="success" size="small" sx={{ ml: 1 }} />
-                                                    )}
-                                                </MobileValue>
-                                            </MobileField>
-                                        </Grid>
-                                        <Grid item xs={12}>
-                                            <MobileField>
-                                                <MobileLabel>Correo</MobileLabel>
-                                                <MobileValue>{user.email}</MobileValue>
-                                            </MobileField>
-                                        </Grid>
-                                        <Grid item xs={12}>
-                                            <MobileField>
-                                                <MobileLabel>Rol</MobileLabel>
-                                                <MobileValue>{user.Role ? user.Role.name : '—'}</MobileValue>
-                                            </MobileField>
-                                        </Grid>
-                                        <Grid item xs={12}>
-                                            <MobileField>
-                                                <MobileLabel>Cliente</MobileLabel>
-                                                <MobileValue>{user.School ? user.School.name : (user.corporation ? user.corporation.name : '—')}</MobileValue>
-                                            </MobileField>
-                                        </Grid>
-                                        <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center', gap: 1, mt: 1 }}>
-                                            {renderUserActions(user)}
-                                        </Grid>
-                                    </Grid>
+                                <MobileCard key={user.id} elevation={3} actions={renderUserActions(user)}>
+                                    <MobileField label="Apellido Familia">{user.lastName || '—'}</MobileField>
+                                    <MobileField label="Nombre">
+                                        {user.name}{' '}
+                                        {isUserNew(user) && (
+                                            <Chip label="NUEVO" color="success" size="small" sx={{ ml: 1 }} />
+                                        )}
+                                    </MobileField>
+                                    <MobileField label="Correo">{user.email}</MobileField>
+                                    <MobileField label="Rol">{user.Role ? user.Role.name : '—'}</MobileField>
+                                    <MobileField label="Cliente">{user.School ? user.School.name : (user.corporation ? user.corporation.name : '—')}</MobileField>
                                 </MobileCard>
                             ))}
-                            <TablePagination
-                                component="div"
-                                count={totalUsers}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                rowsPerPageOptions={[5, 10, 25]}
-                                labelRowsPerPage="Filas por página"
-                            />
+                            <AppTablePagination count={totalUsers} {...table.paginationProps} />
                         </>
                     ) : (
                         <Paper sx={{ width: '100%', overflowX: 'auto' }}>
-                            <TableContainer sx={{ maxHeight: { xs: 400, sm: 'none' }, overflowX: 'auto' }}>
+                            <AppTableContainer>
                                 <Table stickyHeader>
-                                    <ResponsiveTableHead>
-                                        <TableRow>
-                                            <TableCell sortDirection={orderBy === 'familyLastName' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'familyLastName'}
-                                                    direction={orderBy === 'familyLastName' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('familyLastName')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Apellido Familia
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'name' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'name'}
-                                                    direction={orderBy === 'name' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('name')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Nombre
-                                                </TableSortLabel>
-                                            </TableCell>
-
-                                            <TableCell sortDirection={orderBy === 'email' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'email'}
-                                                    direction={orderBy === 'email' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('email')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Correo
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'role' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'role'}
-                                                    direction={orderBy === 'role' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('role')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Rol
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'client' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'client'}
-                                                    direction={orderBy === 'client' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('client')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Cliente
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'updatedAt' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'updatedAt'}
-                                                    direction={orderBy === 'updatedAt' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('updatedAt')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Actualizado el
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="center">Acciones</TableCell>
-                                        </TableRow>
-                                    </ResponsiveTableHead>
+                                    <SortableTableHead columns={COLUMNS} {...table.sortProps} showSortIcons />
                                     <TableBody>
                                         {displayedUsers.map((user) => (
                                             <TableRow key={user.id}>
-                                                <ResponsiveTableCell data-label="Apellido Familia">
-                                                    {user.lastName || '—'}
-                                                </ResponsiveTableCell>
-                                                <ResponsiveTableCell data-label="Nombre">
+                                                <TableCell>{user.lastName || '—'}</TableCell>
+                                                <TableCell>
                                                     {user.name}{' '}
                                                     {isUserNew(user) && (
                                                         <Chip label="NUEVO" color="success" size="small" sx={{ ml: 1 }} />
                                                     )}
-                                                    {/* FamilyDetail badges removed */}
-                                                </ResponsiveTableCell>
-                                                <ResponsiveTableCell data-label="Correo">
-                                                    {user.email}
-                                                </ResponsiveTableCell>
-                                                <ResponsiveTableCell data-label="Rol">
-                                                    {user.Role ? user.Role.name : '—'}
-                                                </ResponsiveTableCell>
-                                                <ResponsiveTableCell data-label="Cliente">
-                                                    {user.School ? user.School.name : (user.corporation ? user.corporation.name : '—')}
-                                                </ResponsiveTableCell>
-                                                <ResponsiveTableCell data-label="Actualizado el">
+                                                </TableCell>
+                                                <TableCell>{user.email}</TableCell>
+                                                <TableCell>{user.Role ? user.Role.name : '—'}</TableCell>
+                                                <TableCell>{user.School ? user.School.name : (user.corporation ? user.corporation.name : '—')}</TableCell>
+                                                <TableCell>
                                                     {user.updatedAt
                                                         ? new Date(user.updatedAt).toLocaleString('es-GT', {
                                                               day: '2-digit',
@@ -1371,32 +1148,23 @@ const RolesManagementPage = () => {
                                                               minute: '2-digit'
                                                           })
                                                         : '—'}
-                                                </ResponsiveTableCell>
-                                                <ResponsiveTableCell data-label="Acciones" align="center">
+                                                </TableCell>
+                                                <TableCell align="center">
                                                     {renderUserActions(user)}
-                                                </ResponsiveTableCell>
+                                                </TableCell>
                                             </TableRow>
                                         ))}
                                         {users.length === 0 && (
                                             <TableRow>
-                                                <ResponsiveTableCell colSpan={6} align="center">
+                                                <TableCell colSpan={7} align="center">
                                                     No se encontraron usuarios.
-                                                </ResponsiveTableCell>
+                                                </TableCell>
                                             </TableRow>
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={totalUsers}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                rowsPerPageOptions={[5, 10, 25]}
-                                labelRowsPerPage="Filas por página"
-                            />
+                            </AppTableContainer>
+                            <AppTablePagination count={totalUsers} {...table.paginationProps} />
                         </Paper>
                     )}
 

@@ -20,9 +20,7 @@ import {
     TableContainer,
     Paper,
     CircularProgress,
-    InputAdornment,
-    useMediaQuery,
-    useTheme
+    InputAdornment
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import ReplyIcon from '@mui/icons-material/Reply';
@@ -32,6 +30,7 @@ import moment from 'moment';
 import api from '../../utils/axiosConfig';
 import { ServiceStatusChip } from '../PaymentTable';
 import { useCurrentDate } from '../../hooks/useCurrentDate';
+import useIsMobile from '../../hooks/useIsMobile';
 
 const formatMoney = (value) => `Q ${Number(value || 0).toFixed(2)}`;
 
@@ -73,8 +72,7 @@ function validateDetail(detail, creditBalance, todayMoment) {
 }
 
 const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPaymentParams, onApplied }) => {
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
     const { format: formatCurrentDate, moment: currentDateMoment } = useCurrentDate();
 
     const [step, setStep] = useState('form'); // 'form' | 'confirm' | 'result'

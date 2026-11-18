@@ -16,8 +16,6 @@ import {
     Pagination,
     CircularProgress,
     Box,
-    useTheme,
-    useMediaQuery,
     Chip
 } from '@mui/material';
 import {
@@ -48,33 +46,18 @@ import parse from 'html-react-parser';
 import SignatureCanvas from 'react-signature-canvas';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import styled from 'styled-components';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
+import useIsMobile from '../hooks/useIsMobile';
+import { MobileCard } from '../components/table/MobileCard';
 
-// Mobile view: Tarjeta para contrato (contratos originales)
-const MobileContractCard = styled(Box)`
-    padding: 16px;
-    margin-bottom: 12px;
-    background-color: #fff;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-`;
-
-// Mobile view: Tarjeta para contrato llenado
-const MobileFilledContractCard = styled(Box)`
-    padding: 16px;
-    margin-bottom: 12px;
-    background-color: #fff;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-`;
+// Tarjeta móvil de contratos: borde gris fino sin sombra, como antes del bloque B
+const CONTRACT_CARD_SX = { p: 2, mb: 1.5, backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: '8px' };
 
 const SchoolContractsPage = () => {
     const { hasPermission } = usePermissions();
     const puedeVerLlenados = hasPermission('contratos-ver-llenados');
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
     const navigate = useNavigate();
     const { cicloEscolarId: routeCicloEscolarId, schoolId } = useParams();
     const location = useLocation();
@@ -709,7 +692,7 @@ const SchoolContractsPage = () => {
 
             if (isMobileView) {
                 return (
-                    <MobileFilledContractCard key={filledContract.id}>
+                    <MobileCard key={filledContract.id} elevation={0} sx={CONTRACT_CARD_SX}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                             <Typography variant="h6">Familia: {familyLastName}</Typography>
                             {filledContract.parent?.deleted && (
@@ -752,7 +735,7 @@ const SchoolContractsPage = () => {
                                 </IconButton>
                             </PermissionGuard>
                         </Box>
-                    </MobileFilledContractCard>
+                    </MobileCard>
                 );
             }
 
@@ -830,7 +813,7 @@ const SchoolContractsPage = () => {
                 {isMobile ? (
                     <Box>
                         {contracts.map((contract) => (
-                            <MobileContractCard key={contract.id}>
+                            <MobileCard key={contract.id} elevation={0} sx={CONTRACT_CARD_SX}>
                                 <Typography variant="h6">{contract.title}</Typography>
 
                                 <Typography variant="body2" color="textSecondary">
@@ -859,7 +842,7 @@ const SchoolContractsPage = () => {
                                         <ContentCopyIcon />
                                     </IconButton>
                                 </Box>
-                            </MobileContractCard>
+                            </MobileCard>
                         ))}
                     </Box>
                 ) : (
@@ -933,13 +916,13 @@ const SchoolContractsPage = () => {
                                     ) : (
                                         <>
                                             {unfilledFamilies.map((f) => (
-                                                <MobileFilledContractCard key={f.familyDetailId}>
+                                                <MobileCard key={f.familyDetailId} elevation={0} sx={CONTRACT_CARD_SX}>
                                                     <Typography variant="h6">Familia: {f.familyLastName || 'Sin Apellido'}</Typography>
                                                     <Typography variant="body2" color="textSecondary">Usuario: {f.userName || ''} &nbsp; {f.userEmail ? `(${f.userEmail})` : ''}</Typography>
                                                     <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
                                                         <Typography variant="caption" color="textSecondary">(Información únicamente)</Typography>
                                                     </Box>
-                                                </MobileFilledContractCard>
+                                                </MobileCard>
                                             ))}
                                         </>
                                     )

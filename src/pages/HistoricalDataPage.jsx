@@ -11,9 +11,7 @@ import {
     TableRow,
     TableCell,
     TableBody,
-    CircularProgress,
-    useTheme,
-    useMediaQuery
+    CircularProgress
 } from '@mui/material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
@@ -22,6 +20,7 @@ import tw, { styled } from 'twin.macro';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
+import useIsMobile from '../hooks/useIsMobile';
 
 // Contenedores y estilos básicos
 const SectionPaper = styled(Paper)(() => [
@@ -33,8 +32,7 @@ const NoData = styled(Typography)(() => [tw`text-center text-gray-500 my-4`]);
 
 const HistoricalDataPage = () => {
     const { auth } = useContext(AuthContext);
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
 
     const currentYear = new Date().getFullYear();
     const fallbackYear = currentYear;

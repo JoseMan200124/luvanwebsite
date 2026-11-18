@@ -10,15 +10,12 @@ import {
     TableRow,
     TableCell,
     TableBody,
-    TablePagination,
     TableContainer,
     IconButton as MuiIconButton,
     Collapse,
     ToggleButtonGroup,
     ToggleButton,
     TextField,
-    useMediaQuery,
-    useTheme,
     Skeleton,
     Alert
 } from '@mui/material';
@@ -51,6 +48,9 @@ import {
 } from '@mui/icons-material';
 import moment from 'moment';
 import api from '../utils/axiosConfig';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from './table/AppTablePagination';
+import useIsMobile from '../hooks/useIsMobile';
 
 // ============================================================
 // Helpers
@@ -693,14 +693,13 @@ const PeriodBreakdownTable = ({ periods }) => {
 // ============================================================
 
 const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [flowData, setFlowData] = useState(null);
-    const [flowPage, setFlowPage] = useState(0);
-    const [flowLimit, setFlowLimit] = useState(20);
+    const flowTable = useTableState();
+    const { page: flowPage, rowsPerPage: flowLimit, setPage: setFlowPage } = flowTable;
     const [flowTotal, setFlowTotal] = useState(0);
     const [sortOrder, setSortOrder] = useState('desc');
     const [dateFrom, setDateFrom] = useState('');
@@ -986,18 +985,10 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
             {/* Paginación del timeline */}
             {flowTotal > flowLimit && (
                 <Box sx={{ display: 'flex', justifyContent: 'flex-start', mt: 1 }}>
-                    <TablePagination
-                        component="div"
+                    <AppTablePagination
                         count={flowTotal}
-                        page={flowPage}
-                        onPageChange={(e, newPage) => setFlowPage(newPage)}
-                        rowsPerPage={flowLimit}
-                        onRowsPerPageChange={(e) => {
-                            setFlowLimit(Number.parseInt(e.target.value, 10));
-                            setFlowPage(0);
-                        }}
-                        rowsPerPageOptions={[10, 20, 50]}
-                        labelRowsPerPage="Eventos"
+                        {...flowTable.paginationProps}
+                        labelRowsPerPage="Eventos por página"
                         sx={{
                             '& .MuiTablePagination-toolbar': { justifyContent: 'flex-start', paddingLeft: 0, flexWrap: 'wrap' },
                             '& .MuiTablePagination-spacer': { display: 'none' }

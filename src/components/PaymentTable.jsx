@@ -2,20 +2,19 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 import {
+    Paper,
     Table,
-    TableHead,
     TableRow,
     TableCell,
     TableBody,
     IconButton,
-    TableContainer,
-    Paper,
     Box,
     Chip,
-    TableSortLabel,
 } from '@mui/material';
 import { Payment as PaymentIcon, CheckCircle as CheckCircleIcon, Close as CloseIcon, NoteAlt as NoteAltIcon, Download as DownloadIcon, ManageAccounts as ManageAccountsIcon, CalendarMonth as CalendarMonthIcon } from '@mui/icons-material';
 import moment from 'moment';
+import SortableTableHead from './table/SortableTableHead';
+import AppTableContainer from './table/AppTableContainer';
 
 const paymentShape = PropTypes.shape({
     id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
@@ -302,39 +301,41 @@ PaymentRow.propTypes = {
     onManagePeriodsClick: PropTypes.func,
 };
 
-const sortHeader = (label, key, orderBy, order, onRequestSort) => (
-    <TableSortLabel
-        active={orderBy === key}
-        direction={orderBy === key ? order : 'asc'}
-        onClick={() => onRequestSort?.(key)}
-    >
-        {label}
-    </TableSortLabel>
-);
+
+const SERVICE_STATUS_SX = { borderLeft: '3px solid #2196F3', borderRight: '3px solid #E0E0E0', fontWeight: 'bold' };
+const PAYMENT_STATUS_SX = { borderLeft: '3px solid #E0E0E0', borderRight: '3px solid #4CAF50', fontWeight: 'bold' };
+
+const ENROLLMENT_COLUMNS = [
+    { id: 'serviceStatus', label: 'Estado del Servicio', sortable: true, align: 'center', sx: SERVICE_STATUS_SX },
+    { id: 'enrollmentStatus', label: 'Pago de Inscripción', sortable: true, align: 'center', sx: PAYMENT_STATUS_SX },
+    { id: 'familyLastName', label: 'Apellidos Familia', sortable: true, align: 'center' },
+    { id: 'students', label: 'Cant. Estudiantes', sortable: true, align: 'center' },
+    { id: 'amount', label: 'Monto a pagar', align: 'center' },
+    { id: 'paid', label: 'Pagado', align: 'center' },
+    { id: 'enrollmentDue', label: 'Saldo pendiente', sortable: true, align: 'center' },
+    { id: 'actions', label: 'Acciones', align: 'center' },
+];
+
+const PAYMENT_COLUMNS = [
+    { id: 'serviceStatus', label: 'Estado del Servicio', sortable: true, align: 'center', sx: SERVICE_STATUS_SX },
+    { id: 'status', label: 'Estado de Pago', sortable: true, align: 'center', sx: PAYMENT_STATUS_SX },
+    { id: 'familyLastName', label: 'Apellidos Familia', sortable: true, align: 'center' },
+    { id: 'students', label: 'Cant. Estudiantes', sortable: true, align: 'center' },
+    { id: 'routeType', label: 'Tipo de Ruta', sortable: true, align: 'center' },
+    { id: 'lastPayment', label: 'Fecha último pago', sortable: true, align: 'center' },
+    { id: 'discount', label: 'Descuento', sortable: true, align: 'center' },
+    { id: 'invoice', label: 'Envío Factura', sortable: true, align: 'center' },
+    { id: 'actions', label: 'Acciones', align: 'center' },
+];
 
 const PaymentTable = ({ payments, enrollmentView, enrollmentByUser, onRegisterClick, onReceiptClick, onEmailClick, onManageClick, onNotesClick, onDownloadHistory, onManagePeriodsClick, order, orderBy, onRequestSort }) => {
     const paymentRows = Array.isArray(payments) ? payments : [];
 
     if (enrollmentView && enrollmentByUser) {
         return (
-            <TableContainer component={Paper} sx={{ borderRadius: 2, overflowX: 'auto' }}>
+            <AppTableContainer component={Paper} sx={{ borderRadius: 2 }}>
                 <Table size="small" sx={{ minWidth: 900 }}>
-                    <TableHead>
-                        <TableRow>
-                            <TableCell align="center" sx={{ borderLeft: '3px solid #2196F3', borderRight: '3px solid #E0E0E0', fontWeight: 'bold' }}>
-                                {sortHeader('Estado del Servicio', 'serviceStatus', orderBy, order, onRequestSort)}
-                            </TableCell>
-                            <TableCell align="center" sx={{ borderLeft: '3px solid #E0E0E0', borderRight: '3px solid #4CAF50', fontWeight: 'bold' }}>
-                                {sortHeader('Pago de Inscripción', 'enrollmentStatus', orderBy, order, onRequestSort)}
-                            </TableCell>
-                            <TableCell align="center">{sortHeader('Apellidos Familia', 'familyLastName', orderBy, order, onRequestSort)}</TableCell>
-                            <TableCell align="center">{sortHeader('Cant. Estudiantes', 'students', orderBy, order, onRequestSort)}</TableCell>
-                            <TableCell align="center">Monto a pagar</TableCell>
-                            <TableCell align="center">Pagado</TableCell>
-                            <TableCell align="center">{sortHeader('Saldo pendiente', 'enrollmentDue', orderBy, order, onRequestSort)}</TableCell>
-                            <TableCell align="center">Acciones</TableCell>
-                        </TableRow>
-                    </TableHead>
+                    <SortableTableHead columns={ENROLLMENT_COLUMNS} order={order} orderBy={orderBy} onSort={onRequestSort} />
                     <TableBody>
                         {paymentRows.map(payment => (
                             <EnrollmentRow
@@ -346,90 +347,14 @@ const PaymentTable = ({ payments, enrollmentView, enrollmentByUser, onRegisterCl
                         ))}
                     </TableBody>
                 </Table>
-            </TableContainer>
+            </AppTableContainer>
         );
     }
 
     return (
-        <TableContainer component={Paper} sx={{ borderRadius: 2, overflowX: 'auto' }}>
+        <AppTableContainer component={Paper} sx={{ borderRadius: 2 }}>
             <Table size="small" sx={{ minWidth: 900 }}>
-                <TableHead>
-                    <TableRow>
-                        <TableCell align="center" sx={{ borderLeft: '3px solid #2196F3', borderRight: '3px solid #E0E0E0', fontWeight: 'bold' }}>
-                            <TableSortLabel
-                                active={orderBy === 'serviceStatus'}
-                                direction={orderBy === 'serviceStatus' ? order : 'asc'}
-                                onClick={() => onRequestSort?.('serviceStatus')}
-                            >
-                                Estado del Servicio
-                            </TableSortLabel>
-                        </TableCell>
-                        <TableCell align="center" sx={{ borderLeft: '3px solid #E0E0E0', borderRight: '3px solid #4CAF50', fontWeight: 'bold' }}>
-                            <TableSortLabel
-                                active={orderBy === 'status'}
-                                direction={orderBy === 'status' ? order : 'asc'}
-                                onClick={() => onRequestSort?.('status')}
-                            >
-                                Estado de Pago
-                            </TableSortLabel>
-                        </TableCell>
-                        <TableCell align="center">
-                            <TableSortLabel
-                                active={orderBy === 'familyLastName'}
-                                direction={orderBy === 'familyLastName' ? order : 'asc'}
-                                onClick={() => onRequestSort?.('familyLastName')}
-                            >
-                                Apellidos Familia
-                            </TableSortLabel>
-                        </TableCell>
-                        <TableCell align="center">
-                            <TableSortLabel
-                                active={orderBy === 'students'}
-                                direction={orderBy === 'students' ? order : 'asc'}
-                                onClick={() => onRequestSort?.('students')}
-                            >
-                                Cant. Estudiantes
-                            </TableSortLabel>
-                        </TableCell>
-                        <TableCell align="center">
-                            <TableSortLabel
-                                active={orderBy === 'routeType'}
-                                direction={orderBy === 'routeType' ? order : 'asc'}
-                                onClick={() => onRequestSort?.('routeType')}
-                            >
-                                Tipo de Ruta
-                            </TableSortLabel>
-                        </TableCell>
-                        <TableCell align="center">
-                            <TableSortLabel
-                                active={orderBy === 'lastPayment'}
-                                direction={orderBy === 'lastPayment' ? order : 'asc'}
-                                onClick={() => onRequestSort?.('lastPayment')}
-                            >
-                                Fecha último pago
-                            </TableSortLabel>
-                        </TableCell>
-                        <TableCell align="center">
-                            <TableSortLabel
-                                active={orderBy === 'discount'}
-                                direction={orderBy === 'discount' ? order : 'asc'}
-                                onClick={() => onRequestSort?.('discount')}
-                            >
-                                Descuento
-                            </TableSortLabel>
-                        </TableCell>
-                        <TableCell align="center">
-                            <TableSortLabel
-                                active={orderBy === 'invoice'}
-                                direction={orderBy === 'invoice' ? order : 'asc'}
-                                onClick={() => onRequestSort?.('invoice')}
-                            >
-                                Envío Factura
-                            </TableSortLabel>
-                        </TableCell>
-                        <TableCell align="center">Acciones</TableCell>
-                    </TableRow>
-                </TableHead>
+                <SortableTableHead columns={PAYMENT_COLUMNS} order={order} orderBy={orderBy} onSort={onRequestSort} />
                 <TableBody>
                     {paymentRows.map(payment => (
                         <PaymentRow
@@ -446,7 +371,7 @@ const PaymentTable = ({ payments, enrollmentView, enrollmentByUser, onRegisterCl
                     ))}
                 </TableBody>
             </Table>
-        </TableContainer>
+        </AppTableContainer>
     );
 };
 

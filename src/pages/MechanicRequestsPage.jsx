@@ -6,21 +6,17 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
+    Paper,
     Box,
     Typography,
-    Paper,
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    TablePagination,
     TextField,
     MenuItem,
     Grid,
     Chip,
-    IconButton,
     Tooltip,
     CircularProgress,
     Card,
@@ -30,7 +26,6 @@ import {
     DialogContent,
     DialogActions,
     Button,
-    TableSortLabel,
     FormControl,
     InputLabel,
     Select,
@@ -68,6 +63,11 @@ import ClientSelector from '../components/ClientSelector';
 import { getClientSchoolId, getClientCorporationId } from '../utils/clientValue';
 import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
 import PermissionGuard from '../components/PermissionGuard';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import RowActions from '../components/table/RowActions';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F, YES_NO_OPTIONS, toRouteOptions } from '../components/filters/filterFields';
@@ -81,6 +81,20 @@ const StatsCard = styled(Card)`
     ${tw`h-full`}
 `;
 
+// Columnas de la tabla de solicitudes
+const COLUMNS = [
+    { id: 'fechaSolicitud', label: 'Fecha', sortable: true },
+    { id: 'tipoTrabajo', label: 'Tipo de Trabajo', sortable: true },
+    { id: 'solicitud', label: 'Solicitud' },
+    { id: 'placa', label: 'Placa' },
+    { id: 'ruta', label: 'Ruta' },
+    { id: 'cliente', label: 'Colegio/Corp.' },
+    { id: 'solicitante', label: 'Solicitante' },
+    { id: 'urgente', label: 'Urgente', sortable: true },
+    { id: 'estado', label: 'Estado', sortable: true },
+    { id: 'acciones', label: 'Acciones', align: 'center' },
+];
+
 const MechanicRequestsPage = () => {
     const notify = useNotify();
     const confirm = useConfirm();
@@ -93,9 +107,9 @@ const MechanicRequestsPage = () => {
     const [plateOptions, setPlateOptions] = useState([]);
     const [routeOptions, setRouteOptions] = useState([]);
 
-    // Estados para paginación
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
+    // Paginación y orden (en el servidor)
+    const table = useTableState({ defaultOrderBy: 'fechaSolicitud', defaultOrder: 'desc' });
+    const { page, rowsPerPage, orderBy: sortBy, order: sortOrder } = table;
     const [totalCount, setTotalCount] = useState(0);
     const [clientBreakdown, setClientBreakdown] = useState({ colegios: 0, corporativos: 0 });
 
@@ -110,7 +124,7 @@ const MechanicRequestsPage = () => {
             F.select('urgente', { label: 'Urgente', width: 'sm', options: YES_NO_OPTIONS }),
             F.dateRange('dates'),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const {
         cycle: selectedCicloEscolar,
@@ -133,10 +147,6 @@ const MechanicRequestsPage = () => {
     // schools alimenta tanto el picker de filtro como el picker del diálogo "Nueva Solicitud" —
     // agrupar por ciclo evita que se elija el año equivocado de un colegio con nombre repetido.
     const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
-
-    // Estados para ordenamiento
-    const [sortBy, setSortBy] = useState('fechaSolicitud');
-    const [sortOrder, setSortOrder] = useState('desc');
 
     // Estados para modales
     const [selectedRequest, setSelectedRequest] = useState(null);
@@ -314,23 +324,6 @@ const MechanicRequestsPage = () => {
     }, [fetchRequests]);
 
     // Manejadores de filtros: usamos setters individuales abajo en los inputs
-
-    // Manejadores de paginación
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
-
-    // Manejador de ordenamiento
-    const handleSort = (column) => {
-        const isAsc = sortBy === column && sortOrder === 'asc';
-        setSortOrder(isAsc ? 'desc' : 'asc');
-        setSortBy(column);
-    };
 
     // Abrir modal de detalle
     const handleViewDetail = async (request) => {
@@ -630,7 +623,7 @@ const MechanicRequestsPage = () => {
             />
 
             {/* Tabla */}
-            <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
+            <AppTableContainer component={Paper}>
                 {loading ? (
                     <Box display="flex" justifyContent="center" p={4}>
                         <CircularProgress />
@@ -638,52 +631,7 @@ const MechanicRequestsPage = () => {
                 ) : (
                     <>
                         <Table size="small" sx={{ minWidth: 1100 }}>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell>
-                                        <TableSortLabel
-                                            active={sortBy === 'fechaSolicitud'}
-                                            direction={sortBy === 'fechaSolicitud' ? sortOrder : 'asc'}
-                                            onClick={() => handleSort('fechaSolicitud')}
-                                        >
-                                            Fecha
-                                        </TableSortLabel>
-                                    </TableCell>
-                                    <TableCell>
-                                        <TableSortLabel
-                                            active={sortBy === 'tipoTrabajo'}
-                                            direction={sortBy === 'tipoTrabajo' ? sortOrder : 'asc'}
-                                            onClick={() => handleSort('tipoTrabajo')}
-                                        >
-                                            Tipo de Trabajo
-                                        </TableSortLabel>
-                                    </TableCell>
-                                    <TableCell>Solicitud</TableCell>
-                                    <TableCell>Placa</TableCell>
-                                    <TableCell>Ruta</TableCell>
-                                    <TableCell>Colegio/Corp.</TableCell>
-                                    <TableCell>Solicitante</TableCell>
-                                    <TableCell>
-                                        <TableSortLabel
-                                            active={sortBy === 'urgente'}
-                                            direction={sortBy === 'urgente' ? sortOrder : 'asc'}
-                                            onClick={() => handleSort('urgente')}
-                                        >
-                                            Urgente
-                                        </TableSortLabel>
-                                    </TableCell>
-                                    <TableCell>
-                                        <TableSortLabel
-                                            active={sortBy === 'estado'}
-                                            direction={sortBy === 'estado' ? sortOrder : 'asc'}
-                                            onClick={() => handleSort('estado')}
-                                        >
-                                            Estado
-                                        </TableSortLabel>
-                                    </TableCell>
-                                    <TableCell align="center">Acciones</TableCell>
-                                </TableRow>
-                            </TableHead>
+                            <SortableTableHead columns={COLUMNS} {...table.sortProps} />
                             <TableBody>
                                 {requests.length === 0 ? (
                                     <TableRow>
@@ -747,58 +695,23 @@ const MechanicRequestsPage = () => {
                                                 />
                                             </TableCell>
                                             <TableCell align="center">
-                                                <Tooltip title="Ver Detalle">
-                                                    <IconButton
-                                                        size="small"
-                                                        onClick={() => handleViewDetail(request)}
-                                                    >
-                                                        <VisibilityIcon fontSize="small" />
-                                                    </IconButton>
-                                                </Tooltip>
-                                                <PermissionGuard permission="mecanica-actualizar-estado">
-                                                    <Tooltip title="Cambiar Estado">
-                                                        <IconButton
-                                                            size="small"
-                                                            color="primary"
-                                                            onClick={() => handleOpenStatusModal(request)}
-                                                        >
-                                                            <EditIcon fontSize="small" />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                </PermissionGuard>
-                                                <PermissionGuard permission="mecanica-eliminar-solicitud">
-                                                    <Tooltip title="Eliminar">
-                                                        <IconButton
-                                                            size="small"
-                                                            color="error"
-                                                            onClick={() => handleDelete(request)}
-                                                        >
-                                                            <DeleteIcon fontSize="small" />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                </PermissionGuard>
+                                                <RowActions
+                                                    actions={[
+                                                        { key: 'view', kind: 'view', label: 'Ver detalle', icon: <VisibilityIcon fontSize="small" />, onClick: () => handleViewDetail(request) },
+                                                        { key: 'status', kind: 'edit', color: 'primary', label: 'Cambiar estado', icon: <EditIcon fontSize="small" />, permission: 'mecanica-actualizar-estado', onClick: () => handleOpenStatusModal(request) },
+                                                        { key: 'delete', kind: 'delete', label: 'Eliminar', icon: <DeleteIcon fontSize="small" />, permission: 'mecanica-eliminar-solicitud', onClick: () => handleDelete(request) },
+                                                    ]}
+                                                />
                                             </TableCell>
                                         </TableRow>
                                     ))
                                 )}
                             </TableBody>
                         </Table>
-                        <TablePagination
-                            component="div"
-                            count={totalCount}
-                            page={page}
-                            onPageChange={handleChangePage}
-                            rowsPerPage={rowsPerPage}
-                            onRowsPerPageChange={handleChangeRowsPerPage}
-                            rowsPerPageOptions={[5, 10, 25, 50]}
-                            labelRowsPerPage="Filas por página"
-                            labelDisplayedRows={({ from, to, count }) =>
-                                `${from}-${to} de ${count !== -1 ? count : `más de ${to}`}`
-                            }
-                        />
+                        <AppTablePagination count={totalCount} {...table.paginationProps} />
                     </>
                 )}
-            </TableContainer>
+            </AppTableContainer>
 
             {/* Modal de Crear Solicitud */}
             <Dialog

@@ -7,18 +7,13 @@ import {
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    TablePagination,
     CircularProgress,
     Box,
     Grid,
     Card,
     CardContent,
     Chip,
-    IconButton,
-    Tooltip,
     Dialog,
     DialogTitle,
     DialogContent,
@@ -40,17 +35,36 @@ import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import useNotify from '../hooks/useNotify';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import RowActions from '../components/table/RowActions';
 
 moment.tz.setDefault('America/Guatemala');
 
 const SCHEDULE_OPTIONS = DEFAULT_SCHEDULE_CODES.map((code) => ({ value: code, label: SCHEDULE_LABELS[code] || code }));
 
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'fecha', label: 'Fecha' },
+    { id: 'estudiante', label: 'Estudiante' },
+    { id: 'tipo_de_incidente', label: 'Tipo de Incidente' },
+    { id: 'horario', label: 'Horario' },
+    { id: 'monitora', label: 'Monitora' },
+    { id: 'placa', label: 'Placa' },
+    { id: 'ruta', label: 'Ruta' },
+    { id: 'colegio', label: 'Colegio' },
+    { id: 'acciones', label: 'Acciones', align: 'center' },
+];
+
 const StudentIncidentsPage = () => {
     const notify = useNotify();
     const [incidents, setIncidents] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(25);
+    // Paginación (en el servidor)
+    const table = useTableState();
+    const { page, rowsPerPage } = table;
     const [totalCount, setTotalCount] = useState(0);
 
     // Filtros
@@ -69,7 +83,7 @@ const StudentIncidentsPage = () => {
             F.search('studentName', { label: 'Buscar estudiante', width: 'md' }),
             F.dateRange('dates'),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const {
         cycle: selectedCicloEscolar,
@@ -221,15 +235,6 @@ const StudentIncidentsPage = () => {
         await fetchIncidents();
     }, [fetchIncidents]);
 
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
-
     const handleViewDetails = async (incidentId) => {
         try {
             console.log('Cargando detalles del incidente:', incidentId);
@@ -316,21 +321,9 @@ const StudentIncidentsPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer>
+                            <AppTableContainer>
                                 <Table>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>Fecha</TableCell>
-                                            <TableCell>Estudiante</TableCell>
-                                            <TableCell>Tipo de Incidente</TableCell>
-                                            <TableCell>Horario</TableCell>
-                                            <TableCell>Monitora</TableCell>
-                                            <TableCell>Placa</TableCell>
-                                            <TableCell>Ruta</TableCell>
-                                            <TableCell>Colegio</TableCell>
-                                            <TableCell align="center">Acciones</TableCell>
-                                        </TableRow>
-                                    </TableHead>
+                                    <SortableTableHead columns={COLUMNS} />
                                     <TableBody>
                                         {incidents.map((incident) => (
                                             <TableRow key={incident.id}>
@@ -368,15 +361,11 @@ const StudentIncidentsPage = () => {
                                                     {incident.school?.name || 'N/A'}
                                                 </TableCell>
                                                 <TableCell align="center">
-                                                    <Tooltip title="Ver detalles">
-                                                        <IconButton
-                                                            size="small"
-                                                            onClick={() => handleViewDetails(incident.id)}
-                                                            color="primary"
-                                                        >
-                                                            <VisibilityIcon />
-                                                        </IconButton>
-                                                    </Tooltip>
+                                                    <RowActions
+                                                        actions={[
+                                                            { key: 'view', kind: 'view', color: 'primary', label: 'Ver detalles', icon: <VisibilityIcon fontSize="small" />, onClick: () => handleViewDetails(incident.id) },
+                                                        ]}
+                                                    />
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -389,19 +378,8 @@ const StudentIncidentsPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={totalCount}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                labelRowsPerPage="Registros por página:"
-                                labelDisplayedRows={({ from, to, count }) =>
-                                    `${from}-${to} de ${count !== -1 ? count : `más de ${to}`}`
-                                }
-                            />
+                            </AppTableContainer>
+                            <AppTablePagination count={totalCount} {...table.paginationProps} />
                         </>
                     )}
                 </Paper>
