@@ -20,11 +20,11 @@ const REINTENTO_MS = 30 * 1000;
 const kitActivo = () => typeof Date.now.original === 'function';
 
 class DateService {
-    constructor() {
-        this.desfaseMs = 0;
-        this.proximaMedicion = 0;
-        this.enCurso = null;
-    }
+    desfaseMs = 0;
+
+    proximaMedicion = 0;
+
+    enCurso = null;
 
     /** Mide (si toca) la diferencia entre el reloj del servidor y el del navegador. */
     sincronizar() {
@@ -39,7 +39,7 @@ class DateService {
             .then((response) => {
                 const servidor = Date.parse(response?.data?.timestamp);
                 if (Number.isNaN(servidor)) {
-                    throw new Error('GET /health sin timestamp');
+                    throw new TypeError('GET /health sin timestamp');
                 }
                 const fin = Date.now();
                 // El servidor respondió en algún momento entre inicio y fin: se toma el punto medio.
