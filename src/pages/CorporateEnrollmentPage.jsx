@@ -150,7 +150,10 @@ const CorporateEnrollmentPage = () => {
     useEffect(() => {
         const fetchCorporationData = async () => {
             try {
-                const response = await api.get(`/corporations/${corporationId}`);
+                const response = await api.get(`/public/corporations/enroll/${corporationId}`, {
+                    skipAuth: true,
+                    skipSchoolCycleContext: true
+                });
                 
                 if (response.data?.corporation) {
                     const corp = response.data.corporation;

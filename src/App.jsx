@@ -267,8 +267,9 @@ function App() {
                             }
                         />
 
-                        {/* Redirect genérico */}
-                        <Route path="*" element={<Navigate to="dashboard" replace />} />
+                        {/* Redirect genérico. Absoluto: en react-router v7 un "dashboard" relativo dentro de
+                            path="*" se resuelve contra la URL completa y se repite sin fin (/x/dashboard/dashboard/...). */}
+                        <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
                     </Route>
 
                     {/* Ruta oculta de auditoría (no listada en menús). Cambia la ruta a tu preferencia */}
