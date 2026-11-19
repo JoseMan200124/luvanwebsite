@@ -108,7 +108,11 @@ const UpdateParentInfoDialog = ({ open, onClose, initialData = {}, onSaved }) =>
     const fetchSchoolData = async (id) => {
         setLoading(true);
         try {
-            const response = await api.get(`/schools/${id}`);
+            // Solo grados y campos extra: los da el endpoint público de inscripción (sin datos sensibles).
+            const response = await api.get(`/public/schools/enroll/${id}`, {
+                skipAuth: true,
+                skipSchoolCycleContext: true
+            });
 
             if (response.data?.school) {
                 const { school } = response.data;

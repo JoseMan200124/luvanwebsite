@@ -31,11 +31,8 @@ import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
 import { 
-    Business as CorporationIcon, 
-    CalendarToday,
     DirectionsBus,
     Group,
-    ArrowBack,
     TrendingUp,
     People,
     Policy as ProtocolIcon,
@@ -53,23 +50,9 @@ import styled from 'styled-components';
 import tw from 'twin.macro';
 import RouteColaboradoresModal from '../components/modals/RouteColaboradoresModal';
 import { generateCorporateRouteOccupancyPDF } from '../utils/pdfExport';
-
-const PageContainer = styled.div`
-    ${tw`bg-gray-50 min-h-screen w-full`}
-    padding: 2rem;
-    max-width: 1600px;
-    margin: 0 auto;
-
-    @media (max-width: 640px) {
-        padding: 1rem;
-    }
-`;
-
-const HeaderCard = styled(Card)`
-    ${tw`mb-6 shadow-lg`}
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-`;
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
+import useClientScope from '../hooks/useClientScope';
 
 const SummaryCard = styled(Card)`
     ${tw`h-full`}
@@ -357,9 +340,7 @@ const CorporateDashboardPage = () => {
         }
     }, [fetchCorporationData, fetchRouteOccupancy, fetchColaboradorSummary, fetchColaboradorStatusSummary, fetchColaboradorUsageSummary]);
 
-    const handleBackToSelection = () => {
-        navigate('/admin/corporaciones');
-    };
+    const scope = useClientScope({ level: 'dashboard' });
 
     const handleViewColaboradores = () => {
         navigate(`/admin/corporaciones/${fiscalYear}/${corporationId}/colaboradores`, {
@@ -503,7 +484,7 @@ const CorporateDashboardPage = () => {
 
     if (loading && !currentCorporation) {
         return (
-            <PageContainer>
+            <PageContainer width="xl">
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
                     <CircularProgress size={60} />
                 </Box>
@@ -512,46 +493,16 @@ const CorporateDashboardPage = () => {
     }
 
     return (
-        <PageContainer>
-            {/* Header */}
-            <HeaderCard>
-                <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                        <Button
-                            startIcon={<ArrowBack />}
-                            onClick={handleBackToSelection}
-                            sx={{ color: 'white', '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
-                        >
-                            Volver
-                        </Button>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <CorporationIcon sx={{ fontSize: 40 }} />
-                        <Box>
-                            <Typography variant="h4" component="h1" gutterBottom>
-                                {currentCorporation?.name || 'Cargando...'}
-                            </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                <Chip 
-                                    icon={<CalendarToday />}
-                                    label={`Año Fiscal ${currentFiscalYear}`}
-                                    sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
-                                />
-                                {currentCorporation?.industry && (
-                                    <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                                        {currentCorporation.industry}
-                                    </Typography>
-                                )}
-                                <Chip 
-                                    label={currentCorporation?.isActive ? 'Activa' : 'Inactiva'}
-                                    color={currentCorporation?.isActive ? 'success' : 'default'}
-                                    sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
-                                />
-                            </Box>
-                        </Box>
-                    </Box>
-                </CardContent>
-            </HeaderCard>
+        <PageContainer width="xl">
+            <PageHeader
+                variant="hero"
+                tone="corporate"
+                name={currentCorporation?.name ?? null}
+                back={scope.back}
+                period={scope.periodLabel(currentFiscalYear)}
+                chips={[{ key: 'status', label: currentCorporation?.isActive ? 'Activa' : 'Inactiva' }]}
+                meta={[currentCorporation?.industry]}
+            />
 
             <Grid container spacing={3}>
                 {/* Sección A: Resumen de ocupación por ruta */}

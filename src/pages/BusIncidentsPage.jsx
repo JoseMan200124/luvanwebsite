@@ -44,7 +44,6 @@ import {
 } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
-import tw from 'twin.macro';
 import { getAllBusIncidents, getBusIncidentById, deleteBusIncident, updateBusIncident, FAILURE_TYPES, INCIDENT_EVENT_TYPES } from '../services/busIncidentService';
 import api from '../utils/axiosConfig';
 import { getClientSchoolId, getClientCorporationId } from '../utils/clientValue';
@@ -53,10 +52,12 @@ import PermissionGuard from '../components/PermissionGuard';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F, toPlateOptions, toRouteOptions } from '../components/filters/filterFields';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 
 moment.tz.setDefault('America/Guatemala');
 
-const Container = tw.div`p-8 bg-gray-100 min-h-screen`;
 const NO_FAILURES_FILTER_VALUE = 'sin_fallas';
 
 const FAILURE_TYPE_OPTIONS = [
@@ -483,20 +484,17 @@ const BusIncidentsPage = () => {
 
     return (
         <LocalizationProvider dateAdapter={AdapterMoment}>
-            <Container>
-                <Box mb={3}>
-                    <Typography variant="h4" gutterBottom>
-                        Incidentes de Pilotos
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                        Visualiza y analiza los incidentes y accidentes reportados por los pilotos
-                    </Typography>
-                </Box>
+            <PageContainer width="xl">
+                <PageHeader
+                    eyebrow={MODULE_GROUPS.buses}
+                    title="Incidentes de Pilotos"
+                    subtitle="Visualiza y analiza los incidentes y accidentes reportados por los pilotos"
+                />
 
                 {/* Estadísticas */}
                 <Grid container spacing={3} mb={3}>
                     <Grid item xs={12} sm={6} md={3}>
-                        <Card>
+                        <Card sx={{ height: '100%' }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
                                     Total Incidentes
@@ -511,7 +509,7 @@ const BusIncidentsPage = () => {
                         </Card>
                     </Grid>
                     <Grid item xs={12} sm={6} md={3}>
-                        <Card>
+                        <Card sx={{ height: '100%' }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
                                     Tipo de Falla Más Común
@@ -527,7 +525,7 @@ const BusIncidentsPage = () => {
                         </Card>
                     </Grid>
                     <Grid item xs={12} sm={6} md={3}>
-                        <Card>
+                        <Card sx={{ height: '100%' }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
                                     Accidentes
@@ -539,7 +537,7 @@ const BusIncidentsPage = () => {
                         </Card>
                     </Grid>
                     <Grid item xs={12} sm={6} md={3}>
-                        <Card>
+                        <Card sx={{ height: '100%' }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
                                     Afectó Recorrido
@@ -1034,7 +1032,7 @@ const BusIncidentsPage = () => {
                         </Button>
                     </DialogActions>
                 </Dialog>
-            </Container>
+            </PageContainer>
         </LocalizationProvider>
     );
 };

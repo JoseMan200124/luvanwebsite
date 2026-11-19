@@ -22,3 +22,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 package-lock.json
+
+# Tests locales (no se commitean)
+src/tests/
+
+# Kit de pruebas local: lo copia kit.ps1, nunca se versiona
+src/kitLocal/kit/*
+!src/kitLocal/kit/.gitkeep

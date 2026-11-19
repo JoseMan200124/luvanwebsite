@@ -27,9 +27,11 @@ import {
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { matchSearchTokens } from '../utils/clientFilter';
 import styled from 'styled-components';
-import tw from 'twin.macro';
 
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
@@ -38,8 +40,6 @@ import { Visibility as VisibilityIcon } from '@mui/icons-material';
 import moment from 'moment-timezone';
 
 moment.tz.setDefault('America/Guatemala');
-
-const PilotsContainer = tw.div`p-8 bg-gray-100 min-h-screen`;
 
 // Helper para agrupar por colegio
 const groupBySchool = (arr) => {
@@ -234,10 +234,11 @@ const PilotsManagementPage = () => {
     const schoolKeys = Object.keys(groupedPilots);
 
     return (
-        <PilotsContainer>
-            <Typography variant="h4" gutterBottom>
-                Gestión de Pilotos
-            </Typography>
+        <PageContainer width="xl">
+            <PageHeader
+                eyebrow={MODULE_GROUPS.personal}
+                title="Gestión de Pilotos"
+            />
 
             {/* Búsqueda */}
             <FilterBar {...pageFilters.barProps} loading={loading} />
@@ -531,7 +532,7 @@ const PilotsManagementPage = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
-        </PilotsContainer>
+        </PageContainer>
     );
 };
 

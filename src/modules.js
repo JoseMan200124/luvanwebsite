@@ -36,11 +36,13 @@ import CorporationsPage from './pages/CorporationsPage';
 import AssignmentHistoryPage from './pages/AssignmentHistoryPage';
 import BusAssignmentHistoryPage from './pages/BusAssignmentHistoryPage';
 import HistoricalDataPage from './pages/HistoricalDataPage';
+import { MODULE_GROUPS } from './components/layout/moduleGroups';
+import kitLocal from './kitLocal';
 
 export const modules = [
     {
         key: 'gestion-personal',
-        name: 'Gestión de Personal',
+        name: MODULE_GROUPS.personal,
         icon: People,
         submodules: [
             {
@@ -77,7 +79,7 @@ export const modules = [
     },
     {
         key: 'gestion-colegios-rutas',
-        name: 'Gestión de Clientes',
+        name: MODULE_GROUPS.clientes,
         icon: School,
         submodules: [
             {
@@ -121,7 +123,7 @@ export const modules = [
     },
     {
         key: 'gestion-buses',
-        name: 'Gestión de Buses',
+        name: MODULE_GROUPS.buses,
         icon: DirectionsBus,
         submodules: [
             {
@@ -176,7 +178,7 @@ export const modules = [
     },
     {
         key: 'gestion-monitoras',
-        name: 'Gestión de Monitoras',
+        name: MODULE_GROUPS.monitoras,
         icon: Groups,
         submodules: [
             {
@@ -201,7 +203,7 @@ export const modules = [
     },
     {
         key: 'historiales',
-        name: 'Historiales',
+        name: MODULE_GROUPS.historiales,
         icon: History,
         submodules: [
             {
@@ -220,7 +222,7 @@ export const modules = [
     },
     {
         key: 'reportes-estadisticas',
-        name: 'Reportes y Estadísticas',
+        name: MODULE_GROUPS.reportes,
         icon: BarChart,
         submodules: [
             {
@@ -237,4 +239,6 @@ export const modules = [
             },
         ],
     },
+    // Módulos del kit de pruebas local (vacío fuera de local)
+    ...kitLocal.modulos,
 ];

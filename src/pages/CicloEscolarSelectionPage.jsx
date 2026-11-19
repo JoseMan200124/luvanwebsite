@@ -13,7 +13,6 @@ import {
     FormControl,
     InputLabel,
     Select,
-    Menu,
     MenuItem,
     Grid,
     IconButton,
@@ -50,15 +49,15 @@ import {
     Visibility,
     Add,
     ExpandMore,
-    DeleteSweep as DeleteSweepIcon,
-    Mail,
-    NotificationsActive as NotificationsActiveIcon
+    DeleteSweep as DeleteSweepIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import styled from 'styled-components';
 import tw from 'twin.macro';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import SubmissionPreview from './SubmissionPreview';
 import EnrollmentFeeTiersEditor from '../components/EnrollmentFeeTiersEditor';
@@ -77,23 +76,6 @@ import {
     getSelectedCicloEscolarId,
     setSelectedCicloEscolarId as persistSelectedCicloEscolarId,
 } from '../utils/schoolContext';
-
-const PageContainer = styled.div`
-    ${tw`bg-gray-50 min-h-screen w-full`}
-    padding: 2rem;
-    max-width: 1400px;
-    margin: 0 auto;
-
-    @media (max-width: 640px) {
-        padding: 1rem;
-    }
-`;
-
-const HeaderCard = styled(Card)`
-    ${tw`mb-6 shadow-lg`}
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-`;
 
 const SchoolCard = styled(Card)`
     ${tw`cursor-pointer transition-all duration-300`}
@@ -282,7 +264,6 @@ const CicloEscolarSelectionPage = () => {
     const [quickClearing, setQuickClearing] = useState(false);
     const [openCircularModal, setOpenCircularModal] = useState(false);
     const [openSendNotifModal, setOpenSendNotifModal] = useState(false);
-    const [extraOptionsAnchorEl, setExtraOptionsAnchorEl] = useState(null);
     const [openNivelesModal, setOpenNivelesModal] = useState(false);
     // Eliminación de colegio: { schoolId, loading, impact, error } mientras el diálogo está abierto
     const [deleteDialog, setDeleteDialog] = useState(null);
@@ -1560,55 +1541,24 @@ const CicloEscolarSelectionPage = () => {
         );
     };
 
+    const headerActions = [
+        { key: 'bulk', label: 'Carga masiva', group: 'upload', permission: 'colegios-crear', onClick: handleOpenBulkUpload },
+        { key: 'circular', label: 'Enviar circular', group: 'send', permission: 'mail-enviar-circular', onClick: () => setOpenCircularModal(true) },
+        { key: 'notification', label: 'Enviar notificación', group: 'send', permission: 'notificaciones-crear', onClick: () => setOpenSendNotifModal(true) },
+        { key: 'levels', label: 'Niveles educativos', group: 'other', permission: 'niveles-listar', onClick: () => setOpenNivelesModal(true) },
+        { key: 'add', label: 'Añadir colegio', icon: <Add />, primary: true, permission: 'colegios-crear', onClick: handleAddSchool },
+    ];
+
     return (
         <PageContainer>
-            <HeaderCard>
-                <CardContent sx={{ position: 'relative' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, sm: 2 } }}>
-                        <CalendarToday sx={{ fontSize: { xs: 36, sm: 40 }, flexShrink: 0 }} />
-                        <Box>
-                            <Typography variant="h4" component="h1" gutterBottom sx={{ fontSize: { xs: '2rem', sm: '2.125rem' }, lineHeight: 1.2 }}>
-                                Gestión de Colegios
-                            </Typography>
-                            <Typography variant="h6" sx={{ opacity: 0.9, fontSize: { xs: '1.1rem', sm: '1.25rem' } }}>
-                                Selecciona el ciclo escolar y colegio para gestionar
-                            </Typography>
-                        </Box>
-                    </Box>
-                    <PermissionGuard permission="niveles-listar">
-                        <Box sx={{ position: 'absolute', right: 16, bottom: 12 }}>
-                            <Button
-                                size="small"
-                                variant="contained"
-                                onClick={(e) => setExtraOptionsAnchorEl(e.currentTarget)}
-                                sx={{
-                                    backgroundColor: 'rgba(255,255,255,0.18)',
-                                    color: 'white',
-                                    fontWeight: 700,
-                                    boxShadow: '0 1px 6px rgba(0,0,0,0.12)',
-                                    '&:hover': { backgroundColor: 'rgba(255,255,255,0.28)', boxShadow: '0 3px 10px rgba(0,0,0,0.15)' },
-                                }}
-                            >
-                                Opciones Extra
-                            </Button>
-                            <Menu
-                                anchorEl={extraOptionsAnchorEl}
-                                open={Boolean(extraOptionsAnchorEl)}
-                                onClose={() => setExtraOptionsAnchorEl(null)}
-                            >
-                                <MenuItem
-                                    onClick={() => {
-                                        setOpenNivelesModal(true);
-                                        setExtraOptionsAnchorEl(null);
-                                    }}
-                                >
-                                    Niveles Educativos
-                                </MenuItem>
-                            </Menu>
-                        </Box>
-                    </PermissionGuard>
-                </CardContent>
-            </HeaderCard>
+            <PageHeader
+                variant="hero"
+                tone="school"
+                icon={CalendarToday}
+                title="Gestión de Colegios"
+                subtitle="Selecciona el ciclo escolar y colegio para gestionar"
+                actions={headerActions}
+            />
 
             {/* Selector de Ciclo Escolar */}
             <Card sx={{ mb: 4 }}>
@@ -1638,51 +1588,6 @@ const CicloEscolarSelectionPage = () => {
                                     )}
                                 </Select>
                             </FormControl>
-
-                            <Box sx={{ display: { xs: 'grid', sm: 'flex' }, gridTemplateColumns: { xs: '1fr' }, gap: 1, width: { xs: '100%', sm: 'auto' } }}>
-                                <PermissionGuard permission="notificaciones-crear">
-                                    <Button
-                                        variant="outlined"
-                                        color="secondary"
-                                        startIcon={<NotificationsActiveIcon />}
-                                        onClick={() => setOpenSendNotifModal(true)}
-                                        sx={{ width: { xs: '100%', sm: 'auto' } }}
-                                    >
-                                        Enviar Notificación
-                                    </Button>
-                                </PermissionGuard>
-                                <PermissionGuard permission="mail-enviar-circular">
-                                    <Button
-                                        variant="outlined"
-                                        color="secondary"
-                                        startIcon={<Mail />}
-                                        onClick={() => setOpenCircularModal(true)}
-                                        sx={{ width: { xs: '100%', sm: 'auto' } }}
-                                    >
-                                        Enviar Circular
-                                    </Button>
-                                </PermissionGuard>
-                                <PermissionGuard permission="colegios-crear">
-                                    <Button
-                                        variant="outlined"
-                                        color="primary"
-                                        onClick={handleOpenBulkUpload}
-                                        sx={{ width: { xs: '100%', sm: 'auto' } }}
-                                    >
-                                        Carga Masiva
-                                    </Button>
-                                </PermissionGuard>
-                                <PermissionGuard permission="colegios-crear">
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        onClick={handleAddSchool}
-                                        sx={{ width: { xs: '100%', sm: 'auto' } }}
-                                        >
-                                        Añadir Colegio
-                                    </Button>
-                                </PermissionGuard>
-                            </Box>
                         </Box>
                     </Box>
                 </CardContent>

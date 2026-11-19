@@ -4,7 +4,7 @@
  * Solicitudes de usuarios de un colegio o una corporación
  */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import {
     Box,
@@ -36,11 +36,7 @@ import {
 import {
     Visibility as VisibilityIcon,
     Delete as DeleteIcon,
-    Edit as EditIcon,
-    ArrowBack as ArrowBackIcon,
-    School as SchoolIcon,
-    Business as BusinessIcon,
-    CalendarToday
+    Edit as EditIcon
 } from '@mui/icons-material';
 import {
     HourglassEmpty as PendingIcon,
@@ -73,24 +69,9 @@ import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
 import api from '../utils/axiosConfig';
 import { getCicloEscolarYear } from '../services/cicloEscolarService';
-
-// Mismo contenedor y encabezado que SchoolProtocolsPage / CorporateProtocolsPage
-const PageContainer = styled.div`
-    ${tw`bg-gray-50 min-h-screen w-full`}
-    padding: 2rem;
-    max-width: 1400px;
-    margin: 0 auto;
-
-    @media (max-width: 640px) {
-        padding: 1rem;
-    }
-`;
-
-const HeaderCard = styled(Card)`
-    ${tw`mb-6 shadow-lg`}
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-`;
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
+import useClientScope from '../hooks/useClientScope';
 
 const STATUS_LABELS_ES = {
     pending: 'Pendiente',
@@ -135,16 +116,12 @@ const StatsCard = styled(Card)`
  * @see {@link https://mui.com/material-ui/icons/} Para ver otros iconos disponibles (paquete @mui/icons-material).
  */
 const RequestsPage = () => {
-    const navigate = useNavigate();
     const location = useLocation();
-    const { cicloEscolarId, schoolId, fiscalYear, corporationId } = useParams();
+    const { schoolId, fiscalYear, corporationId } = useParams();
     const scopeParams = useMemo(
         () => (schoolId ? { schoolId } : { corporationId }),
         [schoolId, corporationId]
     );
-    const hubPath = schoolId
-        ? `/admin/escuelas/ciclo/${cicloEscolarId}/${schoolId}`
-        : `/admin/corporaciones/${fiscalYear}/${corporationId}`;
 
     // Datos del colegio o la corporación para el encabezado (del estado de navegación o de la API)
     const stateSchool = location.state?.school;
@@ -153,6 +130,7 @@ const RequestsPage = () => {
     const currentCicloEscolar = scopeData?.cicloEscolar || scopeData?.CicloEscolar
         || location.state?.cicloEscolar || stateSchool?.cicloEscolar || stateSchool?.CicloEscolar || null;
     const currentCycleLabel = getCicloEscolarYear(currentCicloEscolar);
+    const scope = useClientScope({ entity: scopeData || (schoolId ? stateSchool : stateCorporation), cicloEscolar: currentCicloEscolar });
 
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -266,14 +244,6 @@ const RequestsPage = () => {
         };
         fetchScopeData();
     }, [schoolId, corporationId, stateSchool, stateCorporation]);
-
-    const handleBackToDashboard = () => {
-        navigate(hubPath, {
-            state: schoolId
-                ? { cicloEscolarId, cicloEscolar: currentCicloEscolar, school: scopeData || stateSchool }
-                : { fiscalYear, corporation: scopeData || stateCorporation }
-        });
-    };
 
     const handleChangePage = (event, newPage) => setPage(newPage);
     const handleChangeRowsPerPage = (event) => { setRowsPerPage(Number.parseInt(event.target.value, 10)); setPage(0); };
@@ -757,40 +727,15 @@ const RequestsPage = () => {
 
     return (
         <PageContainer>
-            <HeaderCard>
-                <CardContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Button
-                            startIcon={<ArrowBackIcon />}
-                            onClick={handleBackToDashboard}
-                            sx={{
-                                color: 'white',
-                                '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' }
-                            }}
-                        >
-                            Volver al Dashboard
-                        </Button>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        {schoolId ? <SchoolIcon sx={{ fontSize: 40 }} /> : <BusinessIcon sx={{ fontSize: 40 }} />}
-                        <Box>
-                            <Typography variant="h4" component="h1" gutterBottom>
-                                Solicitudes de Usuarios - {scopeData?.name || 'Cargando...'}
-                            </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                <Chip
-                                    icon={<CalendarToday />}
-                                    label={schoolId ? `Ciclo Escolar ${currentCycleLabel || ''}` : `Año Fiscal ${fiscalYear}`}
-                                    sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
-                                />
-                                <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                                    {totalCount} solicitudes encontradas
-                                </Typography>
-                            </Box>
-                        </Box>
-                    </Box>
-                </CardContent>
-            </HeaderCard>
+            <PageHeader
+                variant="hero"
+                tone={scope.tone}
+                title="Solicitudes de Usuarios"
+                name={scopeData?.name ?? null}
+                back={scope.back}
+                period={scope.periodLabel(schoolId ? currentCycleLabel : fiscalYear)}
+                meta={[`${totalCount} solicitudes encontradas`]}
+            />
 
             {/* Statistics */}
             {statistics && (

@@ -41,10 +41,17 @@ import ColaboradoresPage from './pages/ColaboradoresPage';
 import ColaboradorDashboardPage from './pages/ColaboradorDashboardPage';
 import ColaboradorProtocolsPage from './pages/ColaboradorProtocolsPage';
 import { modules } from './modules';
+import kitLocal from './kitLocal';
 import AdminAuditHidden from './pages/AdminAuditHidden';
 import AdminRebuildPaymentsHidden from './pages/AdminRebuildPaymentsHidden';
 
 function App() {
+    /* Kit de pruebas local: en local arranca la simulación de fechas; fuera de local no hace nada */
+    React.useEffect(() => {
+        const limpiar = kitLocal.inicializar();
+        return () => limpiar?.();
+    }, []);
+
     /* ------------------------------------------------------ */
     /* Rutas dinámicas de módulos (panel administrativo)      */
     /* ------------------------------------------------------ */
@@ -267,8 +274,9 @@ function App() {
                             }
                         />
 
-                        {/* Redirect genérico */}
-                        <Route path="*" element={<Navigate to="dashboard" replace />} />
+                        {/* Redirect genérico. Absoluto: en react-router v7 un "dashboard" relativo dentro de
+                            path="*" se resuelve contra la URL completa y se repite sin fin (/x/dashboard/dashboard/...). */}
+                        <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
                     </Route>
 
                     {/* Ruta oculta de auditoría (no listada en menús). Cambia la ruta a tu preferencia */}
