@@ -52,6 +52,9 @@ import RetroactiveApplyModal from './modals/RetroactiveApplyModal';
 import PaymentFlowTimeline from './PaymentFlowTimeline';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
+import { formatDate, formatDateShort } from '../utils/dateFormat';
+import { formatQ } from '../utils/currency';
+import { SERVICE_STATUS } from '../constants/statuses';
 
 // cache TTL (ms)
 const PAYMENT_HIST_CACHE_TTL = 1000 * 60 * 5; // 5 minutes
@@ -176,16 +179,14 @@ function buildTransactionExplanation(h, allHistories = []) {
     const type = String(h.type || '').toUpperCase();
     const source = String(h.source || '').toUpperCase();
     const amount = Number(h.amountPaid || 0);
-    const date = h.lastPaymentDate ? moment.parseZone(h.lastPaymentDate).format('DD/MM/YYYY') : '—';
+    const date = formatDate(h.lastPaymentDate, { keepZone: true });
     const receipt = h.receiptNumber || '—';
     const meta = h.metadata || {};
     const lines = [];
 
     // Helper para formatear montos
-    const fmt = (v) => `Q${Number(v || 0).toFixed(2)}`;
-
     if (type === 'TARIFA' && source === 'MANUAL') {
-        lines.push(`💳 Pago manual registrado el ${date}.`, `   • Monto total recibido: ${fmt(amount)}`);
+        lines.push(`💳 Pago manual registrado el ${date}.`, `   • Monto total recibido: ${formatQ(amount || 0)}`);
         if (receipt !== '—') {
             lines.push(`   • N° de boleta: ${receipt}`);
         }
@@ -207,13 +208,13 @@ function buildTransactionExplanation(h, allHistories = []) {
                 : (lePayment ? Number(lePayment.metadata?.overpayment || 0) : 0);
 
             if (appliedToBalance > 0) {
-                lines.push(`   ✅ Aplicado a tarifa: ${fmt(appliedToBalance)}`);
+                lines.push(`   ✅ Aplicado a tarifa: ${formatQ(appliedToBalance || 0)}`);
                 if (lePayment) {
-                    lines.push(`      (Saldo antes: ${fmt(lePayment.balanceDueBefore)} → después: ${fmt(lePayment.balanceDueAfter)})`);
+                    lines.push(`      (Saldo antes: ${formatQ(lePayment.balanceDueBefore || 0)} → después: ${formatQ(lePayment.balanceDueAfter || 0)})`);
                 }
             }
             if (overpaymentAmt > 0) {
-                lines.push(`   ↗ Convertido a crédito disponible: ${fmt(overpaymentAmt)}`);
+                lines.push(`   ↗ Convertido a crédito disponible: ${formatQ(overpaymentAmt || 0)}`);
             }
             if (appliedToBalance <= 0 && overpaymentAmt <= 0) {
                 lines.push('   ℹ️ Este pago se aplicó completamente a la tarifa del período.');
@@ -231,7 +232,7 @@ function buildTransactionExplanation(h, allHistories = []) {
 
         lines.push(
             `🔄 Aplicación automática de crédito.`,
-            `   • Crédito aplicado: ${fmt(creditApplied)}`,
+            `   • Crédito aplicado: ${formatQ(creditApplied || 0)}`,
             `   • Destino: tarifa de ${periodLabel}`
         );
 
@@ -242,9 +243,9 @@ function buildTransactionExplanation(h, allHistories = []) {
             if (sourceTxs.length > 0) {
                 lines.push('', '📎 Este crédito proviene de:');
                 sourceTxs.forEach(stx => {
-                    const stxDate = stx.lastPaymentDate ? moment.parseZone(stx.lastPaymentDate).format('DD/MM/YYYY') : '—';
+                    const stxDate = formatDate(stx.lastPaymentDate, { keepZone: true });
                     const stxAmt = Number(stx.amountPaid || 0);
-                    lines.push(`   • Pago del ${stxDate} por ${fmt(stxAmt)} (boleta: ${stx.receiptNumber || '—'})`);
+                    lines.push(`   • Pago del ${stxDate} por ${formatQ(stxAmt || 0)} (boleta: ${stx.receiptNumber || '—'})`);
                 });
             }
         }
@@ -256,8 +257,8 @@ function buildTransactionExplanation(h, allHistories = []) {
             allocations.forEach(al => {
                 const alPeriod = formatPeriodFullLabel(al.period);
                 const alAmt = Number(al.amount || 0);
-                const alDate = al.date ? moment(al.date).format('DD/MM/YYYY') : '—';
-                lines.push(`   • ${fmt(alAmt)} del pago del ${alDate} → ${alPeriod}`);
+                const alDate = formatDate(al.date);
+                lines.push(`   • ${formatQ(alAmt || 0)} del pago del ${alDate} → ${alPeriod}`);
             });
         }
 
@@ -271,7 +272,7 @@ function buildTransactionExplanation(h, allHistories = []) {
     }
 
     else if (type === 'CREDITO' && source !== 'CREDIT_AUTO') {
-        lines.push(`🔄 Transacción de crédito.`, `   • Monto: ${fmt(amount)}`, `   • Fecha: ${date}`);
+        lines.push(`🔄 Transacción de crédito.`, `   • Monto: ${formatQ(amount || 0)}`, `   • Fecha: ${date}`);
 
         const leEntries = Array.isArray(h.ledgerEntries) ? h.ledgerEntries : [];
         const creditLe = leEntries.find(le => String(le.operation || '').toUpperCase() === 'CREDIT_PAYMENT');
@@ -281,16 +282,16 @@ function buildTransactionExplanation(h, allHistories = []) {
             const targetLabel = targetPeriod ? formatPeriodFullLabel(targetPeriod) : 'tarifa';
             lines.push('', `   📌 Aplicado a: ${targetLabel}`);
             if (creditLe.creditBalanceBefore !== undefined) {
-                lines.push(`      Crédito antes: ${fmt(creditLe.creditBalanceBefore)} → después: ${fmt(creditLe.creditBalanceAfter)}`);
+                lines.push(`      Crédito antes: ${formatQ(creditLe.creditBalanceBefore || 0)} → después: ${formatQ(creditLe.creditBalanceAfter || 0)}`);
             }
         }
     }
 
     else if (type === 'MORA') {
-        lines.push(`⚠️ Pago de mora registrado el ${date}.`, `   • Monto: ${fmt(amount)}`);
+        lines.push(`⚠️ Pago de mora registrado el ${date}.`, `   • Monto: ${formatQ(amount || 0)}`);
 
         if (h.extraordinaryDiscount > 0) {
-            lines.push(`   • Descuento/exoneración aplicado: ${fmt(h.extraordinaryDiscount)}`);
+            lines.push(`   • Descuento/exoneración aplicado: ${formatQ(h.extraordinaryDiscount || 0)}`);
         }
         if (receipt !== '—') {
             lines.push(`   • N° de boleta: ${receipt}`);
@@ -300,7 +301,7 @@ function buildTransactionExplanation(h, allHistories = []) {
     else {
         lines.push(
             `📄 Transacción de tipo "${type}".`,
-            `   • Monto: ${fmt(amount)}`,
+            `   • Monto: ${formatQ(amount || 0)}`,
             `   • Fecha: ${date}`
         );
     }
@@ -316,9 +317,9 @@ function buildTransactionExplanation(h, allHistories = []) {
             lines.push(
                 '',
                 '📈 Estado financiero después de esta transacción:',
-                `   • Saldo de tarifa: ${fmt(lastLe.balanceDueAfter)}`,
-                `   • Crédito disponible: ${fmt(lastLe.creditBalanceAfter)}`,
-                `   • Mora pendiente: ${fmt(lastLe.penaltyDueAfter)}`
+                `   • Saldo de tarifa: ${formatQ(lastLe.balanceDueAfter || 0)}`,
+                `   • Crédito disponible: ${formatQ(lastLe.creditBalanceAfter || 0)}`,
+                `   • Mora pendiente: ${formatQ(lastLe.penaltyDueAfter || 0)}`
             );
         }
     }
@@ -358,9 +359,9 @@ const HistoryMobileCard = ({ history, onToggleInvoiceRow, onOpenNotes, onOpenExp
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, alignItems: 'flex-start' }}>
                     <Box>
                         <Typography variant="caption" color="text.secondary">Fecha</Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{dateVal ? moment.parseZone(dateVal).format('DD/MM/YY') : '—'}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{formatDateShort(dateVal, { keepZone: true })}</Typography>
                     </Box>
-                    <Typography variant="body2" sx={{ fontWeight: 700, color: amountVal >= 0 ? 'success.main' : 'error.main' }}>Q {amountVal.toFixed(2)}</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: amountVal >= 0 ? 'success.main' : 'error.main' }}>{formatQ(amountVal)}</Typography>
                 </Box>
 
                 <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
@@ -401,7 +402,7 @@ const HistoryMobileCard = ({ history, onToggleInvoiceRow, onOpenNotes, onOpenExp
                 <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1 }}>
                     <Box sx={{ minWidth: 0 }}>
                         <Typography variant="caption" color="text.secondary">Desc. Extra</Typography>
-                        <Typography variant="body2">Q {(Number(history.extraordinaryDiscount || 0)).toFixed(2)}</Typography>
+                        <Typography variant="body2">{formatQ(history.extraordinaryDiscount || 0)}</Typography>
                     </Box>
                     <Box sx={{ minWidth: 0 }}>
                         <Typography variant="caption" color="text.secondary">N° Boleta</Typography>
@@ -845,10 +846,10 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
         const dateVal = h.lastPaymentDate || null;
         const amountVal = Number(h.amountPaid || 0);
         const typeLabel = getTransactionTypeMeta(h.type || 'PAYMENT').label;
-        const dateStr = dateVal ? moment.parseZone(dateVal).format('DD/MM/YYYY') : '—';
+        const dateStr = formatDate(dateVal, { keepZone: true });
         const explanation = buildTransactionExplanation(h, sortedHistories);
         setTxExplanation({
-            title: `${typeLabel} · Q${amountVal.toFixed(2)} · ${dateStr}`,
+            title: `${typeLabel} · ${formatQ(amountVal)} · ${dateStr}`,
             text: explanation
         });
         setOpenTxExplanation(true);
@@ -953,19 +954,19 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                         let sx = { display: 'inline-flex', alignItems: 'center', px: 1, py: 0.5, borderRadius: 1, color: 'white', fontSize: 12 };
 
                                         if (svcStatus === 'ACTIVE') {
-                                            label = 'Activo';
+                                            label = SERVICE_STATUS.ACTIVE.label;
                                             sx = { ...sx, bgcolor: 'success.main' };
                                         } else if (svcStatus === 'PAUSED') {
-                                            label = 'Pausado';
+                                            label = SERVICE_STATUS.PAUSED.label;
                                             sx = { ...sx, bgcolor: 'warning.main' };
                                         } else if (svcStatus === 'PENDING_START') {
-                                            label = 'Pendiente de inicio';
+                                            label = SERVICE_STATUS.PENDING_START.label;
                                             sx = { ...sx, bgcolor: 'info.main' };
                                         } else if (svcStatus === 'SUSPENDED') {
-                                            label = 'Suspendido';
+                                            label = SERVICE_STATUS.SUSPENDED.label;
                                             sx = { ...sx, bgcolor: 'error.main' };
                                         } else if (svcStatus === 'INACTIVE') {
-                                            label = 'Inactivo';
+                                            label = SERVICE_STATUS.INACTIVE.label;
                                             sx = { ...sx, bgcolor: '#9e9e9e' };
                                         } else {
                                             label = svcStatus;
@@ -981,7 +982,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                         if (svcStatus === 'PAUSED' && resumeAt) {
                                             const formatted = (() => {
                                                 try {
-                                                    return moment.parseZone(resumeAt).format('DD/MM/YYYY');
+                                                    return formatDate(resumeAt, { keepZone: true });
                                                 } catch (e) {
                                                     return String(resumeAt);
                                                 }
@@ -1014,7 +1015,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                             <Box sx={{ display: 'flex', alignItems: { xs: 'stretch', sm: 'baseline' }, gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
                                 <Box>
                                     <Typography variant="caption" color="text.secondary">Tarifa</Typography>
-                                    <Typography variant="h5">Q {totalAfterDiscount}</Typography>
+                                    <Typography variant="h5">{formatQ(totalAfterDiscount)}</Typography>
                                 </Box>
                                 <Box sx={{ ml: { xs: 0, sm: 'auto' } }}>
                                     <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexDirection: { xs: 'column', sm: 'row' } }}>
@@ -1143,7 +1144,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                     autoFocus
                                 />
                                 <Typography variant="caption" color="text.secondary">
-                                    Mora actual: Q {Number(activePayment.penaltyDue || 0).toFixed(2)}
+                                    Mora actual: {formatQ(activePayment.penaltyDue || 0)}
                                 </Typography>
                             </Stack>
                         ) : (
@@ -1153,7 +1154,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                 </Typography>
                                 {activePayment.penaltyGlobalFrozenAt && (
                                     <Typography variant="caption" color="text.secondary">
-                                        Congelada desde: {moment.parseZone(activePayment.penaltyGlobalFrozenAt).format('DD/MM/YYYY')}
+                                        Congelada desde: {formatDate(activePayment.penaltyGlobalFrozenAt, { keepZone: true })}
                                     </Typography>
                                 )}
                             </Stack>
@@ -1342,7 +1343,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                             return (
                                 <TableRow key={key} hover>
                                     <TableCell align="center">
-                                        <Typography variant="body2">{dateVal ? moment.parseZone(dateVal).format('DD/MM/YY') : '—'}</Typography>
+                                        <Typography variant="body2">{formatDateShort(dateVal, { keepZone: true })}</Typography>
                                     </TableCell>
                                     <TableCell align="center">
                                         <TransactionBadge label={typeMeta.label} backgroundColor={typeMeta.backgroundColor} />
@@ -1351,10 +1352,10 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                         <TransactionBadge label={sourceMeta.label} backgroundColor={sourceMeta.backgroundColor} compact />
                                     </TableCell>
                                     <TableCell align="center">
-                                        <Typography variant="body2" sx={{ fontWeight: 600, color: amountVal >= 0 ? 'success.main' : 'error.main' }}>Q {amountVal.toFixed(2)}</Typography>
+                                        <Typography variant="body2" sx={{ fontWeight: 600, color: amountVal >= 0 ? 'success.main' : 'error.main' }}>{formatQ(amountVal)}</Typography>
                                     </TableCell>
                                     <TableCell align="center">
-                                        <Typography variant="body2">Q {(Number(h.extraordinaryDiscount || 0)).toFixed(2)}</Typography>
+                                        <Typography variant="body2">{formatQ(h.extraordinaryDiscount || 0)}</Typography>
                                     </TableCell>
                                     <TableCell align="center">
                                         <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>

@@ -2,6 +2,7 @@
 // Catálogo de campos de filtro con etiquetas, anchos y valores iniciales canónicos.
 import { getInitialCicloEscolarFilter } from '../../utils/cicloEscolarFilterParams';
 import { parseClient, serializeClient } from '../../utils/clientValue';
+import { SERVICE_STATUS, toStatusOptions } from '../../constants/statuses';
 
 export const FILTER_WIDTHS = { sm: 150, md: 200, lg: 280 };
 export const EMPTY_RANGE = { from: '', to: '' };
@@ -21,12 +22,7 @@ export const WEEKDAY_OPTIONS = [
     { value: 'sunday', label: 'Domingo' },
 ];
 
-export const SERVICE_STATUS_OPTIONS = [
-    { value: 'ACTIVE', label: 'Activo' },
-    { value: 'PAUSED', label: 'Pausado' },
-    { value: 'SUSPENDED', label: 'Suspendido' },
-    { value: 'INACTIVE', label: 'Inactivo' },
-];
+export const SERVICE_STATUS_OPTIONS = toStatusOptions(SERVICE_STATUS, ['ACTIVE', 'PAUSED', 'SUSPENDED', 'INACTIVE']);
 
 // Acepta { valor: etiqueta } o [{ value, label, group? }].
 export const toOptions = (source) => (Array.isArray(source)

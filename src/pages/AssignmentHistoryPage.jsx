@@ -15,7 +15,6 @@ import {
 } from '@mui/material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
-import moment from 'moment-timezone';
 import { getClientSchoolId, getClientCorporationId } from '../utils/clientValue';
 import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
 import FilterBar from '../components/filters/FilterBar';
@@ -28,8 +27,7 @@ import useTableState from '../hooks/useTableState';
 import AppTablePagination from '../components/table/AppTablePagination';
 import SortableTableHead from '../components/table/SortableTableHead';
 import AppTableContainer from '../components/table/AppTableContainer';
-
-moment.tz.setDefault('America/Guatemala');
+import { formatDateTime } from '../utils/dateFormat';
 
 const ASSIGNMENT_TYPE_LABELS = {
     'bus_pilot': 'Bus - Piloto',
@@ -48,13 +46,6 @@ const ASSIGNMENT_TYPE_LABELS = {
     'corporation_monitora': 'Corporación - Monitora',
     'route_pilot': 'Ruta - Piloto',
     'route_monitora': 'Ruta - Monitora'
-};
-
-const formatGuatemalaDatetime = (dateString) => {
-    if (!dateString) {
-        return '—';
-    }
-    return moment.utc(dateString).tz('America/Guatemala').format('DD/MM/YYYY HH:mm');
 };
 
 // ─── Pure helpers ────────────────────────────────────────────────────────────
@@ -475,7 +466,7 @@ const AssignmentHistoryPage = () => {
                                                     <TableRow key={record.id} hover>
                                                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                                                             <Typography variant="body2">
-                                                                {formatGuatemalaDatetime(record.createdAt)}
+                                                                {formatDateTime(record.createdAt, { utc: true })}
                                                             </Typography>
                                                         </TableCell>
                                                         <TableCell>

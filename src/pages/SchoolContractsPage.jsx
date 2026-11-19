@@ -50,6 +50,7 @@ import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
 import useIsMobile from '../hooks/useIsMobile';
 import { MobileCard } from '../components/table/MobileCard';
+import { formatDateTime } from '../utils/dateFormat';
 
 // Tarjeta móvil de contratos: borde gris fino sin sombra, como antes del bloque B
 const CONTRACT_CARD_SX = { p: 2, mb: 1.5, backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: '8px' };
@@ -700,7 +701,7 @@ const SchoolContractsPage = () => {
                             )}
                         </Box>
                         <Typography variant="body2" color="textSecondary">
-                            Fecha de Creación: {new Date(filledContract.createdAt).toLocaleString()}
+                            Fecha de Creación: {formatDateTime(filledContract.createdAt)}
                         </Typography>
                         <Typography variant="body2" color="textSecondary">
                             {(() => {
@@ -753,7 +754,7 @@ const SchoolContractsPage = () => {
                     secondary={
                         <>
                             <Typography variant="body2" color="textSecondary">
-                                Fecha de Creación: {new Date(filledContract.createdAt).toLocaleString()}
+                                Fecha de Creación: {formatDateTime(filledContract.createdAt)}
                             </Typography>
                             <Typography variant="body2" color="textSecondary">
                                 {(() => {

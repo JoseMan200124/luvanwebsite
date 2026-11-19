@@ -36,15 +36,7 @@ import useTableState from '../hooks/useTableState';
 import AppTablePagination from '../components/table/AppTablePagination';
 import SortableTableHead from '../components/table/SortableTableHead';
 import AppTableContainer from '../components/table/AppTableContainer';
-
-moment.tz.setDefault('America/Guatemala');
-
-const formatGuatemalaDatetime = (dateString) => {
-    if (!dateString) {
-        return '—';
-    }
-    return moment.utc(dateString).tz('America/Guatemala').format('DD/MM/YYYY, hh:mm a');
-};
+import { formatDateTime, formatDate } from '../utils/dateFormat';
 
 const safeParseJson = (v) => {
     if (!v) {
@@ -528,7 +520,7 @@ const BusAssignmentHistoryPage = () => {
                         {isSpecificCicloEscolarSelected && 'Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.'}
                         {isSpecificCicloEscolarSelected && startDate && endDate && <br />}
                         {startDate && endDate && (
-                            <>Mostrando cambios desde <strong>{moment(startDate).format('DD/MM/YYYY')}</strong> hasta <strong>{moment(endDate).format('DD/MM/YYYY')}</strong></>
+                            <>Mostrando cambios desde <strong>{formatDate(startDate)}</strong> hasta <strong>{formatDate(endDate)}</strong></>
                         )}
                     </>
                 ) : undefined}
@@ -578,7 +570,7 @@ const BusAssignmentHistoryPage = () => {
                                                         {/* Fecha y hora */}
                                                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                                                             <Typography variant="body2">
-                                                                {formatGuatemalaDatetime(record.createdAt)}
+                                                                {formatDateTime(record.createdAt, { utc: true })}
                                                             </Typography>
                                                         </TableCell>
 

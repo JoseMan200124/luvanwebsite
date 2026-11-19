@@ -1,5 +1,4 @@
 import React from 'react';
-import moment from 'moment';
 import {
     Alert,
     AlertTitle,
@@ -34,6 +33,7 @@ import {
     hasPendingInactiveDecision,
     resolvePairing
 } from '../utils/bulkStudentPairing';
+import { formatDate } from '../utils/dateFormat';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Solo ASCII imprimible, igual que el servidor (la base de datos ignora tildes al comparar correos).
@@ -696,7 +696,7 @@ const DraftCard = React.memo(({ draft, duplicateRows, allowedGrades, allowedRout
                                                     disabled={pairing.matchedIds.some((id, other) => other !== index && id === inactive.id)}
                                                 >
                                                     {inactive.fullName} ({inactive.grade}) — inactivo
-                                                    {inactive.inactivoDesde ? ` desde ${moment(inactive.inactivoDesde).format('DD/MM/YYYY')}` : ''}
+                                                    {inactive.inactivoDesde ? ` desde ${formatDate(inactive.inactivoDesde)}` : ''}
                                                 </MenuItem>
                                             ))}
                                         </Select>

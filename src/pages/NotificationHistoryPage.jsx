@@ -42,29 +42,11 @@ import AppTablePagination from '../components/table/AppTablePagination';
 import SortableTableHead from '../components/table/SortableTableHead';
 import AppTableContainer from '../components/table/AppTableContainer';
 import RowActions from '../components/table/RowActions';
-
-moment.tz.setDefault('America/Guatemala');
+import { formatDateTime } from '../utils/dateFormat';
 
 const safeStr = (v) => (v == null ? '' : String(v)).trim();
 
 const MAX_VISIBLE_SCHOOL_NAMES = 2;
-
-const formatDateTime = (dateString) => {
-  if (!dateString) {
-      return '';
-  }
-  try {
-    return new Date(dateString).toLocaleString('es-ES', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return String(dateString);
-  }
-};
 
 const getRoleLabel = (role) => {
   const normalizedRole = safeStr(role).toLowerCase();

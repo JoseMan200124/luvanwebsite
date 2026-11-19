@@ -18,6 +18,7 @@ import ClientSelector from './ClientSelector';
 import {
     MODOS_MAPEO, emptyForm, recordToForm, validateForm, buildCreatePayload, buildUpdatePayload,
 } from '../utils/failureMappingForm';
+import { formatMonth, formatDate } from '../utils/dateFormat';
 
 const TZ = 'America/Guatemala';
 // El valor guardado sigue siendo incidente/accidente; aquí se muestra con el texto de la app del supervisor.
@@ -287,7 +288,7 @@ const FailureMappingFormDialog = ({ open, onClose, onSaved, record = null }) => 
                     </Alert>
                     {esDiaAnterior && (
                         <Alert severity="warning" sx={{ mb: 2 }}>
-                            {`Registro de un día anterior (${moment(form.dia).format('dddd D [de] MMMM [de] YYYY')}). Afectará los totales del reporte PDF de ${moment(form.dia).format('MMMM YYYY')}.`}
+                            {`Registro de un día anterior (${moment(form.dia).format('dddd D [de] MMMM [de] YYYY')}). Afectará los totales del reporte PDF de ${formatMonth(form.dia)}.`}
                         </Alert>
                     )}
                     {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -306,7 +307,7 @@ const FailureMappingFormDialog = ({ open, onClose, onSaved, record = null }) => 
                                     >
                                         {[o.nombre, o.cicloEscolarAnio].filter(Boolean).join(' ')}
                                         {o.desde && o.hasta
-                                            ? ` (${moment(o.desde).format('DD/MM/YYYY')} – ${moment(o.hasta).format('DD/MM/YYYY')})`
+                                            ? ` (${formatDate(o.desde)} – ${formatDate(o.hasta)})`
                                             : ''}
                                     </Button>
                                 ))}

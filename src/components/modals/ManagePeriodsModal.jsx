@@ -32,6 +32,9 @@ import moment from 'moment';
 import 'moment/locale/es';
 import api from '../../utils/axiosConfig';
 import usePermissions from '../../hooks/usePermissions';
+import { formatMonth, formatDate } from '../../utils/dateFormat';
+import { formatQ } from '../../utils/currency';
+import { useCurrentDate } from '../../hooks/useCurrentDate';
 
 const PERIOD_RE = /^\d{4}-\d{2}$/;
 
@@ -47,6 +50,7 @@ const normalizePeriod = (val) => {
 };
 
 const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
+    const { currentDate } = useCurrentDate();
     const { hasPermission } = usePermissions();
     const paymentId = payment?.id;
 
@@ -68,7 +72,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
     const [deleteBusy, setDeleteBusy] = useState(false);
     const [freezeBusyPeriod, setFreezeBusyPeriod] = useState('');
 
-    const currentPeriod = useMemo(() => moment().format('YYYY-MM'), []);
+    const currentPeriod = useMemo(() => moment(currentDate).format('YYYY-MM'), [currentDate]);
 
     const periods = useMemo(() => {
         const arr = serverPayment?.periods || serverPayment?.PaymentPeriods || [];
@@ -374,7 +378,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                 await api.post('/payments/penalties/freeze', {
                     paymentId,
                     period: per,
-                    freezeDate: moment().format('YYYY-MM-DD'),
+                    freezeDate: moment(currentDate).format('YYYY-MM-DD'),
                     notes: `Mora del período ${per} congelada manualmente`
                 });
                 setSuccess(`Mora del período ${per} congelada.`);
@@ -430,7 +434,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                 Al no definirse ruta, descuento o estudiantes, se usará la configuración actual
                             </Typography>
                             <Typography variant="caption" display="block" sx={{ color: 'text.secondary', mt: 0.5 }}>
-                                Configuración actual: Ruta: <strong>{futureRouteType || '-'}</strong> · Descuento: <strong>Q {Number(futureDiscount || 0).toFixed(2)}</strong> · Estudiantes: <strong>{studentCountFromFamily}</strong>
+                                Configuración actual: Ruta: <strong>{futureRouteType || '-'}</strong> · Descuento: <strong>{formatQ(futureDiscount || 0)}</strong> · Estudiantes: <strong>{studentCountFromFamily}</strong>
                             </Typography>
                         </Paper>
                     </Box>
@@ -516,7 +520,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                 type="number"
                                 label="Descuento"
                                 inputProps={{ min: 0, step: 0.01 }}
-                                placeholder={discountToAddType === 'amount' ? `Actual: Q ${Number(futureDiscount || 0).toFixed(2)}` : '%'}
+                                placeholder={discountToAddType === 'amount' ? `Actual: ${formatQ(futureDiscount || 0)}` : '%'}
                                 value={discountToAdd}
                                 onChange={(e) => setDiscountToAdd(e.target.value)}
                                 disabled={!paymentId || loading}
@@ -657,7 +661,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                 return 'default';
                             })();
 
-                            const monthRaw = per ? moment(per + '-01').locale('es').format('MMMM YYYY') : per;
+                            const monthRaw = per ? formatMonth(per + '-01') : per;
                             const monthLabel = monthRaw ? (monthRaw.charAt(0).toUpperCase() + monthRaw.slice(1)) : monthRaw;
 
                                     const routeTypeForLabel = String(p.routeType || familyFromDetail?.routeType || '').trim();
@@ -682,7 +686,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                             return false;
                                         }
                                         try {
-                                            return moment().isAfter(moment.parseZone(dueDate), 'day');
+                                            return moment(currentDate).isAfter(moment.parseZone(dueDate), 'day');
                                         } catch (e) {
                                             return false;
                                         }
@@ -776,38 +780,38 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                                                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                         <Typography variant="body2" sx={{ color: 'text.secondary' }}>{baseLabel}</Typography>
-                                                        <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 700, minWidth: 120, textAlign: 'right' }}>{`Q ${Number(baseFee || 0).toFixed(2)}`}</Typography>
+                                                        <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 700, minWidth: 120, textAlign: 'right' }}>{formatQ(baseFee || 0)}</Typography>
                                                     </Box>
 
                                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                         <Typography variant="body2" sx={{ color: 'text.secondary' }}>{monthlyLabel}</Typography>
-                                                        <Typography variant="body2" sx={{ color: 'text.primary', minWidth: 120, textAlign: 'right' }}>{`Q ${Number(original || 0).toFixed(2)}`}</Typography>
+                                                        <Typography variant="body2" sx={{ color: 'text.primary', minWidth: 120, textAlign: 'right' }}>{formatQ(original || 0)}</Typography>
                                                     </Box>
 
                                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                         <Typography variant="body2" sx={{ color: 'text.secondary' }}>Descuento</Typography>
-                                                        <Typography variant="body2" sx={{ color: 'text.primary', minWidth: 120, textAlign: 'right' }}>{`Q ${Number(discount || 0).toFixed(2)}`}</Typography>
+                                                        <Typography variant="body2" sx={{ color: 'text.primary', minWidth: 120, textAlign: 'right' }}>{formatQ(discount || 0)}</Typography>
                                                     </Box>
 
                                                     {extraTariffDiscount > 0 && (
                                                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                             <Typography variant="body2" sx={{ color: 'warning.dark' }}>Desc. extraordinario tarifa</Typography>
-                                                            <Typography variant="body2" sx={{ color: 'warning.dark', fontWeight: 600, minWidth: 120, textAlign: 'right' }}>{`Q ${extraTariffDiscount.toFixed(2)}`}</Typography>
+                                                            <Typography variant="body2" sx={{ color: 'warning.dark', fontWeight: 600, minWidth: 120, textAlign: 'right' }}>{formatQ(extraTariffDiscount)}</Typography>
                                                         </Box>
                                                     )}
 
                                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                         <Typography component="span" sx={{ fontWeight: 800 }}>Subtotal período:</Typography>
-                                                        <Typography component="span" sx={{ ml: 1, color: 'primary.main', fontWeight: 800, minWidth: 120, textAlign: 'right' }}>Q {Number(net || 0).toFixed(2)}</Typography>
+                                                        <Typography component="span" sx={{ ml: 1, color: 'primary.main', fontWeight: 800, minWidth: 120, textAlign: 'right' }}>{formatQ(net || 0)}</Typography>
                                                     </Box>
                                                 </Box>
 
                                                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
-                                                    Pagado: Q {amountPaid.toFixed(2)} · Pendiente: Q {amountDue.toFixed(2)}
+                                                    Pagado: {formatQ(amountPaid)} · Pendiente: {formatQ(amountDue)}
                                                 </Typography>
                                                 {(penaltyDue > 0 || penaltyFrozen) && (
                                                     <Typography variant="caption" color={penaltyFrozen ? 'info.main' : 'text.secondary'} sx={{ display: 'block', mt: 0.25 }}>
-                                                        Mora: Q {penaltyDue.toFixed(2)}{penaltyFrozen && p.penaltyFrozenAt ? ` · Congelada: ${moment.parseZone(p.penaltyFrozenAt).format('DD/MM/YYYY')}` : ''}
+                                                        Mora: {formatQ(penaltyDue)}{penaltyFrozen && p.penaltyFrozenAt ? ` · Congelada: ${formatDate(p.penaltyFrozenAt, { keepZone: true })}` : ''}
                                                     </Typography>
                                                 )}
                                             </Box>

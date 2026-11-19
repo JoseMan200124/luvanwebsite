@@ -30,7 +30,6 @@ import {
     CheckCircle as CheckCircleIcon,
     Cancel as CancelIcon,
 } from '@mui/icons-material';
-import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { getAttendances, getAttendanceDetails } from '../services/attendanceService';
 import api from '../utils/axiosConfig';
@@ -48,8 +47,7 @@ import AppTablePagination from '../components/table/AppTablePagination';
 import SortableTableHead from '../components/table/SortableTableHead';
 import AppTableContainer from '../components/table/AppTableContainer';
 import RowActions from '../components/table/RowActions';
-
-moment.tz.setDefault('America/Guatemala');
+import { formatDate } from '../utils/dateFormat';
 
 // Columnas de la tabla de asistencias
 const COLUMNS = [
@@ -399,7 +397,7 @@ const AttendanceManagementPage = () => {
                                             return (
                                                 <TableRow key={attendance.id}>
                                                     <TableCell>
-                                                        {moment(attendance.fecha).format('DD/MM/YYYY')}
+                                                        {formatDate(attendance.fecha)}
                                                     </TableCell>
                                                     <TableCell>{getDayLabel(attendance.day)}</TableCell>
                                                     <TableCell>
@@ -475,7 +473,7 @@ const AttendanceManagementPage = () => {
                         </Typography>
                         {selectedAttendance && (
                             <Typography variant="body2" color="textSecondary">
-                                {moment(selectedAttendance.fecha).format('DD/MM/YYYY')} - {getScheduleLabel(selectedAttendance.schedule)} - {getDayLabel(selectedAttendance.day)}
+                                {formatDate(selectedAttendance.fecha)} - {getScheduleLabel(selectedAttendance.schedule)} - {getDayLabel(selectedAttendance.day)}
                             </Typography>
                         )}
                     </DialogTitle>

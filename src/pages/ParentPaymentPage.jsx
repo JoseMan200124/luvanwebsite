@@ -50,6 +50,9 @@ import api from '../utils/axiosConfig';
 import { AuthContext } from '../context/AuthProvider';
 import useParentSchoolOperational from '../hooks/useParentSchoolOperational';
 import useNotify from '../hooks/useNotify';
+import { formatDate } from '../utils/dateFormat';
+import { formatQ } from '../utils/currency';
+import { PAYMENT_STATUS } from '../constants/statuses';
 
 const PRIMARY_COLOR = '#0D3FE2';
 const BACKGROUND_COLOR = '#F8F9FA';
@@ -85,26 +88,6 @@ const toNumber = (value) => {
     return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const formatMoney = (value) => `Q${toNumber(value).toFixed(2)}`;
-
-const formatDate = (value) => {
-    if (!value) {
-        return 'N/A';
-    }
-
-    const datePart = String(value).split('T')[0];
-    const parts = datePart.split('-');
-    if (parts.length === 3) {
-        return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    }
-
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) {
-        return 'N/A';
-    }
-    return parsed.toLocaleDateString('es-GT', { day: '2-digit', month: '2-digit', year: 'numeric' });
-};
-
 const formatPeriodName = (period, fallback) => {
     const match = /^(\d{4})-(\d{2})$/.exec(String(period || ''));
     if (!match) {
@@ -138,23 +121,23 @@ const getStatusMeta = (status, hasPendingReceipt = false) => {
 
     const normalized = String(status || 'PENDIENTE').toUpperCase();
     if (normalized === 'MORA') {
-        return { label: 'Mora', color: '#D32F2F', background: '#FDEDEC', icon: ErrorOutlineIcon };
+        return { label: PAYMENT_STATUS.MORA.label, color: '#D32F2F', background: '#FDEDEC', icon: ErrorOutlineIcon };
     }
     if (normalized === 'CONFIRMADO' || normalized === 'PAGADO') {
-        return { label: 'Pagado', color: '#15803D', background: '#E8F5E9', icon: CheckCircleIcon };
+        return { label: PAYMENT_STATUS.PAGADO.label, color: '#15803D', background: '#E8F5E9', icon: CheckCircleIcon };
     }
     if (normalized === 'ADELANTADO') {
-        return { label: 'Adelantado', color: '#2563EB', background: '#EAF1FF', icon: TrendingUpIcon };
+        return { label: PAYMENT_STATUS.ADELANTADO.label, color: '#2563EB', background: '#EAF1FF', icon: TrendingUpIcon };
     }
     if (normalized === 'PARCIAL') {
-        return { label: 'Pago Parcial', color: '#6D28D9', background: '#EDE9FE', icon: HourglassEmptyIcon };
+        return { label: PAYMENT_STATUS.PARCIAL.label, color: '#6D28D9', background: '#EDE9FE', icon: HourglassEmptyIcon };
     }
     // 'EN_PROCESO' ya no se genera como finalStatus, pero se conserva el
     // mapeo por si queda alguna referencia histórica.
     if (normalized === 'EN_PROCESO') {
         return { label: 'En revisión', color: '#B45309', background: '#FEF3C7', icon: HourglassEmptyIcon };
     }
-    return { label: 'Pendiente', color: '#B45309', background: '#FEF3C7', icon: AccessTimeIcon };
+    return { label: PAYMENT_STATUS.PENDIENTE.label, color: '#B45309', background: '#FEF3C7', icon: AccessTimeIcon };
 };
 
 const getMetricToneStyles = (tone) => {
@@ -471,19 +454,19 @@ const PeriodItem = ({ period }) => {
                     <Typography sx={{ color: TEXT_COLOR, fontSize: 16, fontWeight: 900, overflowWrap: 'anywhere' }}>
                         {formatPeriodName(period.period, period.periodName)}
                     </Typography>
-                    <Typography sx={{ color: MUTED_COLOR, fontSize: 12, mt: 0.25 }}>Vence: {formatDate(period.dueDate)}</Typography>
+                    <Typography sx={{ color: MUTED_COLOR, fontSize: 12, mt: 0.25 }}>Vence: {formatDate(period.dueDate, { keepZone: true })}</Typography>
                 </Box>
                 <StatusBadge status={effectivePeriodStatus} />
             </Box>
 
             {!expanded && (
                 <>
-                    <DetailRow label="Tarifa neta" value={formatMoney(period.netAmount)} />
+                    <DetailRow label="Tarifa neta" value={formatQ(period.netAmount || 0)} />
                     {hasMora && (
-                        <DetailRow label="Mora pendiente" value={formatMoney(period.penaltyDue)} valueSx={penaltyDue > 0 ? { color: '#D32F2F' } : undefined} />
+                        <DetailRow label="Mora pendiente" value={formatQ(period.penaltyDue || 0)} valueSx={penaltyDue > 0 ? { color: '#D32F2F' } : undefined} />
                     )}
-                    <DetailRow label="Pagado" value={formatMoney(period.amountPaid)} valueSx={{ color: '#15803D' }} last />
-                    <TotalRow value={formatMoney(totalPending)} danger={totalPending > 0} />
+                    <DetailRow label="Pagado" value={formatQ(period.amountPaid || 0)} valueSx={{ color: '#15803D' }} last />
+                    <TotalRow value={formatQ(totalPending || 0)} danger={totalPending > 0} />
                 </>
             )}
 
@@ -493,24 +476,24 @@ const PeriodItem = ({ period }) => {
                 <DetailRow label="Estudiantes" value={String(period.studentsCount || 1)} last />
 
                 <DetailSection label="Tarifa" />
-                <DetailRow label="Tarifa base" value={formatMoney(period.originalAmount)} />
-                {discountApplied > 0 && <DetailRow label="Descuento familiar" value={`- ${formatMoney(period.discountApplied)}`} valueSx={{ color: '#15803D' }} />}
-                {extraDiscount > 0 && <DetailRow label="Descuento extraordinario" value={`- ${formatMoney(period.extraordinaryTariffDiscount)}`} valueSx={{ color: '#15803D' }} />}
+                <DetailRow label="Tarifa base" value={formatQ(period.originalAmount || 0)} />
+                {discountApplied > 0 && <DetailRow label="Descuento familiar" value={`- ${formatQ(period.discountApplied || 0)}`} valueSx={{ color: '#15803D' }} />}
+                {extraDiscount > 0 && <DetailRow label="Descuento extraordinario" value={`- ${formatQ(period.extraordinaryTariffDiscount || 0)}`} valueSx={{ color: '#15803D' }} />}
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, px: 1.75, py: 1.15, backgroundColor: '#F9FAFB', borderTop: `1px solid ${BORDER_COLOR}`, borderBottom: `1px solid ${BORDER_COLOR}` }}>
                     <Typography sx={{ color: TEXT_COLOR, fontSize: 13, fontWeight: 800 }}>Tarifa neta</Typography>
-                    <Typography sx={{ color: TEXT_COLOR, fontSize: 14, fontWeight: 900 }}>{formatMoney(period.netAmount)}</Typography>
+                    <Typography sx={{ color: TEXT_COLOR, fontSize: 14, fontWeight: 900 }}>{formatQ(period.netAmount || 0)}</Typography>
                 </Box>
-                <DetailRow label="Pagado" value={formatMoney(period.amountPaid)} valueSx={{ color: '#15803D' }} last />
+                <DetailRow label="Pagado" value={formatQ(period.amountPaid || 0)} valueSx={{ color: '#15803D' }} last />
 
                 {hasMora && (
                     <>
                         <DetailSection label="Mora" />
-                        {dailyRate > 0 && <DetailRow label="Mora por día" value={formatMoney(period.penaltyAccrualBaseAmount)} valueSx={{ color: '#D32F2F' }} />}
+                        {dailyRate > 0 && <DetailRow label="Mora por día" value={formatQ(period.penaltyAccrualBaseAmount || 0)} valueSx={{ color: '#D32F2F' }} />}
                         {penaltyDays !== null && <DetailRow label="Días de mora" value={`${penaltyDays} ${penaltyDays === 1 ? 'día' : 'días'}`} />}
-                        {penaltyAmount > 0 && <DetailRow label="Mora acumulada" value={formatMoney(period.penaltyAmount)} />}
-                        {penaltyDiscountApplied > 0 && <DetailRow label="Descuento extraordinario" value={`- ${formatMoney(period.penaltyDiscountApplied)}`} valueSx={{ color: '#15803D' }} />}
-                        {penaltyPaid > 0 && <DetailRow label="Mora pagada" value={formatMoney(period.penaltyPaid)} valueSx={{ color: '#15803D' }} />}
-                        <DetailRow label="Mora pendiente" value={formatMoney(period.penaltyDue)} valueSx={penaltyDue > 0 ? { color: '#D32F2F' } : undefined} last={!period.penaltyFrozen && !period.penaltyCleared} />
+                        {penaltyAmount > 0 && <DetailRow label="Mora acumulada" value={formatQ(period.penaltyAmount || 0)} />}
+                        {penaltyDiscountApplied > 0 && <DetailRow label="Descuento extraordinario" value={`- ${formatQ(period.penaltyDiscountApplied || 0)}`} valueSx={{ color: '#15803D' }} />}
+                        {penaltyPaid > 0 && <DetailRow label="Mora pagada" value={formatQ(period.penaltyPaid || 0)} valueSx={{ color: '#15803D' }} />}
+                        <DetailRow label="Mora pendiente" value={formatQ(period.penaltyDue || 0)} valueSx={penaltyDue > 0 ? { color: '#D32F2F' } : undefined} last={!period.penaltyFrozen && !period.penaltyCleared} />
                         {(!!period.penaltyFrozen || !!period.penaltyCleared) && (
                             <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1, px: 1.75, py: 1 }}>
                                 {period.penaltyFrozen && <Chip size="small" color="info" variant="outlined" label="Mora congelada" />}
@@ -521,9 +504,9 @@ const PeriodItem = ({ period }) => {
                 )}
 
                 <DetailSection label="Resumen" />
-                <DetailRow label="Tarifa pendiente" value={formatMoney(period.amountDue)} valueSx={amountDue > 0 ? { color: '#D32F2F' } : { color: '#15803D' }} />
-                {penaltyDue > 0 && <DetailRow label="Mora pendiente" value={formatMoney(period.penaltyDue)} valueSx={{ color: '#D32F2F' }} />}
-                <TotalRow value={formatMoney(totalPending)} danger={totalPending > 0} />
+                <DetailRow label="Tarifa pendiente" value={formatQ(period.amountDue || 0)} valueSx={amountDue > 0 ? { color: '#D32F2F' } : { color: '#15803D' }} />
+                {penaltyDue > 0 && <DetailRow label="Mora pendiente" value={formatQ(period.penaltyDue || 0)} valueSx={{ color: '#D32F2F' }} />}
+                <TotalRow value={formatQ(totalPending || 0)} danger={totalPending > 0} />
             </Collapse>
 
             <Button
@@ -541,7 +524,7 @@ const PeriodItem = ({ period }) => {
 const HistoryItem = ({ movement }) => {
     const extraDiscount = toNumber(movement?.transaction?.extraordinaryDiscount);
     const receiptNumber = movement?.transaction?.receiptNumber;
-    const paymentDate = formatDate(movement?.transaction?.realPaymentDate || movement?.createdAt);
+    const paymentDate = formatDate(movement?.transaction?.realPaymentDate || movement?.createdAt, { keepZone: true });
 
     return (
         <Box sx={{ border: `1px solid ${BORDER_COLOR}`, borderRadius: 1.5, p: 1.5, mb: 1.25, backgroundColor: '#FFFFFF' }}>
@@ -552,9 +535,9 @@ const HistoryItem = ({ movement }) => {
                 <Typography sx={{ color: MUTED_COLOR, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{paymentDate}</Typography>
             </Box>
             <Divider sx={{ my: 1 }} />
-            <InfoRow label="Monto" value={formatMoney(getMovementAmount(movement))} />
+            <InfoRow label="Monto" value={formatQ((getMovementAmount(movement)) || 0)} />
             {!!receiptNumber && <InfoRow label="Boleta" value={receiptNumber} />}
-            {extraDiscount > 0 && <InfoRow label="Desc. extraordinario" value={formatMoney(extraDiscount)} />}
+            {extraDiscount > 0 && <InfoRow label="Desc. extraordinario" value={formatQ(extraDiscount || 0)} />}
             {!!movement?.description && (
                 <Typography sx={{ color: MUTED_COLOR, fontSize: 14, lineHeight: 1.55, mt: 1 }}>{movement.description}</Typography>
             )}
@@ -581,7 +564,7 @@ const ReceiptItem = ({ receipt, onOpen }) => {
             <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
                 <Box sx={{ minWidth: 0 }}>
                     <Typography sx={{ color: TEXT_COLOR, fontSize: 15, fontWeight: 900 }}>Boleta de pago</Typography>
-                    <Typography sx={{ color: MUTED_COLOR, fontSize: 12, mt: 0.25 }}>{formatDate(getReceiptDisplayDate(receipt))}</Typography>
+                    <Typography sx={{ color: MUTED_COLOR, fontSize: 12, mt: 0.25 }}>{formatDate(getReceiptDisplayDate(receipt), { keepZone: true })}</Typography>
                 </Box>
                 <Box
                     sx={{
@@ -657,7 +640,7 @@ const ReceiptViewerDialog = ({ receipt, onClose }) => {
             <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
                 <Box sx={{ minWidth: 0 }}>
                     <Typography component="span" sx={{ display: 'block', color: TEXT_COLOR, fontSize: 18, fontWeight: 900 }}>Boleta de pago</Typography>
-                    <Typography sx={{ color: MUTED_COLOR, fontSize: 12 }}>{formatDate(getReceiptDisplayDate(receipt))}</Typography>
+                    <Typography sx={{ color: MUTED_COLOR, fontSize: 12 }}>{formatDate(getReceiptDisplayDate(receipt), { keepZone: true })}</Typography>
                 </Box>
                 <Stack direction="row" spacing={1} alignItems="center">
                     {receipt?.fileUrl && <Button size="small" onClick={openInNewTab} sx={{ textTransform: 'none' }}>Abrir</Button>}
@@ -978,12 +961,12 @@ const ParentPaymentPage = () => {
                 {/* La tarjeta de inscripción solo aparece si la familia tiene cargo de inscripción,
                     y en ese caso el grid pasa a 5 columnas para no dejarla sola en otra fila. */}
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', md: enrollmentPayment ? 'repeat(5, minmax(0, 1fr))' : 'repeat(4, minmax(0, 1fr))' }, gap: 1.25 }}>
-                    <MetricCard label="Tarifa pendiente" value={formatMoney(paymentAccount?.totals?.balanceDue)} icon={CreditCardIcon} tone="primary" />
-                    <MetricCard label="Mora pendiente" value={formatMoney(paymentAccount?.totals?.penaltyDue)} icon={ErrorOutlineIcon} tone="danger" />
+                    <MetricCard label="Tarifa pendiente" value={formatQ(paymentAccount?.totals?.balanceDue || 0)} icon={CreditCardIcon} tone="primary" />
+                    <MetricCard label="Mora pendiente" value={formatQ(paymentAccount?.totals?.penaltyDue || 0)} icon={ErrorOutlineIcon} tone="danger" />
                     {enrollmentPayment && (
-                        <MetricCard label="Inscripción pendiente" value={formatMoney(enrollmentPayment.amountDue)} icon={ReceiptLongIcon} tone="warning" />
+                        <MetricCard label="Inscripción pendiente" value={formatQ(enrollmentPayment.amountDue || 0)} icon={ReceiptLongIcon} tone="warning" />
                     )}
-                    <MetricCard label="Crédito" value={formatMoney(paymentAccount?.totals?.creditBalance)} icon={TrendingUpIcon} tone="info" />
+                    <MetricCard label="Crédito" value={formatQ(paymentAccount?.totals?.creditBalance || 0)} icon={TrendingUpIcon} tone="info" />
                     <MetricCard label="Períodos pendientes" value={`${paymentAccount?.totals?.unpaidPeriodsCount || 0}`} icon={CalendarMonthIcon} tone="warning" />
                 </Box>
 
@@ -1011,8 +994,8 @@ const ParentPaymentPage = () => {
                 <InfoRow label="Banco" value={routeInfo?.bankName} />
                 <InfoRow label="Cuenta bancaria" value={routeInfo?.bankAccount} />
                 <InfoRow label="Fecha máxima de pago" value={routeInfo?.duePaymentDay ? `${routeInfo.duePaymentDay} de cada mes` : 'N/A'} />
-                <InfoRow label="Cuota completa" value={routeInfo?.transportFeeComplete ? formatMoney(routeInfo.transportFeeComplete) : 'N/A'} />
-                <InfoRow label="Cuota media" value={routeInfo?.transportFeeHalf ? formatMoney(routeInfo.transportFeeHalf) : 'N/A'} last />
+                <InfoRow label="Cuota completa" value={routeInfo?.transportFeeComplete ? formatQ(routeInfo.transportFeeComplete || 0) : 'N/A'} />
+                <InfoRow label="Cuota media" value={routeInfo?.transportFeeHalf ? formatQ(routeInfo.transportFeeHalf || 0) : 'N/A'} last />
             </SectionCard>
 
             <Box sx={{ mb: 2 }}>{renderUploadButton(true)}</Box>
@@ -1134,7 +1117,7 @@ const ParentPaymentPage = () => {
                         >
                             <Box sx={{ minWidth: 0 }}>
                                 <Typography sx={{ color: 'rgba(255,255,255,0.78)', fontSize: 12, fontWeight: 800, textTransform: 'uppercase' }}>Estado de pago</Typography>
-                                <Typography sx={{ color: '#FFFFFF', fontSize: { xs: 34, sm: 42 }, fontWeight: 900, lineHeight: 1.05, mt: 0.5 }}>{formatMoney(totalPending)}</Typography>
+                                <Typography sx={{ color: '#FFFFFF', fontSize: { xs: 34, sm: 42 }, fontWeight: 900, lineHeight: 1.05, mt: 0.5 }}>{formatQ(totalPending || 0)}</Typography>
                                 <Typography sx={{ color: 'rgba(255,255,255,0.86)', fontSize: 14, mt: 0.75 }}>Total pendiente entre tarifa y mora</Typography>
                             </Box>
                             <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap', gap: 1 }}>

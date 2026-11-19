@@ -18,18 +18,7 @@ import api from '../utils/axiosConfig';
 import { PASSWORD_MIN_LENGTH, getPasswordLengthError } from '../utils/passwordPolicy';
 import logoLuvan from '../assets/img/logo-sin-fondo.png';
 import useNotify from '../hooks/useNotify';
-
-// Función para convertir tiempo de 24h a 12h con AM/PM
-const formatTime12Hour = (time24) => {
-    if (!time24) {
-        return '';
-    }
-    const [hours, minutes] = time24.split(':');
-    const hour = Number.parseInt(hours, 10);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const hour12 = hour % 12 || 12;
-    return `${hour12}:${minutes} ${ampm}`;
-};
+import { formatClock } from '../utils/dateFormat';
 
 const CorporateEnrollmentPage = () => {
     const { corporationId } = useParams();
@@ -364,7 +353,7 @@ const CorporateEnrollmentPage = () => {
                                 {Array.isArray(corporationData?.schedules) && corporationData.schedules.length > 0 ? (
                                     corporationData.schedules.map((schedule, idx) => (
                                         <MenuItem key={idx} value={idx}>
-                                            {schedule.name} ({formatTime12Hour(schedule.entryTime)} - {formatTime12Hour(schedule.exitTime)})
+                                            {schedule.name} ({formatClock(schedule.entryTime)} - {formatClock(schedule.exitTime)})
                                         </MenuItem>
                                     ))
                                 ) : (

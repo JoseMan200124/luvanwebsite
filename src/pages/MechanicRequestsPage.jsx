@@ -53,9 +53,7 @@ import {
     createMechanicRequest,
     deleteMechanicRequest,
     updateMechanicRequestStatus,
-    WORK_TYPES,
-    REQUEST_STATES,
-    STATE_COLORS
+    WORK_TYPES
 } from '../services/mechanicRequestService';
 import api from '../utils/axiosConfig';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
@@ -76,6 +74,8 @@ import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
+import { formatDateTime, formatDate } from '../utils/dateFormat';
+import { MECHANIC_STATUS, getStatusLabel, getStatusMeta, toStatusOptions } from '../constants/statuses';
 
 const StatsCard = styled(Card)`
     ${tw`h-full`}
@@ -120,7 +120,7 @@ const MechanicRequestsPage = () => {
             F.plate({ options: [...new Set(plateOptions.map((option) => option.label).filter(Boolean))].map((plateLabel) => ({ value: plateLabel, label: plateLabel })) }),
             F.route({ options: toRouteOptions(routeOptions) }),
             F.select('tipoTrabajo', { label: 'Tipo de trabajo', options: WORK_TYPES }),
-            F.select('estado', { label: 'Estado', options: REQUEST_STATES }),
+            F.select('estado', { label: 'Estado', options: toStatusOptions(MECHANIC_STATUS) }),
             F.select('urgente', { label: 'Urgente', width: 'sm', options: YES_NO_OPTIONS }),
             F.dateRange('dates'),
         ],
@@ -354,7 +354,7 @@ const MechanicRequestsPage = () => {
                             <strong>Tipo:</strong> {WORK_TYPES[request.tipoTrabajo] || request.tipoTrabajo}
                         </Typography>
                         <Typography variant="body2" color="textSecondary">
-                            <strong>Fecha:</strong> {formatDate(request.fechaSolicitud)}
+                            <strong>Fecha:</strong> {formatDateTime(request.fechaSolicitud)}
                         </Typography>
                     </Box>
                 </>
@@ -505,22 +505,6 @@ const MechanicRequestsPage = () => {
         }
     };
 
-    // Formatear fecha con hora
-    const formatDate = (date) => {
-        if (!date) {
-            return '-';
-        }
-        return moment(date).tz('America/Guatemala').format('DD/MM/YYYY HH:mm');
-    };
-
-    // Formatear solo fecha (sin hora)
-    const formatDateOnly = (date) => {
-        if (!date) {
-            return '-';
-        }
-        return moment(date).tz('America/Guatemala').format('DD/MM/YYYY');
-    };
-
     return (
         <PageContainer width="xl">
             <PageHeader
@@ -643,7 +627,7 @@ const MechanicRequestsPage = () => {
                                     requests.map((request) => (
                                         <TableRow key={request.id} hover>
                                             <TableCell>
-                                                {formatDate(request.fechaSolicitud)}
+                                                {formatDateTime(request.fechaSolicitud)}
                                             </TableCell>
                                             <TableCell>
                                                 <Chip
@@ -689,9 +673,9 @@ const MechanicRequestsPage = () => {
                                             <TableCell>
                                                 <Chip
                                                     icon={getStatusIcon(request.estado)}
-                                                    label={REQUEST_STATES[request.estado] || request.estado}
+                                                    label={getStatusLabel(MECHANIC_STATUS, request.estado)}
                                                     size="small"
-                                                    color={STATE_COLORS[request.estado] || 'default'}
+                                                    color={getStatusMeta(MECHANIC_STATUS, request.estado).color}
                                                 />
                                             </TableCell>
                                             <TableCell align="center">
@@ -831,7 +815,7 @@ const MechanicRequestsPage = () => {
                                     Fecha de Solicitud
                                 </Typography>
                                 <Typography>
-                                    {formatDate(selectedRequest.fechaSolicitud)}
+                                    {formatDateTime(selectedRequest.fechaSolicitud)}
                                 </Typography>
                             </Grid>
                             <Grid item xs={12} sm={6}>
@@ -840,8 +824,8 @@ const MechanicRequestsPage = () => {
                                 </Typography>
                                 <Chip
                                     icon={getStatusIcon(selectedRequest.estado)}
-                                    label={REQUEST_STATES[selectedRequest.estado] || selectedRequest.estado}
-                                    color={STATE_COLORS[selectedRequest.estado] || 'default'}
+                                    label={getStatusLabel(MECHANIC_STATUS, selectedRequest.estado)}
+                                    color={getStatusMeta(MECHANIC_STATUS, selectedRequest.estado).color}
                                 />
                             </Grid>
                             <Grid item xs={12} sm={6}>
@@ -924,7 +908,7 @@ const MechanicRequestsPage = () => {
                                         Fecha de Completado
                                     </Typography>
                                     <Typography>
-                                        {formatDateOnly(selectedRequest.fechaCompletado)}
+                                        {formatDate(selectedRequest.fechaCompletado)}
                                     </Typography>
                                 </Grid>
                             )}
@@ -966,7 +950,7 @@ const MechanicRequestsPage = () => {
                                         label="Estado"
                                         MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
                                     >
-                                    {Object.entries(REQUEST_STATES).map(([key, label]) => (
+                                    {toStatusOptions(MECHANIC_STATUS).map(({ value: key, label }) => (
                                         <MenuItem key={key} value={key}>
                                             {label}
                                         </MenuItem>

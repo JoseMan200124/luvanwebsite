@@ -22,6 +22,7 @@ import api from '../utils/axiosConfig';
 import { AuthContext } from '../context/AuthProvider';
 import { getPasswordChangeError } from '../utils/passwordPolicy';
 import useNotify from '../hooks/useNotify';
+import { formatClock } from '../utils/dateFormat';
 
 const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved }) => {
     const { logout } = useContext(AuthContext);
@@ -73,25 +74,6 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
     const [employeeNumber, setEmployeeNumber] = useState('');
 
     const notify = useNotify();
-
-    // Formato 24h -> 12h con AM/PM (ej: "14:30" -> "2:30 PM")
-    const formatTime12Hour = (time24) => {
-        if (!time24) {
-            return '';
-        }
-        const parts = String(time24).split(':');
-        if (parts.length < 2) {
-            return time24;
-        }
-        const hours = Number.parseInt(parts[0], 10);
-        const minutes = parts[1];
-        if (Number.isNaN(hours)) {
-            return time24;
-        }
-        const ampm = hours >= 12 ? 'PM' : 'AM';
-        const hour12 = hours % 12 || 12;
-        return `${hour12}:${minutes} ${ampm}`;
-    };
 
     useEffect(() => {
         if (!open) {
@@ -303,8 +285,8 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
                                             const name = s.name || `Horario ${idx+1}`;
                                             const entry = s.entryTime || s.entry || s.startTime || s.entry_time || '';
                                             const exit = s.exitTime || s.exit || s.endTime || s.exit_time || '';
-                                            const entryFmt = entry ? formatTime12Hour(entry) : '';
-                                            const exitFmt = exit ? formatTime12Hour(exit) : '';
+                                            const entryFmt = entry ? formatClock(entry) : '';
+                                            const exitFmt = exit ? formatClock(exit) : '';
                                             const times = entryFmt || exitFmt ? ` (${entryFmt}${entryFmt && exitFmt ? ' - ' : ''}${exitFmt})` : '';
                                             return name + times;
                                         })()}</MenuItem>

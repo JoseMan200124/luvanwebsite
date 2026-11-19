@@ -33,6 +33,7 @@ import {
 } from '@mui/icons-material';
 import api from '../utils/axiosConfig';
 import usePermissions from '../hooks/usePermissions';
+import { SERVICE_STATUS } from '../constants/statuses';
 
 // Cada estado del servicio lo aplica su propia ruta de /service-status.
 const LLAVE_POR_ESTADO = {
@@ -45,7 +46,7 @@ const LLAVE_POR_ESTADO = {
 // Definición de estados con sus propiedades
 const SERVICE_STATES = {
     ACTIVE: {
-        label: 'Activo',
+        label: SERVICE_STATUS.ACTIVE.label,
         icon: CheckCircle,
         color: 'success',
         description: 'Servicio activo normal. Se genera cobro mensual y acumula mora.',
@@ -54,7 +55,7 @@ const SERVICE_STATES = {
         accumulatesPenalty: true
     },
     PAUSED: {
-        label: 'Pausado',
+        label: SERVICE_STATUS.PAUSED.label,
         icon: Pause,
         color: 'warning',
         description: 'Pausado temporal (ej: vacaciones). No se cobra, no acumula mora. Usuario puede hacer login.',
@@ -63,7 +64,7 @@ const SERVICE_STATES = {
         accumulatesPenalty: false
     },
     SUSPENDED: {
-        label: 'Suspendido',
+        label: SERVICE_STATUS.SUSPENDED.label,
         icon: Block,
         color: 'error',
         description: 'Suspendido por mora severa o por no haber firmado contrato. Se genera cobro mensual y acumula mora. Usuario puede hacer login pero solo puede subir boletas de pago o firmar contrato.',
@@ -72,7 +73,7 @@ const SERVICE_STATES = {
         accumulatesPenalty: true
     },
     INACTIVE: {
-        label: 'Inactivo',
+        label: SERVICE_STATUS.INACTIVE.label,
         icon: RemoveCircle,
         color: 'default',
         description: 'No usa el servicio. Usuario NO puede hacer login. No se genera cobro ni mora.',
@@ -81,7 +82,7 @@ const SERVICE_STATES = {
         accumulatesPenalty: false
     },
     PENDING_START: {
-        label: 'Pendiente de inicio',
+        label: SERVICE_STATUS.PENDING_START.label,
         icon: HourglassEmpty,
         color: 'info',
         description: 'Inscrita en un colegio que aún no está en operaciones. No se cobra ni acumula mora. Al iniciar operaciones pasa sola a Activo (o a Suspendido si no firmó contrato). Puede activarse antes a mano.',

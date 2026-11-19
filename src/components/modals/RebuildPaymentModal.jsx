@@ -14,6 +14,8 @@ import RotateRightIcon from '@mui/icons-material/RotateRight';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import api from '../../utils/axiosConfig';
 import useNotify from '../../hooks/useNotify';
+import { formatDateTime } from '../../utils/dateFormat';
+import { formatQ } from '../../utils/currency';
 
 const ROUTE_TYPE_LABELS = { ALL: 'Todos', COMPLETA: 'Completa', 'MEDIA AM': 'Media AM', 'MEDIA PM': 'Media PM' };
 const TARIFF_MODE_LABELS  = { SET: 'Fijar', INCREMENT: 'Aumentar', DECREMENT: 'Disminuir' };
@@ -22,7 +24,7 @@ function tariffOverrideSummary(overrides = {}) {
         const [period, routeType = 'ALL'] = key.includes('|') ? key.split('|', 2) : [key, 'ALL'];
         const rt    = ROUTE_TYPE_LABELS[routeType]  || routeType;
         const mode  = TARIFF_MODE_LABELS[val?.mode] || 'Fijar';
-        return `${period} [${rt}]: ${mode} Q${Number(val?.valuePerStudent || 0).toFixed(2)}/alumno`;
+        return `${period} [${rt}]: ${mode} ${formatQ(val?.valuePerStudent || 0)}/alumno`;
     });
 }
 
@@ -802,7 +804,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                                                                         {p.period}
                                                                     </Typography>
                                                                     <Typography variant="caption" color="text.secondary">
-                                                                        billedAt: {p.billedAt} · desc. tarifa: Q{Number(p.extraordinaryTariffDiscount).toFixed(2)} · mora: Q{Number(p.penaltyAmount).toFixed(2)}
+                                                                        billedAt: {p.billedAt} · desc. tarifa: {formatQ(p.extraordinaryTariffDiscount)} · mora: {formatQ(p.penaltyAmount)}
                                                                     </Typography>
                                                                 </Box>
                                                                 <FormControlLabel
@@ -837,7 +839,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                                                                         {item.period}
                                                                     </Typography>
                                                                     <Typography variant="caption" color="text.secondary">
-                                                                        {item.createMora ? 'Crear MORA' : `MORA #${item.moraReceipt || item.moraTxId}`}: Q{Number(item.penaltyAmount).toFixed(2)} · TARIFA #{item.tariffReceipt || item.tariffTxId}: Q{Number(item.tariffOriginalAmount).toFixed(2)} → Q{Number(item.tariffAdjustedAmount).toFixed(2)}
+                                                                        {item.createMora ? 'Crear MORA' : `MORA #${item.moraReceipt || item.moraTxId}`}: {formatQ(item.penaltyAmount)} · TARIFA #{item.tariffReceipt || item.tariffTxId}: {formatQ(item.tariffOriginalAmount)} → {formatQ(item.tariffAdjustedAmount)}
                                                                     </Typography>
                                                                 </Box>
                                                                 <FormControlLabel
@@ -1382,7 +1384,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                         <Box sx={{ mt: 2, p: 2, border: '2px solid #2e7d32', borderRadius: 1, bgcolor: '#e8f5e9' }}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <Typography variant="h6" color="success.main">
-                                    ✓ Aplicado a las {new Date(appliedResult.appliedAt).toLocaleString()}
+                                    ✓ Aplicado a las {formatDateTime(appliedResult.appliedAt)}
                                 </Typography>
                                 <Button startIcon={<DownloadIcon />} onClick={handleDownloadResult} variant="outlined">
                                     Descargar JSON
@@ -1451,7 +1453,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                             <TableBody>
                                 {receipts.map(r => (
                                     <TableRow key={r.id || r.fileUrl}>
-                                        <TableCell>{(r.uploadedAt || r.createdAt) ? new Date(r.uploadedAt || r.createdAt).toLocaleString() : '—'}</TableCell>
+                                        <TableCell>{formatDateTime(r.uploadedAt || r.createdAt)}</TableCell>
                                         <TableCell sx={{ wordBreak: 'break-all', fontSize: 11 }}>{r.fileName || r.fileUrl}</TableCell>
                                         <TableCell>{r.amount ?? '—'}</TableCell>
                                         <TableCell sx={{ fontSize: 11, maxWidth: 200 }}>{r.notes || '—'}</TableCell>
@@ -1530,9 +1532,9 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                             <Table size="small" sx={{ mb: 2 }}>
                                 <TableBody>
                                     {[
-                                        ['Tarifa completa (mensual)',  schoolData.transportFeeComplete != null ? `Q ${Number(schoolData.transportFeeComplete).toFixed(2)}` : null],
-                                        ['Tarifa media (mensual)',     schoolData.transportFeeHalf     != null ? `Q ${Number(schoolData.transportFeeHalf).toFixed(2)}`     : null],
-                                        ['Mora diaria',               schoolData.dailyPenalty          != null ? `Q ${Number(schoolData.dailyPenalty).toFixed(2)}`          : null],
+                                        ['Tarifa completa (mensual)',  schoolData.transportFeeComplete != null ? formatQ(schoolData.transportFeeComplete) : null],
+                                        ['Tarifa media (mensual)',     schoolData.transportFeeHalf     != null ? formatQ(schoolData.transportFeeHalf)     : null],
+                                        ['Mora diaria',               schoolData.dailyPenalty          != null ? formatQ(schoolData.dailyPenalty)          : null],
                                         ['Mora pausada',              schoolData.penaltyPaused != null  ? (schoolData.penaltyPaused ? 'Sí' : 'No')                         : null],
                                         ['Día límite de pago',        schoolData.duePaymentDay != null  ? `Día ${schoolData.duePaymentDay} de cada mes`                    : null],
                                     ].map(([label, val]) => val != null ? (

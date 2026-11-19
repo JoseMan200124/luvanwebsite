@@ -16,6 +16,9 @@ import {
 import api from '../../utils/axiosConfig';
 import moment from 'moment';
 import useNotify from '../../hooks/useNotify';
+import { formatMonth } from '../../utils/dateFormat';
+import { formatQ } from '../../utils/currency';
+import { useCurrentDate } from '../../hooks/useCurrentDate';
 
 /**
  * Modal genérico para aplicar cambios de forma retroactiva con alcance por períodos.
@@ -39,6 +42,7 @@ const RetroactiveApplyModal = ({
 
     onApplied = () => {}
 }) => {
+    const { currentDate } = useCurrentDate();
     const normalizedMode = String(mode || 'DISCOUNT').toUpperCase();
 
     const [option, setOption] = useState(null);
@@ -70,7 +74,7 @@ const RetroactiveApplyModal = ({
         }
     }, [effectivePayment]);
 
-    const currentPeriod = effectivePayment?.currentPeriod || moment().format('YYYY-MM');
+    const currentPeriod = effectivePayment?.currentPeriod || moment(currentDate).format('YYYY-MM');
 
     const familyFromUser = effectivePayment?.User || effectivePayment?.user || null;
     const familyFromDetail = familyFromUser?.FamilyDetail || familyFromUser?.familyDetail || null;
@@ -391,7 +395,7 @@ const RetroactiveApplyModal = ({
                                             const monthlyFee = original;
 
                                             const discount = Math.max(0, monthlyFee - net) || Number(p.discountApplied ?? p.discount ?? 0);
-                                            const monthRaw = p.period ? moment(p.period + '-01').locale('es').format('MMMM YYYY') : p.period;
+                                            const monthRaw = p.period ? formatMonth(p.period + '-01') : p.period;
                                             const monthLabel = monthRaw ? (monthRaw.charAt(0).toUpperCase() + monthRaw.slice(1)) : monthRaw;
 
                                             const studentsLabel = `${studentCount} estudiante${studentCount === 1 ? '' : 's'}`;
@@ -415,22 +419,22 @@ const RetroactiveApplyModal = ({
                                                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mt: 0.5 }}>
                                                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>{baseLabel}</Typography>
-                                                                    <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 700, minWidth: 120, textAlign: 'right' }}>{`Q ${Number(baseFee || 0).toFixed(2)}`}</Typography>
+                                                                    <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 700, minWidth: 120, textAlign: 'right' }}>{formatQ(baseFee || 0)}</Typography>
                                                                 </Box>
 
                                                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>{monthlyLabel}</Typography>
-                                                                    <Typography variant="body2" sx={{ color: 'text.primary', minWidth: 120, textAlign: 'right' }}>{`Q ${Number(monthlyFee || 0).toFixed(2)}`}</Typography>
+                                                                    <Typography variant="body2" sx={{ color: 'text.primary', minWidth: 120, textAlign: 'right' }}>{formatQ(monthlyFee || 0)}</Typography>
                                                                 </Box>
 
                                                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>Descuento</Typography>
-                                                                    <Typography variant="body2" sx={{ color: 'text.primary', minWidth: 120, textAlign: 'right' }}>{`Q ${discount > 0 ? discount.toFixed(2) : '0.00'}`}</Typography>
+                                                                    <Typography variant="body2" sx={{ color: 'text.primary', minWidth: 120, textAlign: 'right' }}>{formatQ(discount > 0 ? discount : 0)}</Typography>
                                                                 </Box>
 
                                                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                                     <Typography component="span" sx={{ fontWeight: 700 }}>Subtotal período:</Typography>
-                                                                    <Typography component="span" sx={{ ml: 1, color: 'primary.main', fontWeight: 700, minWidth: 120, textAlign: 'right' }}>Q {net.toFixed(2)}</Typography>
+                                                                    <Typography component="span" sx={{ ml: 1, color: 'primary.main', fontWeight: 700, minWidth: 120, textAlign: 'right' }}>{formatQ(net)}</Typography>
                                                                 </Box>
                                                             </Box>
                                                         </Box>

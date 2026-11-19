@@ -33,14 +33,13 @@ import {
     Edit as EditIcon
 } from '@mui/icons-material';
 import {
-    HourglassEmpty as PendingIcon,
-    Autorenew as InProgressIcon,
-    CheckCircle as CheckCircleIcon,
     Cancel as CancelIcon
 } from '@mui/icons-material';
 import tw from 'twin.macro';
 import styled from 'styled-components';
-import moment from 'moment-timezone';
+import StatusChip from '../components/StatusChip';
+import { REQUEST_STATUS, getStatusLabel } from '../constants/statuses';
+import { formatDateTime } from '../utils/dateFormat';
 import {
     getAllRequests,
     getRequestById,
@@ -72,15 +71,6 @@ import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import useClientScope from '../hooks/useClientScope';
 
-const STATUS_LABELS_ES = {
-    pending: 'Pendiente',
-    in_review: 'En revisión',
-    cancelled: 'Cancelada',
-    approved: 'Completada',
-    rejected: 'Rechazada',
-    completed: 'Completada'
-};
-
 const SELECTABLE_REQUEST_STATES = Object.keys(REQUEST_STATES).filter((s) => s !== 'approved');
 
 const StatsCard = styled(Card)`
@@ -100,7 +90,7 @@ const StatsCard = styled(Card)`
  * - Permite ver detalle de una solicitud, cambiar su estado (con notas) y eliminarla; actualiza la lista y estadísticas tras acciones.
  * - Gestiona estados locales para: requests, loading, statistics, filtros (aplicados y draft), paginación, ordenamiento,
  *   selección de request, y modales (detalle, confirmación de borrado, cambio de estado).
- * - Formatea fechas con moment.js en zona 'America/Guatemala'.
+ * - Formatea fechas con utils/dateFormat (zona 'America/Guatemala').
  *
  * Uso interno de utilidades UI:
  * - Genera Chips con etiquetas y colores según prioridad/estado.
@@ -158,7 +148,7 @@ const RequestsPage = () => {
             F.select('status', {
                 label: 'Estado',
                 width: 'sm',
-                options: SELECTABLE_REQUEST_STATES.map((state) => ({ value: state, label: STATUS_LABELS_ES[state] || REQUEST_STATES[state] || state })),
+                options: SELECTABLE_REQUEST_STATES.map((state) => ({ value: state, label: getStatusLabel(REQUEST_STATUS, state) })),
             }),
             F.search('userName', { label: 'Solicitante', width: 'md' }),
             F.dateRange('dates'),
@@ -354,8 +344,6 @@ const RequestsPage = () => {
         } catch (err) { console.error(err); }
     };
 
-    const formatDate = (date) => date ? moment(date).tz('America/Guatemala').format('DD/MM/YYYY hh:mm A') : '-';
-
     const PRIORITY_LABELS_ES = {
         urgent: 'Urgente',
         high: 'Alta',
@@ -370,37 +358,9 @@ const RequestsPage = () => {
         low: '#9E9E9E'
     };
 
-    const STATUS_BG = {
-        pending: '#FB8C00',
-        in_review: '#42A5F5',
-        cancelled: '#9C27B0',
-        approved: '#4CAF50',
-        completed: '#388E3C',
-        rejected: '#E53935'
-    };
-
-    const getStatusIcon = (status) => {
-        switch (status) {
-            case 'pending':
-                return <PendingIcon fontSize="small" />;
-            case 'in_review':
-                return <InProgressIcon fontSize="small" />;
-            case 'approved':
-            case 'completed':
-                return <CheckCircleIcon fontSize="small" />;
-            case 'rejected':
-                return <CancelIcon fontSize="small" />;
-            default:
-                return null;
-        }
-    };
-
-    const getStatusChip = (status) => {
-        const normalizedStatus = status === 'approved' ? 'completed' : status;
-        const label = STATUS_LABELS_ES[normalizedStatus] || REQUEST_STATES[normalizedStatus] || normalizedStatus;
-        const bg = STATUS_BG[normalizedStatus] || '#757575';
-        return <Chip icon={getStatusIcon(normalizedStatus)} label={label} size="small" sx={{ backgroundColor: bg, color: '#fff', fontWeight: 600 }} />;
-    };
+    const getStatusChip = (status) => (
+        <StatusChip domain={REQUEST_STATUS} value={status === 'approved' ? 'completed' : status} showIcon sx={{ fontWeight: 600 }} />
+    );
 
     const getPriorityChip = (priority) => {
         const label = PRIORITY_LABELS_ES[priority] || priority || '-';
@@ -493,8 +453,7 @@ const RequestsPage = () => {
     };
 
     const getSafeStatusLabel = (statusValue) => {
-        const normalized = String(statusValue || '').toLowerCase();
-        return STATUS_LABELS_ES[normalized] || REQUEST_STATES[normalized] || (statusValue ? String(statusValue) : 'N/A');
+        return statusValue ? getStatusLabel(REQUEST_STATUS, statusValue) : 'N/A';
     };
 
     // Try to extract a status value from a variety of metadata shapes
@@ -751,34 +710,34 @@ const RequestsPage = () => {
                         </StatsCard>
                     </Grid>
                     <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard sx={{ borderLeft: `4px solid ${STATUS_BG.pending}` }}>
+                        <StatsCard sx={{ borderLeft: `4px solid ${REQUEST_STATUS.pending.color}` }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>Pendientes</Typography>
-                                <Typography variant="h4" color={STATUS_BG.pending}>{statistics.pendingRequests}</Typography>
+                                <Typography variant="h4" color={REQUEST_STATUS.pending.color}>{statistics.pendingRequests}</Typography>
                             </CardContent>
                         </StatsCard>
                     </Grid>
                     <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard sx={{ borderLeft: `4px solid ${STATUS_BG.in_review}` }}>
+                        <StatsCard sx={{ borderLeft: `4px solid ${REQUEST_STATUS.in_review.color}` }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>En revisión</Typography>
-                                <Typography variant="h4" color={STATUS_BG.in_review}>{statistics.inReviewRequests ?? 0}</Typography>
+                                <Typography variant="h4" color={REQUEST_STATUS.in_review.color}>{statistics.inReviewRequests ?? 0}</Typography>
                             </CardContent>
                         </StatsCard>
                     </Grid>
                     <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard sx={{ borderLeft: `4px solid ${STATUS_BG.completed}` }}>
+                        <StatsCard sx={{ borderLeft: `4px solid ${REQUEST_STATUS.completed.color}` }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>Completadas</Typography>
-                                <Typography variant="h4" color={STATUS_BG.completed}>{statistics.approvedRequests}</Typography>
+                                <Typography variant="h4" color={REQUEST_STATUS.completed.color}>{statistics.approvedRequests}</Typography>
                             </CardContent>
                         </StatsCard>
                     </Grid>
                     <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard sx={{ borderLeft: `4px solid ${STATUS_BG.rejected}` }}>
+                        <StatsCard sx={{ borderLeft: `4px solid ${REQUEST_STATUS.rejected.color}` }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>Rechazadas</Typography>
-                                <Typography variant="h4" color={STATUS_BG.rejected}>{statistics.rejectedRequests}</Typography>
+                                <Typography variant="h4" color={REQUEST_STATUS.rejected.color}>{statistics.rejectedRequests}</Typography>
                             </CardContent>
                         </StatsCard>
                     </Grid>
@@ -814,7 +773,7 @@ const RequestsPage = () => {
                                 <TableRow><TableCell colSpan={8} align="center">No hay solicitudes</TableCell></TableRow>
                             ) : requests.map(r => (
                                 <TableRow key={r.id} hover sx={{ '&:hover': { backgroundColor: '#fafafa' } }}>
-                                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(r.createdAt)}</TableCell>
+                                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDateTime(r.createdAt)}</TableCell>
                                         <TableCell>{getPriorityChip(r.priority)}</TableCell>
                                         <TableCell>{getRequestTypeChip(r.requestType)}</TableCell>
                                         <TableCell sx={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</TableCell>
@@ -894,7 +853,7 @@ const RequestsPage = () => {
                                         {selectedRequest.title || 'Solicitud sin título'}
                                     </Typography>
                                     <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                                        {formatDate(selectedRequest.createdAt)}
+                                        {formatDateTime(selectedRequest.createdAt)}
                                     </Typography>
                                 </Box>
                             </Box>
@@ -1054,7 +1013,7 @@ const RequestsPage = () => {
                                             )}
                                             <Box sx={{ mt: 1 }}>
                                                 {author && <Typography variant="caption" sx={{ color: 'text.secondary', mr: 1 }}>{author}</Typography>}
-                                                <Typography variant="caption" sx={{ color: 'text.disabled' }}>{ev.createdAt ? formatDate(ev.createdAt) : ''}</Typography>
+                                                <Typography variant="caption" sx={{ color: 'text.disabled' }}>{ev.createdAt ? formatDateTime(ev.createdAt) : ''}</Typography>
                                             </Box>
                                         </Box>
                                     );
@@ -1101,7 +1060,7 @@ const RequestsPage = () => {
                                                             {getEventDetailText(ev)}
                                                         </Typography>
                                                         <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.75 }}>
-                                                            {formatDate(ev.createdAt)}
+                                                            {formatDateTime(ev.createdAt)}
                                                         </Typography>
                                                     </Box>
                                                 </Box>
@@ -1201,7 +1160,7 @@ const RequestsPage = () => {
                             {SELECTABLE_REQUEST_STATES.map(s => (
                                 normalizeStatus(s) === normalizeStatus(selectedRequest?.status)
                                     ? null
-                                    : <MenuItem key={s} value={s}>{STATUS_LABELS_ES[s] || REQUEST_STATES[s] || s}</MenuItem>
+                                    : <MenuItem key={s} value={s}>{getStatusLabel(REQUEST_STATUS, s)}</MenuItem>
                             ))}
                         </TextField>
 

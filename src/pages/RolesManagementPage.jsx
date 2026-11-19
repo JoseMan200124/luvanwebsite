@@ -53,6 +53,7 @@ import RowActions from '../components/table/RowActions';
 import { sortRows } from '../utils/tableSort';
 import usePermissions from '../hooks/usePermissions';
 import useManageableRoles from '../hooks/useManageableRoles';
+import { formatDateTime } from '../utils/dateFormat';
 
 // Fallback static role list (used as initial value, backend will provide authoritative list)
 const roleOptionsStatic = [
@@ -1139,15 +1140,7 @@ const RolesManagementPage = () => {
                                                 <TableCell>{user.Role ? user.Role.name : '—'}</TableCell>
                                                 <TableCell>{user.School ? user.School.name : (user.corporation ? user.corporation.name : '—')}</TableCell>
                                                 <TableCell>
-                                                    {user.updatedAt
-                                                        ? new Date(user.updatedAt).toLocaleString('es-GT', {
-                                                              day: '2-digit',
-                                                              month: '2-digit',
-                                                              year: 'numeric',
-                                                              hour: '2-digit',
-                                                              minute: '2-digit'
-                                                          })
-                                                        : '—'}
+                                                    {formatDateTime(user.updatedAt)}
                                                 </TableCell>
                                                 <TableCell align="center">
                                                     {renderUserActions(user)}

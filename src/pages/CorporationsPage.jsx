@@ -48,6 +48,7 @@ import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
+import { formatClock } from '../utils/dateFormat';
 
 const CorporationCard = styled(Card)`
     ${tw`cursor-pointer transition-all duration-300`}
@@ -113,18 +114,6 @@ const StyledAccordionSummary = styled(AccordionSummary)`
         }
     }
 `;
-
-// Función para convertir tiempo de 24h a 12h con AM/PM
-const formatTime12Hour = (time24) => {
-    if (!time24) {
-        return '';
-    }
-    const [hours, minutes] = time24.split(':');
-    const hour = Number.parseInt(hours, 10);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const hour12 = hour % 12 || 12;
-    return `${hour12}:${minutes} ${ampm}`;
-};
 
 const CorporationsPage = () => {
     const { auth } = useContext(AuthContext);
@@ -875,7 +864,7 @@ const CorporationsPage = () => {
                                                 </Typography>
                                             ) : (
                                                 Array.isArray(corporationSchedules) && corporationSchedules.map((sch, si) => {
-                                                    const label = `${sch.name} (${formatTime12Hour(sch.entryTime)} - ${formatTime12Hour(sch.exitTime)})`;
+                                                    const label = `${sch.name} (${formatClock(sch.entryTime)} - ${formatClock(sch.exitTime)})`;
                                                     const checked = selectedSchedules.has(sch.name);
                                                     return (
                                                         <FormControlLabel

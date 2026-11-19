@@ -48,6 +48,8 @@ import api from '../utils/axiosConfig';
 import ParentNavbar from '../components/ParentNavbar';
 import UpdateColaboradorInfoDialog from '../components/UpdateColaboradorInfoDialog';
 import useNotify from '../hooks/useNotify';
+import { REQUEST_STATUS, getStatusLabel } from '../constants/statuses';
+import { formatDateTime, formatClock } from '../utils/dateFormat';
 
 const SectionCard = styled(Card)`width:100%;border-radius:10px;`;
 const LoaderBox   = styled(Box)`display:flex;align-items:center;justify-content:center;min-height:320px;`;
@@ -120,31 +122,8 @@ const ColaboradorDashboardPage = () => {
     return labels[type] || type;
   };
 
-  const getRequestStatusLabel = (status) => {
-    const labels = {
-      pending: 'Pendiente',
-      in_review: 'En Revisión',
-      cancelled: 'Cancelada',
-      approved: 'Aprobada',
-      rejected: 'Rechazada',
-      completed: 'Completada'
-    };
-    return labels[status] || status;
-  };
-
   const getPriorityLabel = (p) => {
     return p === 'low' ? 'Baja' : p === 'medium' ? 'Media' : p === 'high' ? 'Alta' : 'Urgente';
-  };
-
-  const formatDate = (d) => {
-    if (!d) {
-      return 'N/A';
-    }
-    try {
-      return new Date(d).toLocaleString('es-GT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    } catch (e) {
-      return String(d);
-    }
   };
 
   const getRequestStatusColor = (status) => {
@@ -257,28 +236,6 @@ const ColaboradorDashboardPage = () => {
     }
   };
 
-  // Format time strings to 12-hour (e.g., 07:30 -> 7:30 AM). If input looks already formatted, return as-is.
-  const formatTime12 = (timeStr) => {
-    if (!timeStr) {
-      return '';
-    }
-    const s = String(timeStr).trim();
-    // If contains AM/PM already, return
-    if (/\b(am|pm)\b/i.test(s)) {
-      return s;
-    }
-    // Try ISO time like HH:mm or HH:mm:ss
-    const m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-    if (!m) {
-      return s;
-    }
-    let hh = Number.parseInt(m[1], 10);
-    const mm = m[2];
-    const ampm = hh >= 12 ? 'PM' : 'AM';
-    hh = hh % 12 || 12;
-    return `${hh}:${mm} ${ampm}`;
-  };
-
   const daysToRender = useMemo(() => {
     if (selectedDay === 'all') {
       return DAYS;
@@ -336,8 +293,8 @@ const ColaboradorDashboardPage = () => {
       const startTime = s.startTime || s.entryTime || s.entrada || s.start || null;
       const endTime = s.endTime || s.exitTime || s.salida || s.end || null;
       if (s.name && (startTime || endTime)) {
-        const fmtStart = startTime ? formatTime12(String(startTime)) : '--';
-        const fmtEnd = endTime ? formatTime12(String(endTime)) : '--';
+        const fmtStart = startTime ? formatClock(String(startTime)) : '--';
+        const fmtEnd = endTime ? formatClock(String(endTime)) : '--';
         return `${s.name} — ${fmtStart} - ${fmtEnd}`;
       }
       if (s.name) {
@@ -527,7 +484,7 @@ const ColaboradorDashboardPage = () => {
                             <Paper key={`${key}-${i}`} sx={{ display: 'flex', gap: 1, alignItems: 'center', p: 1, mb: 1 }} elevation={1}>
                               <Box sx={{ width: 78, textAlign: 'center' }}>
                                 <Chip label={slot._label || 'Parada'} size="small" color={slot._label === 'Entrada' ? 'success' : slot._label === 'Salida' ? 'error' : 'default'} />
-                                <Typography variant="h6" sx={{ mt: 0.5 }}>{formatTime12(slot.time) || safeStr(slot.time)}</Typography>
+                                <Typography variant="h6" sx={{ mt: 0.5 }}>{formatClock(slot.time) || safeStr(slot.time)}</Typography>
                               </Box>
                               <Box sx={{ flex: 1 }}>
                                 {safeStr(slot.routeNumber) && <Typography variant="body2"><strong>Ruta:</strong> {slot.routeNumber}</Typography>}
@@ -635,12 +592,12 @@ const ColaboradorDashboardPage = () => {
                   }}>
                     <ListItemText
                       primary={r.title}
-                      secondary={`${getRequestTypeLabel(r.requestType)} — ${formatDate(r.createdAt)}`}
+                      secondary={`${getRequestTypeLabel(r.requestType)} — ${formatDateTime(r.createdAt)}`}
                     />
                     <ListItemSecondaryAction>
-                      <Tooltip title={getRequestStatusLabel(r.status)}>
+                      <Tooltip title={getStatusLabel(REQUEST_STATUS, r.status)}>
                         <Chip
-                          label={getRequestStatusLabel(r.status)}
+                          label={getStatusLabel(REQUEST_STATUS, r.status)}
                           size="small"
                           sx={{ backgroundColor: getRequestStatusColor(r.status), color: '#fff', fontWeight: 700 }}
                         />
@@ -703,9 +660,9 @@ const ColaboradorDashboardPage = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Box>
               <Typography variant="h6">{selectedRequest?.title || 'Solicitud'}</Typography>
-              <Typography variant="caption" color="text.secondary">{getRequestTypeLabel(selectedRequest?.requestType)} • {formatDate(selectedRequest?.createdAt)}</Typography>
+              <Typography variant="caption" color="text.secondary">{getRequestTypeLabel(selectedRequest?.requestType)} • {formatDateTime(selectedRequest?.createdAt)}</Typography>
             </Box>
-            <Chip label={getRequestStatusLabel(selectedRequest?.status)} sx={{ backgroundColor: getRequestStatusColor(selectedRequest?.status), color: '#fff', fontWeight: 700 }} />
+            <Chip label={getStatusLabel(REQUEST_STATUS, selectedRequest?.status)} sx={{ backgroundColor: getRequestStatusColor(selectedRequest?.status), color: '#fff', fontWeight: 700 }} />
           </Box>
         </DialogTitle>
         <DialogContent>
@@ -715,7 +672,7 @@ const ColaboradorDashboardPage = () => {
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>Información General</Typography>
                 <Grid container spacing={1}>
                   <Grid item xs={12} sm={6}><Typography variant="body2"><strong>Tipo:</strong> {getRequestTypeLabel(selectedRequest.requestType)}</Typography></Grid>
-                  <Grid item xs={12} sm={6}><Typography variant="body2"><strong>Fecha:</strong> {formatDate(selectedRequest.createdAt)}</Typography></Grid>
+                  <Grid item xs={12} sm={6}><Typography variant="body2"><strong>Fecha:</strong> {formatDateTime(selectedRequest.createdAt)}</Typography></Grid>
                   {selectedRequest.priority && <Grid item xs={12} sm={6}><Typography variant="body2"><strong>Prioridad:</strong> {getPriorityLabel(selectedRequest.priority)}</Typography></Grid>}
                   {selectedRequest.relatedEntityType && <Grid item xs={12} sm={6}><Typography variant="body2"><strong>Relacionado a:</strong> {selectedRequest.relatedEntityType}</Typography></Grid>}
                 </Grid>
@@ -739,7 +696,7 @@ const ColaboradorDashboardPage = () => {
                 <Paper variant="outlined" sx={{ p: 2 }}>
                   <Typography variant="subtitle2" sx={{ mb: 1 }}>Información de Revisión</Typography>
                   {selectedRequest.reviewer && <Typography variant="body2"><strong>Revisado por:</strong> {selectedRequest.reviewer?.name || selectedRequest.reviewer?.email}</Typography>}
-                  {selectedRequest.reviewedAt && <Typography variant="body2"><strong>Fecha de revisión:</strong> {formatDate(selectedRequest.reviewedAt)}</Typography>}
+                  {selectedRequest.reviewedAt && <Typography variant="body2"><strong>Fecha de revisión:</strong> {formatDateTime(selectedRequest.reviewedAt)}</Typography>}
                   {selectedRequest.reviewNotes && <Typography variant="body2" sx={{ mt: 1 }}><strong>Notas del revisor:</strong> {selectedRequest.reviewNotes}</Typography>}
                 </Paper>
               )}

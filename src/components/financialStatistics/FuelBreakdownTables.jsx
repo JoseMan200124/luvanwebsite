@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { Box, Chip, Paper, Tab, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tabs, Typography } from '@mui/material';
-import { FUELING_REASONS, clientTagLabel, formatGallons, formatMoney, formatPercent, reasonLabel } from './fuelStatsUtils';
+import { FUELING_REASONS, clientTagLabel, formatGallons, formatPercent, reasonLabel } from './fuelStatsUtils';
+import { formatQ } from '../../utils/currency';
 
 // Mismo estilo de tabla que la pestaña Ingresos.
 const titleSx = { fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#6B7280', fontWeight: 600, mb: 1 };
@@ -25,7 +26,7 @@ const TABS = [
     { key: 'reason', label: 'Por razón de carga', firstHeader: 'Razón' }
 ];
 
-const reasonAmount = (amount) => (Number(amount) > 0 ? formatMoney(amount) : '—');
+const reasonAmount = (amount) => (Number(amount) > 0 ? formatQ(amount, { nullText: 'N/A' }) : '—');
 
 const FuelBreakdownTables = ({ result, visibleTypes }) => {
     const [tab, setTab] = useState('period');
@@ -55,13 +56,13 @@ const FuelBreakdownTables = ({ result, visibleTypes }) => {
         <>
             <TableCell align="right" sx={sx}>{d.records}</TableCell>
             <TableCell align="right" sx={sx}>{formatGallons(d.gallons)}</TableCell>
-            <TableCell align="right" sx={sx}>{formatMoney(d.amount)}</TableCell>
+            <TableCell align="right" sx={sx}>{formatQ(d.amount, { nullText: 'N/A' })}</TableCell>
             <TableCell align="right" sx={sx}>{formatPercent(d.shareOfAmount)}</TableCell>
             {showReasons && FUELING_REASONS.map((r) => (
                 <TableCell key={r.key} align="right" sx={sx}>{reasonAmount(d.byReason?.[r.key])}</TableCell>
             ))}
             {visibleTypes.map((t) => (
-                <TableCell key={t.key} align="right" sx={sx}>{formatMoney(d.byType?.[t.key]?.price)}</TableCell>
+                <TableCell key={t.key} align="right" sx={sx}>{formatQ(d.byType?.[t.key]?.price, { nullText: 'N/A' })}</TableCell>
             ))}
         </>
     );

@@ -50,7 +50,7 @@ import {
 } from 'recharts';
 import { useParams, useLocation } from 'react-router-dom';
 import { InfoOutlined, People, ChevronLeft, ChevronRight } from '@mui/icons-material';
-import { getCurrentDate, getCurrentDateSync } from '../hooks/useCurrentDate';
+import { getCurrentDate, getCurrentDateSync, useCurrentDate } from '../hooks/useCurrentDate';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import styled from 'styled-components';
 import tw from 'twin.macro';
@@ -76,8 +76,11 @@ import useNotify from '../hooks/useNotify';
 import useTableState from '../hooks/useTableState';
 import AppTablePagination from '../components/table/AppTablePagination';
 import { sortRows } from '../utils/tableSort';
+import { formatDate, formatDateShort, formatMonth, formatDateTime } from '../utils/dateFormat';
+import { formatQ } from '../utils/currency';
+import { PAYMENT_STATUS, ENROLLMENT_PAYMENT_STATUS, toStatusOptions } from '../constants/statuses';
+import StatusChip from '../components/StatusChip';
 
-moment.locale('es'); // Configurar moment en español
 const SectionCard = styled(Card)`
     ${tw`mb-4`}
     border-radius: 10px;
@@ -98,34 +101,14 @@ const getReceiptDisplayDateValue = (receipt) => receipt?.displayDate || receipt?
 
 // Formateadores de presentación: el backend ya calcula TODAS las métricas financieras.
 // `null`/`undefined` => "N/A" (p. ej. divisiones por cero resueltas en el backend).
-const formatMoneyOrNA = (value) => (value === null || value === undefined)
-    ? 'N/A'
-    : `Q ${Number(value).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const formatPercentOrNA = (value) => (value === null || value === undefined)
     ? 'N/A'
     : `${Number(value).toFixed(1)}%`;
 
-const ENROLLMENT_STATUS_LABEL = {
-    PENDIENTE: { label: 'Pendiente', color: 'warning' },
-    PARCIAL: { label: 'Parcial', color: 'info' },
-    PAGADO: { label: 'Pagado', color: 'success' },
-};
-
 // Opciones de los filtros de la tabla (el valor vacío de cada select es "Todos")
-const PAYMENT_STATUS_OPTIONS = [
-    { value: 'PAGADO', label: 'Pagado' },
-    { value: 'ADELANTADO', label: 'Adelantado' },
-    { value: 'PENDIENTE', label: 'Pendiente' },
-    { value: 'MORA', label: 'En mora' },
-    { value: 'PARCIAL', label: 'Pago parcial' },
-];
+const PAYMENT_STATUS_OPTIONS = toStatusOptions(PAYMENT_STATUS, ['PAGADO', 'ADELANTADO', 'PENDIENTE', 'MORA', 'PARCIAL']);
 // Reemplaza al filtro "Estado de pago" cuando la vista de inscripción está encendida
-const ENROLLMENT_FILTER_OPTIONS = [
-    { value: 'PAGADO', label: 'Pagado' },
-    { value: 'PENDIENTE', label: 'Pendiente' },
-    { value: 'PARCIAL', label: 'Parcial' },
-    { value: 'SIN_CARGO', label: 'Sin cargo de inscripción' },
-];
+const ENROLLMENT_FILTER_OPTIONS = toStatusOptions(ENROLLMENT_PAYMENT_STATUS, ['PAGADO', 'PENDIENTE', 'PARCIAL', 'SIN_CARGO']);
 const PAYMENT_SERVICE_OPTIONS = [...SERVICE_STATUS_OPTIONS, { value: 'ELIMINADO', label: 'Eliminado' }];
 const YES_NO_AUTO_DEBIT_OPTIONS = [
     { value: 'yes', label: 'Sí' },
@@ -135,6 +118,7 @@ const YES_NO_AUTO_DEBIT_OPTIONS = [
 const isServiceInactiveDraft = (values) => values.serviceStatus === 'INACTIVE';
 
 const SchoolPaymentsPage = () => {
+    const { currentDate } = useCurrentDate();
     const { hasPermission } = usePermissions();
     const puedeRecalcular = hasPermission('pagos-recalcular');
     useContext(AuthContext); // keep context hook for future auth-based features
@@ -145,7 +129,7 @@ const SchoolPaymentsPage = () => {
     const currentCicloEscolarId = routeCicloEscolarId || location.state?.cicloEscolarId || location.state?.school?.cicloEscolarId || school?.cicloEscolarId || '';
     const stateCycleYear = getCicloEscolarYear(location.state?.cicloEscolar) || getCicloEscolarYear(location.state?.school?.cicloEscolar) || getCicloEscolarYear(location.state?.school?.CicloEscolar);
     const schoolCycleYear = getCicloEscolarYear(school?.cicloEscolar) || getCicloEscolarYear(school?.CicloEscolar);
-    const currentCycleYear = Number(stateCycleYear || schoolCycleYear || moment().year());
+    const currentCycleYear = Number(stateCycleYear || schoolCycleYear || moment(currentDate).year());
     const currentCycleLabel = stateCycleYear || schoolCycleYear || String(currentCycleYear || '');
     const scope = useClientScope({ entity: school, cicloEscolar: school?.cicloEscolar || school?.CicloEscolar || location.state?.cicloEscolar || null });
     const buildPaymentParams = useCallback((extra = {}) => ({
@@ -535,7 +519,7 @@ const SchoolPaymentsPage = () => {
                 ] };
                 setAnalysisData(derived);
                 // build a tiny combinedEarnings for last 6 months with zeros
-                const now = moment();
+                const now = moment(currentDate);
                 const months = [];
                 for (let i = 5; i >= 0; i--) {
                     const m = moment(now).subtract(i, 'months');
@@ -831,7 +815,7 @@ const SchoolPaymentsPage = () => {
     const [registerPaymentTarget, setRegisterPaymentTarget] = useState(null);
     const [registerAmount, setRegisterAmount] = useState('');
     const [registerPaymentExtra, setRegisterPaymentExtra] = useState({
-        paymentDate: moment().format('YYYY-MM-DD'),
+        paymentDate: moment(currentDate).format('YYYY-MM-DD'),
         numeroBoleta: '',
         extraordinaryDiscount: 0,
         bankAccountNumber: ''
@@ -1021,7 +1005,7 @@ const SchoolPaymentsPage = () => {
     const [payPenaltyAmount, setPayPenaltyAmount] = useState('');
     const [payPenaltyBoleta, setPayPenaltyBoleta] = useState('');
     const [payPenaltyAccount, setPayPenaltyAccount] = useState('');
-    const [payPenaltyDate, setPayPenaltyDate] = useState(moment().format('YYYY-MM-DD'));
+    const [payPenaltyDate, setPayPenaltyDate] = useState(moment(currentDate).format('YYYY-MM-DD'));
     const [payPenaltyUseCredit, setPayPenaltyUseCredit] = useState(false);
     const [payPenaltyBoletaAmount, setPayPenaltyBoletaAmount] = useState('');
 
@@ -1035,7 +1019,7 @@ const SchoolPaymentsPage = () => {
     const [enrollmentPayment, setEnrollmentPayment] = useState(null);
     const [payEnrollmentAmount, setPayEnrollmentAmount] = useState('');
     const [payEnrollmentDiscount, setPayEnrollmentDiscount] = useState('');
-    const [payEnrollmentDate, setPayEnrollmentDate] = useState(moment().format('YYYY-MM-DD'));
+    const [payEnrollmentDate, setPayEnrollmentDate] = useState(moment(currentDate).format('YYYY-MM-DD'));
     const [payEnrollmentReceiptNumber, setPayEnrollmentReceiptNumber] = useState('');
     const [payEnrollmentNotes, setPayEnrollmentNotes] = useState('');
     const [enrollmentSaving, setEnrollmentSaving] = useState(false);
@@ -1081,14 +1065,14 @@ const SchoolPaymentsPage = () => {
         setReceiptZoom(1);
         setRegisterAmount('');
         setRegisterPaymentExtra({
-            paymentDate: moment().format('YYYY-MM-DD'),
+            paymentDate: moment(currentDate).format('YYYY-MM-DD'),
             numeroBoleta: payment.receiptNumber || '',
             extraordinaryDiscount: 0,
             bankAccountNumber: payment.bankAccountNumber || (school ? school.bankAccount : '') || ''
         });
         
         // Inicializar campos de la pestaña de mora con los mismos valores por defecto
-        setPayPenaltyDate(moment().format('YYYY-MM-DD'));
+        setPayPenaltyDate(moment(currentDate).format('YYYY-MM-DD'));
         setPayPenaltyBoleta(payment.receiptNumber || '');
         setPayPenaltyAccount(payment.bankAccountNumber || (school ? school.bankAccount : '') || '');
         setPayPenaltyAmount('');
@@ -1102,7 +1086,7 @@ const SchoolPaymentsPage = () => {
         setEnrollmentPayment(null);
         setPayEnrollmentAmount('');
         setPayEnrollmentDiscount('');
-        setPayEnrollmentDate(moment().format('YYYY-MM-DD'));
+        setPayEnrollmentDate(moment(currentDate).format('YYYY-MM-DD'));
         setPayEnrollmentReceiptNumber(payment.receiptNumber || '');
         setPayEnrollmentNotes('');
 
@@ -1205,7 +1189,7 @@ const SchoolPaymentsPage = () => {
                 openRegisterInProgressRef.current = false;
             }
         })();
-    }, [allSchools, fetchAllSchools, regHistPage, regHistLimit, school, puedeRecalcular]);
+    }, [allSchools, fetchAllSchools, regHistPage, regHistLimit, school, puedeRecalcular, currentDate]);
 
     // Handle query params after handleOpenRegister is defined
     useEffect(() => {
@@ -1322,7 +1306,7 @@ const SchoolPaymentsPage = () => {
                 bankAccount: registerPaymentExtra.bankAccountNumber,
                 extraordinaryDiscount: registerPaymentExtra.extraordinaryDiscount || 0,
                 notes: registerPaymentExtra.extraordinaryDiscount > 0
-                    ? `Descuento extraordinario: Q${registerPaymentExtra.extraordinaryDiscount}`
+                    ? `Descuento extraordinario: ${formatQ(registerPaymentExtra.extraordinaryDiscount)}`
                     : undefined,
                 ...(selectedReceipt?.status === 'PENDIENTE' ? {
                     receiptId: selectedReceipt.id,
@@ -1570,7 +1554,7 @@ const SchoolPaymentsPage = () => {
             doc.text('Estado de cuenta', headerCenterX, headerTopY + 30, { align: 'center' });
             doc.setFontSize(9);
             doc.setFont(undefined, 'normal');
-            doc.text(`Generado: ${moment().format('YYYY-MM-DD HH:mm')}`, headerCenterX, headerTopY + 46, { align: 'center' });
+            doc.text(`Generado: ${formatDateTime(moment())}`, headerCenterX, headerTopY + 46, { align: 'center' });
 
             // Summary block
             let cursorY = headerTopY + Math.max(logoDrawnH || 0, 60) + 20;
@@ -1680,10 +1664,10 @@ const SchoolPaymentsPage = () => {
             const discountLabel = discountPct > 0 ? `Descuento (${discountPct}%)` : 'Descuento:';
             const summaryRows = [
                 ['Tipo de Ruta:', String(routeType || '-')],
-                ['Tarifa base:', `Q${baseTariff.toFixed(2)}`],
-                [`Tarifa (${studentCount || 0} ${Number(studentCount || 0) === 1 ? 'estudiante' : 'estudiantes'}):`, `Q${monthlyTariff.toFixed(2)}`],
-                [discountLabel, `Q${familyDiscount.toFixed(2)}`],
-                ['Cuota mensual:', `Q${monthlyNet.toFixed(2)}`],
+                ['Tarifa base:', formatQ(baseTariff)],
+                [`Tarifa (${studentCount || 0} ${Number(studentCount || 0) === 1 ? 'estudiante' : 'estudiantes'}):`, formatQ(monthlyTariff)],
+                [discountLabel, formatQ(familyDiscount)],
+                ['Cuota mensual:', formatQ(monthlyNet)],
                 ['Estado de Pago:', String(paymentStatusLabel || '-')],
                 ['Estado del Servicio:', String(serviceStatusLabel || '-')],
             ];
@@ -1748,24 +1732,6 @@ const SchoolPaymentsPage = () => {
                     doc.addPage();
                     cursorY = 52;
                 }
-            };
-
-            const formatDateDMY = (d) => {
-                if (!d) {
-                    return 'N/A';
-                }
-                const m = moment.parseZone(d);
-                return m.isValid() ? m.format('DD/MM/YYYY') : 'N/A';
-            };
-
-            const moneyCard = (v) => {
-                const num = Number(v || 0);
-                return `Q ${num.toFixed(2)}`;
-            };
-
-            const money = (v) => {
-                const num = Number(v || 0);
-                return `Q ${num.toFixed(2)}`;
             };
 
             const monthNamesTitle = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -1877,14 +1843,14 @@ const SchoolPaymentsPage = () => {
             cursorY += cicloLabel ? 26 : 18;
 
             const metricCards = [
-                { label: 'Tarifa pendiente', value: moneyCard(totals?.balanceDue || 0) },
-                { label: 'Mora pendiente', value: moneyCard(totals?.penaltyDue || 0) },
+                { label: 'Tarifa pendiente', value: formatQ((totals?.balanceDue || 0) || 0) },
+                { label: 'Mora pendiente', value: formatQ((totals?.penaltyDue || 0) || 0) },
                 // Solo se agrega cuando existe cargo de inscripción, para no alterar el layout
                 // de 4 tarjetas en colegios que no cobran inscripción.
                 ...(enrollmentPaymentForPdf
-                    ? [{ label: 'Inscripción pendiente', value: moneyCard(enrollmentPaymentForPdf.amountDue || 0) }]
+                    ? [{ label: 'Inscripción pendiente', value: formatQ(enrollmentPaymentForPdf.amountDue || 0) }]
                     : []),
-                { label: 'Crédito a favor', value: moneyCard(totals?.creditBalance || 0) },
+                { label: 'Crédito a favor', value: formatQ((totals?.creditBalance || 0) || 0) },
                 { label: 'Períodos pendientes', value: String(totals?.unpaidPeriodsCount || 0) },
             ];
 
@@ -2071,7 +2037,7 @@ const SchoolPaymentsPage = () => {
                             const type = formatTransactionType(tx?.type || tx?.transactionType || 'Tarifa');
                             const discount = Number(tx?.extraordinaryDiscount || tx?.discountApplied || tx?.discount || 0) || 0;
                             const receipt = String(tx?.receiptNumber || tx?.boleta || tx?.reference || '').trim();
-                            return [date, type, money(amount), money(discount), receipt || '-'];
+                            return [date, type, formatQ(amount || 0), formatQ(discount || 0), receipt || '-'];
                         });
 
                 if (txRows.length > 0) {
@@ -2082,7 +2048,7 @@ const SchoolPaymentsPage = () => {
                         const descV = Number(p.discountApplied || 0);
                         const montoRaw = Number(p.amountPaid || 0) > 0 ? Number(p.amountPaid || 0) : Number(p.appliedSim || 0);
                         const boleta = (p.receiptNumber) ? String(p.receiptNumber) : '-';
-                        return [fecha || '-', 'Tarifa', money(montoRaw), money(descV), boleta];
+                        return [fecha || '-', 'Tarifa', formatQ(montoRaw || 0), formatQ(descV || 0), boleta];
                     });
                 }
             } else if (noTransactions) {
@@ -2297,7 +2263,7 @@ const SchoolPaymentsPage = () => {
                         doc.setFont(undefined, 'normal');
                         doc.setFontSize(8);
                         doc.setTextColor(100);
-                        doc.text(`Vencimiento: ${formatDateDMY(dueDate)}`, 52, headerLineY + 3);
+                        doc.text(`Vencimiento: ${formatDate(dueDate, { keepZone: true })}`, 52, headerLineY + 3);
                         drawStatusBadge(pageWidth - 50, headerLineY + 6, effectiveStatus);
                         doc.setTextColor(0, 0, 0);
 
@@ -2334,30 +2300,30 @@ const SchoolPaymentsPage = () => {
                         doc.setFontSize(8);
                         doc.setTextColor(80);
                         doc.text('Tarifa base:', 50, cursorY);
-                        doc.text(money(originalAmount), pageWidth - 50, cursorY, { align: 'right' });
+                        doc.text(formatQ(originalAmount || 0), pageWidth - 50, cursorY, { align: 'right' });
                         cursorY += 12;
                         if (discountApplied > 0) {
                             doc.text('Descuento familiar:', 50, cursorY);
                             doc.setTextColor(21, 128, 61);
-                            doc.text(`- ${money(discountApplied)}`, pageWidth - 50, cursorY, { align: 'right' });
+                            doc.text(`- ${formatQ(discountApplied || 0)}`, pageWidth - 50, cursorY, { align: 'right' });
                             cursorY += 12;
                         }
                         if (extraDiscount > 0) {
                             doc.setTextColor(80);
                             doc.text('Descuento extraordinario:', 50, cursorY);
                             doc.setTextColor(21, 128, 61);
-                            doc.text(`- ${money(extraDiscount)}`, pageWidth - 50, cursorY, { align: 'right' });
+                            doc.text(`- ${formatQ(extraDiscount || 0)}`, pageWidth - 50, cursorY, { align: 'right' });
                             cursorY += 12;
                         }
                         doc.setTextColor(80);
                         doc.text('Tarifa neta:', 50, cursorY);
                         doc.setTextColor(0, 0, 0);
-                        doc.text(money(netAmount), pageWidth - 50, cursorY, { align: 'right' });
+                        doc.text(formatQ(netAmount || 0), pageWidth - 50, cursorY, { align: 'right' });
                         cursorY += 12;
                         doc.setTextColor(80);
                         doc.text('Pagado:', 50, cursorY);
                         doc.setTextColor(21, 128, 61);
-                        doc.text(money(amountPaid), pageWidth - 50, cursorY, { align: 'right' });
+                        doc.text(formatQ(amountPaid || 0), pageWidth - 50, cursorY, { align: 'right' });
                         cursorY += 12;
                         doc.setDrawColor(230, 230, 230);
                         doc.setLineWidth(0.6);
@@ -2375,7 +2341,7 @@ const SchoolPaymentsPage = () => {
                             doc.setTextColor(80);
                             if (penaltyAccrualBaseAmount > 0) {
                                 doc.text('Mora por día:', 50, cursorY);
-                                doc.text(money(penaltyAccrualBaseAmount), pageWidth - 50, cursorY, { align: 'right' });
+                                doc.text(formatQ(penaltyAccrualBaseAmount || 0), pageWidth - 50, cursorY, { align: 'right' });
                                 cursorY += 12;
                             }
                             if (penaltyDays !== null) {
@@ -2385,20 +2351,20 @@ const SchoolPaymentsPage = () => {
                             }
                             if (penaltyAmount > 0) {
                                 doc.text('Mora acumulada:', 50, cursorY);
-                                doc.text(money(penaltyAmount), pageWidth - 50, cursorY, { align: 'right' });
+                                doc.text(formatQ(penaltyAmount || 0), pageWidth - 50, cursorY, { align: 'right' });
                                 cursorY += 12;
                             }
                             if (penaltyDiscountApplied > 0) {
                                 doc.text('Descuento extraordinario:', 50, cursorY);
                                 doc.setTextColor(21, 128, 61);
-                                doc.text(`- ${money(penaltyDiscountApplied)}`, pageWidth - 50, cursorY, { align: 'right' });
+                                doc.text(`- ${formatQ(penaltyDiscountApplied || 0)}`, pageWidth - 50, cursorY, { align: 'right' });
                                 cursorY += 12;
                             }
                             if (penaltyPaid > 0) {
                                 doc.setTextColor(80);
                                 doc.text('Mora pagada:', 50, cursorY);
                                 doc.setTextColor(21, 128, 61);
-                                doc.text(money(penaltyPaid), pageWidth - 50, cursorY, { align: 'right' });
+                                doc.text(formatQ(penaltyPaid || 0), pageWidth - 50, cursorY, { align: 'right' });
                                 cursorY += 12;
                             }
                             doc.setTextColor(80);
@@ -2409,7 +2375,7 @@ const SchoolPaymentsPage = () => {
                             else {
                                 doc.setTextColor(0, 0, 0);
                             }
-                            doc.text(money(penaltyDue), pageWidth - 50, cursorY, { align: 'right' });
+                            doc.text(formatQ(penaltyDue || 0), pageWidth - 50, cursorY, { align: 'right' });
                             cursorY += 12;
                             if (period?.penaltyFrozen) {
                                 doc.setTextColor(0, 0, 0);
@@ -2442,12 +2408,12 @@ const SchoolPaymentsPage = () => {
                         else {
                             doc.setTextColor(21, 128, 61);
                         }
-                        doc.text(money(amountDue), pageWidth - 50, cursorY, { align: 'right' });
+                        doc.text(formatQ(amountDue || 0), pageWidth - 50, cursorY, { align: 'right' });
                         cursorY += 12;
                         if (penaltyDue > 0) {
                             doc.text('Mora pendiente:', 50, cursorY);
                             doc.setTextColor(244, 67, 54);
-                            doc.text(money(penaltyDue), pageWidth - 50, cursorY, { align: 'right' });
+                            doc.text(formatQ(penaltyDue || 0), pageWidth - 50, cursorY, { align: 'right' });
                             cursorY += 12;
                         }
                         doc.setFont(undefined, 'bold');
@@ -2458,7 +2424,7 @@ const SchoolPaymentsPage = () => {
                             doc.setTextColor(21, 128, 61);
                         }
                         doc.text('Total a pagar:', 50, cursorY);
-                        doc.text(money(totalPending), pageWidth - 50, cursorY, { align: 'right' });
+                        doc.text(formatQ(totalPending || 0), pageWidth - 50, cursorY, { align: 'right' });
                         cursorY += 12;
                         doc.setDrawColor(225, 225, 225);
                         doc.setLineWidth(0.6);
@@ -2544,7 +2510,7 @@ const SchoolPaymentsPage = () => {
                 const response = await api.post('/payments/penalties/freeze', { 
                     paymentId: payment.id,
                     freezeDate,
-                    notes: `Mora congelada manualmente el ${moment(freezeDate).format('DD/MM/YYYY')}`
+                    notes: `Mora congelada manualmente el ${formatDate(freezeDate)}`
                 });
                 console.log('[FREEZE_PENALTY] Response received:', response.data);
                 notify.success('Mora congelada');
@@ -2700,9 +2666,9 @@ const SchoolPaymentsPage = () => {
     // Service status selector for export (ACTIVE, PAUSED, SUSPENDED, INACTIVE, ALL)
     const [exportServiceStatus, setExportServiceStatus] = useState('TODOS'); 
     // Año seleccionable para exportación
-    const [exportYear, setExportYear] = useState(String(moment().year()));
+    const [exportYear, setExportYear] = useState(String(moment(currentDate).year()));
     const exportYearOptions = React.useMemo(() => {
-        const currentYear = moment().year();
+        const currentYear = moment(currentDate).year();
         const baseYear = Number(currentCycleYear);
         const startYear = Number.isFinite(baseYear) ? baseYear : currentYear;
 
@@ -2712,7 +2678,7 @@ const SchoolPaymentsPage = () => {
         }
         // Mostrar descendente (más reciente primero)
         return years.reverse();
-    }, [currentCycleYear]);
+    }, [currentCycleYear, currentDate]);
 
     // Si cambia el año del ciclo y el exportYear ya no está en el rango, ajustarlo.
     useEffect(() => {
@@ -2741,7 +2707,7 @@ const SchoolPaymentsPage = () => {
             // Use new backend endpoint to fetch all PaymentHistory rows for payments
             // matching the selected final status. Backend will JOIN PaymentHistory -> Payment.
             // If 'GENERAL' is selected, omit the finalstatus param so backend returns all statuses.
-            const selectedYear = String(year || exportYear || moment().year());
+            const selectedYear = String(year || exportYear || moment(currentDate).year());
             const params = buildPaymentParams({ page: 1, limit: 10000 });
             // Manejar agrupación de estados: PAGADO incluye CONFIRMADO y ADELANTADO
             if (exportFinalStatus && String(exportFinalStatus).toUpperCase() === 'PAGADO') {
@@ -2782,7 +2748,7 @@ const SchoolPaymentsPage = () => {
 
             // historiesAll contains PaymentHistory rows for all matching payments.
             // Apply month/year filter and write rows directly (assume each history row includes familyLastName)
-            const yearToUse = selectedYear ? Number(selectedYear) : moment().year();
+            const yearToUse = selectedYear ? Number(selectedYear) : moment(currentDate).year();
             const monthStrPad = (month && month !== 'TODOS') ? String(month).padStart(2, '0') : null;
 
             const normalizeUpper = (val) => (val == null ? '' : String(val)).trim().toUpperCase();
@@ -2916,7 +2882,7 @@ const SchoolPaymentsPage = () => {
                     }
                 }
 
-                const fecha = (typeof h.paymentDate !== 'undefined' && h.paymentDate !== null && h.paymentDate !== '') ? moment.parseZone(h.paymentDate).format('DD/MM/YY') : '0';
+                const fecha = (typeof h.paymentDate !== 'undefined' && h.paymentDate !== null && h.paymentDate !== '') ? formatDateShort(h.paymentDate, { keepZone: true }) : '0';
                 const creditoSaldo = Number(h.creditBalanceBefore ?? 0);
                 const tarifa = Number(h.tarif ?? 0);
                 const descuentoFamFromHistory = Number(
@@ -3015,7 +2981,7 @@ const SchoolPaymentsPage = () => {
             };
             // Build filename in requested format:
             // "Historial Pagos estadoFinal nombreColegio Mes Año"
-            const periodYear = year || exportYear || moment().year();
+            const periodYear = year || exportYear || moment(currentDate).year();
             const monthPadded = (month && String(month).toUpperCase() !== 'TODOS') ? String(month).padStart(2, '0') : '';
             const monthName = monthPadded ? (monthNames[monthPadded] || monthPadded) : '';
             // sanitize school name for filenames (remove newlines/slashes, collapse spaces)
@@ -3041,7 +3007,7 @@ const SchoolPaymentsPage = () => {
             console.error('handleDownloadPaymentsByStatus', err);
             notify.error('Error generando exportación');
         }
-    }, [schoolId, buildPaymentParams, school, paymentsAll, exportYear, exportFinalStatus, exportServiceStatus, notify]);
+    }, [schoolId, buildPaymentParams, school, paymentsAll, exportYear, exportFinalStatus, exportServiceStatus, notify, currentDate]);
 
     // Export payments filtered by estado using client-side dataset (paymentsAll)
     const handleDownloadByState = useCallback(async (estado) => {
@@ -3318,8 +3284,6 @@ const SchoolPaymentsPage = () => {
     }, [paymentsAll, enrollmentByUser, exportByStateServiceStatus, school, schoolId, notify]);
 
     // Derived values for the Register Payment dialog summary
-    const formatCurrency = (v) => `Q ${Number(v || 0).toFixed(2)}`;
-    
     // Función para calcular mora hasta una fecha específica (retroactiva) — POR PERÍODO
     // Itera cada período con mora y calcula días desde su penaltyStartDate hasta paymentDate.
     const calculateRetroactivePenalty = useCallback((paymentDate, penaltyPeriods) => {
@@ -3328,7 +3292,7 @@ const SchoolPaymentsPage = () => {
         }
 
         const paymentMoment = moment(paymentDate).startOf('day');
-        const today = moment().startOf('day');
+        const today = moment(currentDate).startOf('day');
 
         // Si la fecha de pago es igual o después de hoy, no es retroactivo
         if (paymentMoment.isSameOrAfter(today)) {
@@ -3392,7 +3356,7 @@ const SchoolPaymentsPage = () => {
                 daysLate,
                 penaltyAmount: periodPenalty,
                 studentCount: periodStudentCount,
-                penaltyStartDate: penaltyStart.format('DD/MM/YYYY'),
+                penaltyStartDate: formatDate(penaltyStart),
                 frozen: false,
                 cleared: false,
             });
@@ -3406,9 +3370,9 @@ const SchoolPaymentsPage = () => {
             dailyPenalty,
             studentCount: fallbackStudentCount,
             paymentDate: paymentMoment.format('DD [de] MMMM, YYYY'),
-            message: `Pago retroactivo: La mora acumulada hasta el ${paymentMoment.format('DD/MM/YYYY')} es de Q${totalPenalty.toFixed(2)}`
+            message: `Pago retroactivo: La mora acumulada hasta el ${formatDate(paymentMoment)} es de ${formatQ(totalPenalty)}`
         };
-    }, [registerPaymentTarget, school, allSchools]);
+    }, [registerPaymentTarget, school, allSchools, currentDate]);
     
     // Valores del sistema V2
     // monthlyFee = tarifa base × cantidad de estudiantes (antes de descuentos)
@@ -3654,7 +3618,7 @@ const SchoolPaymentsPage = () => {
                                                 </IconButton>
                                                 <Box sx={{ minWidth: 150, textAlign: 'center' }}>
                                                     <Typography variant="subtitle1" sx={{ fontWeight: 700, textTransform: 'capitalize', lineHeight: 1.1 }}>
-                                                        {moment(`${selectedPeriod}-01`).format('MMMM YYYY')}
+                                                        {formatMonth(`${selectedPeriod}-01`)}
                                                     </Typography>
                                                     <Typography variant="caption" color="text.secondary">Período de métricas</Typography>
                                                 </Box>
@@ -3800,7 +3764,7 @@ const SchoolPaymentsPage = () => {
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ color: '#2196f3', fontWeight: 600 }}>{formatMoneyOrNA(finByBasis(fin?.ingresoTarifa))}</Typography>
+                                                    <Typography variant="h6" sx={{ color: '#2196f3', fontWeight: 600 }}>{formatQ(finByBasis(fin?.ingresoTarifa), { nullText: 'N/A' })}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
@@ -3818,7 +3782,7 @@ const SchoolPaymentsPage = () => {
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ color: '#ff9800', fontWeight: 600 }}>{formatMoneyOrNA(finByBasis(fin?.ingresoPorMora))}</Typography>
+                                                    <Typography variant="h6" sx={{ color: '#ff9800', fontWeight: 600 }}>{formatQ(finByBasis(fin?.ingresoPorMora), { nullText: 'N/A' })}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
@@ -3836,7 +3800,7 @@ const SchoolPaymentsPage = () => {
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ color: '#43a047', fontWeight: 600 }}>{formatMoneyOrNA(fin?.ingresoInscripcion)}</Typography>
+                                                    <Typography variant="h6" sx={{ color: '#43a047', fontWeight: 600 }}>{formatQ(fin?.ingresoInscripcion, { nullText: 'N/A' })}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
@@ -3854,7 +3818,7 @@ const SchoolPaymentsPage = () => {
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ color: '#f44336', fontWeight: 600 }}>{formatMoneyOrNA(fin?.totalPendiente)}</Typography>
+                                                    <Typography variant="h6" sx={{ color: '#f44336', fontWeight: 600 }}>{formatQ(fin?.totalPendiente, { nullText: 'N/A' })}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
@@ -3872,7 +3836,7 @@ const SchoolPaymentsPage = () => {
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ color: '#d32f2f', fontWeight: 600 }}>{formatMoneyOrNA(fin?.moraPendiente)}</Typography>
+                                                    <Typography variant="h6" sx={{ color: '#d32f2f', fontWeight: 600 }}>{formatQ(fin?.moraPendiente, { nullText: 'N/A' })}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
@@ -3890,7 +3854,7 @@ const SchoolPaymentsPage = () => {
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ color: '#e65100', fontWeight: 600 }}>{formatMoneyOrNA(fin?.inscripcionPendiente)}</Typography>
+                                                    <Typography variant="h6" sx={{ color: '#e65100', fontWeight: 600 }}>{formatQ(fin?.inscripcionPendiente, { nullText: 'N/A' })}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
@@ -3911,7 +3875,7 @@ const SchoolPaymentsPage = () => {
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ color: '#9c27b0', fontWeight: 600 }}>{formatMoneyOrNA(fin?.creditoAcumulado)}</Typography>
+                                                    <Typography variant="h6" sx={{ color: '#9c27b0', fontWeight: 600 }}>{formatQ(fin?.creditoAcumulado, { nullText: 'N/A' })}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
@@ -3929,7 +3893,7 @@ const SchoolPaymentsPage = () => {
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ color: '#9c27b0', fontWeight: 600 }}>{formatMoneyOrNA(fin?.creditoReintegrado)}</Typography>
+                                                    <Typography variant="h6" sx={{ color: '#9c27b0', fontWeight: 600 }}>{formatQ(fin?.creditoReintegrado, { nullText: 'N/A' })}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
@@ -3947,7 +3911,7 @@ const SchoolPaymentsPage = () => {
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ color: '#1565c0', fontWeight: 600 }}>{formatMoneyOrNA(fin?.ingresoEsperadoBruto)}</Typography>
+                                                    <Typography variant="h6" sx={{ color: '#1565c0', fontWeight: 600 }}>{formatQ(fin?.ingresoEsperadoBruto, { nullText: 'N/A' })}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
@@ -3965,7 +3929,7 @@ const SchoolPaymentsPage = () => {
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ color: '#2e7d32', fontWeight: 600 }}>{formatMoneyOrNA(fin?.ingresoEsperadoNeto)}</Typography>
+                                                    <Typography variant="h6" sx={{ color: '#2e7d32', fontWeight: 600 }}>{formatQ(fin?.ingresoEsperadoNeto, { nullText: 'N/A' })}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
@@ -3983,7 +3947,7 @@ const SchoolPaymentsPage = () => {
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ color: '#795548', fontWeight: 600 }}>{formatMoneyOrNA(fin?.totalDescuentos)}</Typography>
+                                                    <Typography variant="h6" sx={{ color: '#795548', fontWeight: 600 }}>{formatQ(fin?.totalDescuentos, { nullText: 'N/A' })}</Typography>
                                                 </Grid>
                                                 <Grid item xs={12} sm={6} md={3}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
@@ -4001,7 +3965,7 @@ const SchoolPaymentsPage = () => {
                                                             <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
                                                         </Tooltip>
                                                     </Box>
-                                                    <Typography variant="h6" sx={{ color: '#607d8b', fontWeight: 600 }}>{formatMoneyOrNA(fin?.descuentosMoraExonerados)}</Typography>
+                                                    <Typography variant="h6" sx={{ color: '#607d8b', fontWeight: 600 }}>{formatQ(fin?.descuentosMoraExonerados, { nullText: 'N/A' })}</Typography>
                                                 </Grid>
                                             </Grid>
                                         </Box>
@@ -4028,7 +3992,7 @@ const SchoolPaymentsPage = () => {
                                                                 <XAxis dataKey="label" angle={-45} textAnchor="end" height={80} />
                                                                 <YAxis tickFormatter={(value) => `Q${(value/1000).toFixed(0)}k`} />
                                                                 <RechartsTooltip 
-                                                                    formatter={(value) => [`Q ${Number(value).toLocaleString('es-GT', {minimumFractionDigits: 2})}`, 'Ingreso']}
+                                                                    formatter={(value) => [formatQ(value), 'Ingreso']}
                                                                     labelFormatter={(label, payload) => payload?.[0] ? payload[0].payload.fullLabel : label}
                                                                 />
                                                             <Legend />
@@ -4499,7 +4463,7 @@ const SchoolPaymentsPage = () => {
                                             <Tabs value={paymentTab} onChange={(e, newValue) => setPaymentTab(newValue)}>
                                                 <Tab label="Pago de Tarifa" />
                                                 <Tab
-                                                    label={`Pago de Mora ${effectivePenaltyDue > 0 ? `(Q ${effectivePenaltyDue.toFixed(2)})` : '(Q 0.00)'}`}
+                                                    label={`Pago de Mora ${effectivePenaltyDue > 0 ? `(${formatQ(effectivePenaltyDue)})` : '(Q 0.00)'}`}
                                                     sx={{
                                                         color: effectivePenaltyDue > 0 ? 'error.main' : 'inherit',
                                                         fontWeight: effectivePenaltyDue > 0 ? 700 : 400,
@@ -4549,7 +4513,7 @@ const SchoolPaymentsPage = () => {
                                                                 ({effectiveRouteType})
                                                             </Typography>
                                                         </Typography>
-                                                        <Typography variant="body2">{formatCurrency(effectiveBaseFee)}</Typography>
+                                                        <Typography variant="body2">{formatQ(effectiveBaseFee || 0)}</Typography>
                                                     </Box>
                                                     
                                                     {/* Tarifa mensual total (base × estudiantes) */}
@@ -4560,7 +4524,7 @@ const SchoolPaymentsPage = () => {
                                                                             ({cargosStudents} {cargosStudents === 1 ? 'estudiante' : 'estudiantes'})
                                                                         </Typography>
                                                         </Typography>
-                                                        <Typography variant="body2" sx={{ fontWeight: 500 }}>{formatCurrency(effectiveMonthlyFee)}</Typography>
+                                                        <Typography variant="body2" sx={{ fontWeight: 500 }}>{formatQ(effectiveMonthlyFee || 0)}</Typography>
                                                     </Box>
                                                 </Box>
                                             )}
@@ -4589,7 +4553,7 @@ const SchoolPaymentsPage = () => {
                                                                 </Box>
                                                             </Typography>
                                                             <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 500 }}>
-                                                                - {formatCurrency(dialogCredito)}
+                                                                - {formatQ(dialogCredito || 0)}
                                                             </Typography>
                                                         </Box>
                                                     )}
@@ -4600,7 +4564,7 @@ const SchoolPaymentsPage = () => {
                                                                 Descuento familiar
                                                             </Typography>
                                                             <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 500 }}>
-                                                                - {formatCurrency(dialogFamilySpecialFee)}
+                                                                - {formatQ(dialogFamilySpecialFee || 0)}
                                                             </Typography>
                                                         </Box>
                                                     )}
@@ -4609,7 +4573,7 @@ const SchoolPaymentsPage = () => {
                                                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
                                                             <Typography variant="body2" color="text.secondary">Descuento extraordinario</Typography>
                                                             <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 500 }}>
-                                                                - {formatCurrency(dialogExtraDiscount)}
+                                                                - {formatQ(dialogExtraDiscount || 0)}
                                                             </Typography>
                                                         </Box>
                                                     )}
@@ -4635,7 +4599,7 @@ const SchoolPaymentsPage = () => {
                                                                         const periodDate = moment(period.period);
                                                                         const monthName = monthNames[periodDate.month()];
                                                                         const year = periodDate.year();
-                                                                        const dueDate = period.dueDate ? moment(period.dueDate).format('DD/MM/YY') : 'N/A';
+                                                                        const dueDate = formatDateShort(period.dueDate);
                                                                         
                                                                         // Verificar si es pago parcial
                                                                         const originalAmount = Number(period.originalAmount ?? dialogMonthlyFee ?? 0) || 0;
@@ -4687,7 +4651,7 @@ const SchoolPaymentsPage = () => {
                                                                                         :
                                                                                     </Typography>
                                                                                     <Typography variant="caption">
-                                                                                        {formatCurrency(periodBaseFee)}
+                                                                                        {formatQ(periodBaseFee || 0)}
                                                                                     </Typography>
                                                                                 </Box>
                                                                                 
@@ -4697,7 +4661,7 @@ const SchoolPaymentsPage = () => {
                                                                                         Tarifa mensual ({periodStudents} {periodStudents === 1 ? 'estudiante' : 'estudiantes'}):
                                                                                     </Typography>
                                                                                     <Typography variant="caption">
-                                                                                        {formatCurrency(originalAmount)}
+                                                                                        {formatQ(originalAmount || 0)}
                                                                                     </Typography>
                                                                                 </Box>
                                                                                 
@@ -4708,7 +4672,7 @@ const SchoolPaymentsPage = () => {
                                                                                             Descuento familiar:
                                                                                         </Typography>
                                                                                         <Typography variant="caption" sx={{ color: 'success.main' }}>
-                                                                                            - {formatCurrency(periodDiscount)}
+                                                                                            - {formatQ(periodDiscount || 0)}
                                                                                         </Typography>
                                                                                     </Box>
                                                                                 )}
@@ -4721,7 +4685,7 @@ const SchoolPaymentsPage = () => {
                                                                                                 Ya pagado:
                                                                                             </Typography>
                                                                                             <Typography variant="caption" sx={{ color: 'info.main', fontWeight: 500 }}>
-                                                                                                {formatCurrency(amountPaid)}
+                                                                                                {formatQ(amountPaid || 0)}
                                                                                             </Typography>
                                                                                         </Box>
                                                                                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.3, ml: 2 }}>
@@ -4729,7 +4693,7 @@ const SchoolPaymentsPage = () => {
                                                                                                 Saldo pendiente:
                                                                                             </Typography>
                                                                                             <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 600 }}>
-                                                                                                {formatCurrency(periodAmountDue)}
+                                                                                                {formatQ(periodAmountDue || 0)}
                                                                                             </Typography>
                                                                                         </Box>
                                                                                     </>
@@ -4741,7 +4705,7 @@ const SchoolPaymentsPage = () => {
                                                                                         {isParcial ? 'A pagar este período:' : 'Subtotal período:'}
                                                                                     </Typography>
                                                                                     <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main' }}>
-                                                                                        {formatCurrency(periodAmountDue)}
+                                                                                        {formatQ(periodAmountDue || 0)}
                                                                                     </Typography>
                                                                                 </Box>
                                                                             </Box>
@@ -4767,7 +4731,7 @@ const SchoolPaymentsPage = () => {
                                             <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 1.5, borderTop: '2px solid rgba(0,0,0,0.12)' }}>
                                                 <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: '1.1rem' }}>💰 Total a pagar</Typography>
                                                 <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: '1.1rem', color: 'primary.main' }}>
-                                                    {formatCurrency(dialogTotalToPay)}
+                                                    {formatQ(dialogTotalToPay || 0)}
                                                 </Typography>
                                             </Box>
                                         </Box>
@@ -4786,7 +4750,7 @@ const SchoolPaymentsPage = () => {
                                                             ↗ Crédito disponible
                                                         </Box>
                                                         <Typography variant="caption" sx={{ fontWeight: 600, color: '#1565c0' }}>
-                                                            Q {dialogCredito.toFixed(2)}
+                                                            {formatQ(dialogCredito)}
                                                         </Typography>
                                                     </Box>
                                                     <Typography variant="caption" color="text.secondary">
@@ -4796,8 +4760,8 @@ const SchoolPaymentsPage = () => {
                                                     {dialogPendingBalance > 0 && (
                                                         <Typography variant="caption" color="text.secondary" sx={{ mt: 0.3 }}>
                                                             {dialogCredito >= dialogPendingBalance
-                                                                ? `✅ El crédito cubre todo el saldo pendiente (Q${dialogPendingBalance.toFixed(2)}). No se requiere pago adicional para ponerse al día.`
-                                                                : `💡 El crédito (Q${dialogCredito.toFixed(2)}) se aplicará primero al saldo pendiente (Q${dialogPendingBalance.toFixed(2)}), reduciéndolo a Q${Math.max(0, dialogPendingBalance - dialogCredito).toFixed(2)}.`
+                                                                ? `✅ El crédito cubre todo el saldo pendiente (${formatQ(dialogPendingBalance)}). No se requiere pago adicional para ponerse al día.`
+                                                                : `💡 El crédito (${formatQ(dialogCredito)}) se aplicará primero al saldo pendiente (${formatQ(dialogPendingBalance)}), reduciéndolo a ${formatQ(Math.max(0, dialogPendingBalance - dialogCredito))}.`
                                                             }
                                                         </Typography>
                                                     )}
@@ -4841,12 +4805,12 @@ const SchoolPaymentsPage = () => {
                                             onChange={(e) => setRegisterPaymentExtra(prev => ({ ...prev, extraordinaryDiscount: e.target.value }))}
                                             disabled={uploadedReceiptsLoading || regHistLoading}
                                             error={extraDiscountError}
-                                            helperText={extraDiscountError ? `El descuento no puede exceder el saldo pendiente (Q${effectivePendingBalance.toFixed(2)})` : undefined}
+                                            helperText={extraDiscountError ? `El descuento no puede exceder el saldo pendiente (${formatQ(effectivePendingBalance)})` : undefined}
                                             sx={{ mb: 2 }}
                                         />
                                         {dialogGeneratedCredit > 0 && (
                                             <Alert severity="info" sx={{ mb: 2 }}>
-                                                Se generará {formatCurrency(dialogGeneratedCredit)} como crédito a favor.
+                                                Se generará {formatQ(dialogGeneratedCredit || 0)} como crédito a favor.
                                             </Alert>
                                         )}
                                         <FormControl fullWidth sx={{ mb: 0 }}>
@@ -4936,7 +4900,7 @@ const SchoolPaymentsPage = () => {
                                                 // Fecha fin mora: si está congelada → penaltyFrozenAt; si acumulando → hoy
                                                 const moraEnd = isFrozen && period.penaltyFrozenAt
                                                     ? moment(period.penaltyFrozenAt)
-                                                    : moment(payPenaltyDate || moment().format('YYYY-MM-DD'));
+                                                    : moment(payPenaltyDate || moment(currentDate).format('YYYY-MM-DD'));
                                                 // Días = fin - inicio + 1 (ambos extremos inclusivos)
                                                 const moraDays = moraStart ? Math.max(0, moraEnd.diff(moraStart, 'days') + 1) : 0;
 
@@ -4953,16 +4917,16 @@ const SchoolPaymentsPage = () => {
                                                                 {label} {isFrozen && '❄️'} {isCleared && '✅'}
                                                             </Typography>
                                                             <Typography variant="caption" sx={{ fontWeight: 700, color: isFrozen ? '#1976d2' : 'error.main' }}>
-                                                                {formatCurrency(computedPenaltyForDisplay)}
+                                                                {formatQ(computedPenaltyForDisplay || 0)}
                                                             </Typography>
                                                         </Box>
                                                         {moraStart && (
                                                             <Box sx={{ mt: 0.5, display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
                                                                 <Typography variant="caption" color="text.secondary">
-                                                                    📅 Inicio: <strong>{moraStart.format('DD/MM/YYYY')}</strong>
+                                                                    📅 Inicio: <strong>{formatDate(moraStart)}</strong>
                                                                 </Typography>
                                                                 <Typography variant="caption" color="text.secondary">
-                                                                    {isFrozen ? '🔒 Fin:' : '📆 Hasta:'} <strong>{moraEnd.format('DD/MM/YYYY')}</strong>
+                                                                    {isFrozen ? '🔒 Fin:' : '📆 Hasta:'} <strong>{formatDate(moraEnd)}</strong>
                                                                 </Typography>
                                                                 <Typography variant="caption" sx={{ color: isFrozen ? '#1976d2' : 'error.main', fontWeight: 600 }}>
                                                                     {moraDays} día{moraDays !== 1 ? 's' : ''}
@@ -4986,7 +4950,7 @@ const SchoolPaymentsPage = () => {
                                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
                                                 <Typography variant="body2" color="text.secondary">Mora acumulada:</Typography>
                                                 <Typography variant="body2" sx={{ color: 'error.main', fontWeight: 500 }}>
-                                                    {formatCurrency(effectivePenaltyDue)}
+                                                    {formatQ(effectivePenaltyDue || 0)}
                                                 </Typography>
                                             </Box>
 
@@ -5000,7 +4964,7 @@ const SchoolPaymentsPage = () => {
                                                                 {isExonerating ? 'Exoneración completa:' : 'Exoneración parcial:'}
                                                             </Typography>
                                                             <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 500 }}>
-                                                                - {formatCurrency(exonerateValue)}
+                                                                - {formatQ(exonerateValue || 0)}
                                                             </Typography>
                                                         </Box>
                                                     );
@@ -5015,7 +4979,7 @@ const SchoolPaymentsPage = () => {
                                                     {(() => {
                                                         const exonerateValue = isExonerating ? Number(exonerateAmount || 0) : Number(discountPenaltyAmount || 0);
                                                         const total = Math.max(0, effectivePenaltyDue - exonerateValue);
-                                                        return formatCurrency(total);
+                                                        return formatQ(total || 0);
                                                     })()}
                                                 </Typography>
                                             </Box>
@@ -5026,7 +4990,7 @@ const SchoolPaymentsPage = () => {
                                                             Crédito disponible ↗
                                                         </Box>
                                                     </Typography>
-                                                    <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 600 }}>Q {dialogCredito.toFixed(2)}</Typography>
+                                                    <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 600 }}>{formatQ(dialogCredito)}</Typography>
                                                 </Box>
                                             )}
                                         </Box>
@@ -5060,7 +5024,7 @@ const SchoolPaymentsPage = () => {
                                                 }}
                                                 fullWidth
                                             >
-                                                Usar crédito (Q {Math.min(dialogCredito, effectivePenaltyDue).toFixed(2)})
+                                                Usar crédito ({formatQ(Math.min(dialogCredito, effectivePenaltyDue))})
                                             </Button>
                                         </Box>
                                     )}
@@ -5110,14 +5074,14 @@ const SchoolPaymentsPage = () => {
                                         inputProps={{ min: 0, step: '0.01', max: payPenaltyUseCredit ? dialogCredito : effectivePenaltyDue }}
                                         sx={{ mb: 2 }}
                                         disabled={effectivePenaltyDue === 0 || isExonerating}
-                                        helperText={isExonerating ? 'Exoneración completa: No se realizará pago' : payPenaltyUseCredit ? `Máximo del crédito: Q ${dialogCredito.toFixed(2)}` : ''}
+                                        helperText={isExonerating ? 'Exoneración completa: No se realizará pago' : payPenaltyUseCredit ? `Máximo del crédito: ${formatQ(dialogCredito)}` : ''}
                                     />
                                     {payPenaltyUseCredit && (() => {
                                         const cashRem = Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100);
                                         return cashRem > 0 ? (
                                             <Box sx={{ mb: 2, p: 1.5, bgcolor: '#fff3e0', borderRadius: 1, border: '1px solid #ffb74d' }}>
                                                 <Typography variant="body2" sx={{ color: 'warning.dark' }}>
-                                                    ⚠️ El crédito no cubre toda la mora. <strong>Restante a pagar con boleta: Q {cashRem.toFixed(2)}</strong>
+                                                    ⚠️ El crédito no cubre toda la mora. <strong>Restante a pagar con boleta: {formatQ(cashRem)}</strong>
                                                 </Typography>
                                             </Box>
                                         ) : (
@@ -5181,11 +5145,11 @@ const SchoolPaymentsPage = () => {
                                                         </Typography>
                                                         {p.frozen ? (
                                                             <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                                                Mora congelada: {formatCurrency(p.penaltyAmount)}
+                                                                Mora congelada: {formatQ(p.penaltyAmount || 0)}
                                                             </Typography>
                                                         ) : (
                                                             <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                                                {p.daysLate} días × Q{retroactivePenaltyCalc.dailyPenalty} × {Number(p.studentCount || retroactivePenaltyCalc.studentCount || 1)} est. = {formatCurrency(p.penaltyAmount)}
+                                                                {p.daysLate} días × {formatQ(retroactivePenaltyCalc.dailyPenalty)} × {Number(p.studentCount || retroactivePenaltyCalc.studentCount || 1)} est. = {formatQ(p.penaltyAmount || 0)}
                                                             </Typography>
                                                         )}
                                                     </Box>
@@ -5195,7 +5159,7 @@ const SchoolPaymentsPage = () => {
                                             {/* Total retroactivo */}
                                             <Box sx={{ mt: 1.5, p: 1.5, bgcolor: '#fff', borderRadius: 1, border: '2px solid #ff9800' }}>
                                                 <Typography variant="body1" sx={{ fontWeight: 700, color: '#e65100' }}>
-                                                    💰 Mora hasta {moment(payPenaltyDate).format('DD/MM/YYYY')}: <span style={{ fontSize: '1.2em' }}>{formatCurrency(retroactivePenaltyCalc.penaltyUntilPaymentDate)}</span>
+                                                    💰 Mora hasta {formatDate(payPenaltyDate)}: <span style={{ fontSize: '1.2em' }}>{formatQ(retroactivePenaltyCalc.penaltyUntilPaymentDate || 0)}</span>
                                                 </Typography>
                                             </Box>
 
@@ -5211,10 +5175,10 @@ const SchoolPaymentsPage = () => {
                                                             <Typography variant="body2" sx={{ fontWeight: 600, color: willCoverFull ? '#2e7d32' : '#e65100', mb: 0.5 }}>
                                                                 📊 Aplicación del Pago Retroactivo:
                                                             </Typography>
-                                                            {paymentAmount > 0 && <Typography variant="body2">• Pago: {formatCurrency(paymentAmount)}</Typography>}
-                                                            {exonerationAmount > 0 && <Typography variant="body2">• Exoneración: {formatCurrency(exonerationAmount)}</Typography>}
+                                                            {paymentAmount > 0 && <Typography variant="body2">• Pago: {formatQ(paymentAmount || 0)}</Typography>}
+                                                            {exonerationAmount > 0 && <Typography variant="body2">• Exoneración: {formatQ(exonerationAmount || 0)}</Typography>}
                                                             <Typography variant="body2" sx={{ fontWeight: 700, color: willCoverFull ? '#2e7d32' : '#e65100', mt: 1 }}>
-                                                                {willCoverFull ? <>✅ Cubre toda la mora hasta {moment(payPenaltyDate).format('DD/MM/YYYY')}</> : <>⚠️ Pago parcial: resta {formatCurrency(retroactivePenaltyCalc.penaltyUntilPaymentDate - totalReduction)}</>}
+                                                                {willCoverFull ? <>✅ Cubre toda la mora hasta {formatDate(payPenaltyDate)}</> : <>⚠️ Pago parcial: resta {formatQ((retroactivePenaltyCalc.penaltyUntilPaymentDate - totalReduction) || 0)}</>}
                                                             </Typography>
                                                         </Box>
                                                     );
@@ -5330,11 +5294,7 @@ const SchoolPaymentsPage = () => {
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                                         <Typography variant="h6">🎓 Inscripción de Ciclo</Typography>
                                         {enrollmentPayment && (
-                                            <Chip
-                                                label={ENROLLMENT_STATUS_LABEL[enrollmentPayment.status]?.label || enrollmentPayment.status}
-                                                color={ENROLLMENT_STATUS_LABEL[enrollmentPayment.status]?.color || 'default'}
-                                                size="small"
-                                            />
+                                            <StatusChip domain={ENROLLMENT_PAYMENT_STATUS} value={enrollmentPayment.status} />
                                         )}
                                     </Box>
 
@@ -5351,27 +5311,27 @@ const SchoolPaymentsPage = () => {
                                             <Box sx={{ mb: 2, p: 2, bgcolor: '#fafafa', borderRadius: 1, border: '1px solid rgba(0,0,0,0.04)' }}>
                                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                                                     <Typography variant="body2" color="text.secondary">Monto original ({enrollmentPayment.studentsCount} est.)</Typography>
-                                                    <Typography variant="body2">{formatCurrency(enrollmentPayment.originalAmount)}</Typography>
+                                                    <Typography variant="body2">{formatQ(enrollmentPayment.originalAmount || 0)}</Typography>
                                                 </Box>
                                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                                                     <Typography variant="body2" color="text.secondary">Descuento aplicado</Typography>
-                                                    <Typography variant="body2">{formatCurrency(enrollmentPayment.discountApplied)}</Typography>
+                                                    <Typography variant="body2">{formatQ(enrollmentPayment.discountApplied || 0)}</Typography>
                                                 </Box>
                                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                                                     <Typography variant="body2" color="text.secondary">Monto neto</Typography>
-                                                    <Typography variant="body2">{formatCurrency(enrollmentPayment.netAmount)}</Typography>
+                                                    <Typography variant="body2">{formatQ(enrollmentPayment.netAmount || 0)}</Typography>
                                                 </Box>
                                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                                                     <Typography variant="body2" color="text.secondary">Pagado</Typography>
-                                                    <Typography variant="body2">{formatCurrency(enrollmentPayment.amountPaid)}</Typography>
+                                                    <Typography variant="body2">{formatQ(enrollmentPayment.amountPaid || 0)}</Typography>
                                                 </Box>
                                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.5, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
                                                     <Typography variant="body2" sx={{ fontWeight: 700 }}>Saldo pendiente</Typography>
-                                                    <Typography variant="body2" sx={{ fontWeight: 700 }}>{formatCurrency(enrollmentPayment.amountDue)}</Typography>
+                                                    <Typography variant="body2" sx={{ fontWeight: 700 }}>{formatQ(enrollmentPayment.amountDue || 0)}</Typography>
                                                 </Box>
                                                 {enrollmentPayment.manualAdjustmentAmount > 0 && (
                                                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                                                        Ajuste manual acumulado: {formatCurrency(enrollmentPayment.manualAdjustmentAmount)}
+                                                        Ajuste manual acumulado: {formatQ(enrollmentPayment.manualAdjustmentAmount || 0)}
                                                         {enrollmentPayment.manualAdjustmentReason ? ` — ${enrollmentPayment.manualAdjustmentReason}` : ''}
                                                     </Typography>
                                                 )}
@@ -5387,7 +5347,7 @@ const SchoolPaymentsPage = () => {
                                                         inputProps={{ min: '0', step: '0.01' }}
                                                     />
                                                     <TextField
-                                                        label={`Descuento extraordinario / exoneración (Q, opcional, máx. Q${Number(enrollmentPayment.amountDue).toFixed(2)})`}
+                                                        label={`Descuento extraordinario / exoneración (Q, opcional, máx. ${formatQ(enrollmentPayment.amountDue)})`}
                                                         type="number"
                                                         value={payEnrollmentDiscount}
                                                         onChange={(e) => setPayEnrollmentDiscount(e.target.value)}
@@ -5475,7 +5435,7 @@ const SchoolPaymentsPage = () => {
                                                 return;
                                             }
                                             if (creditAmt > dialogCredito) {
-                                                notify.error(`El crédito a aplicar excede el disponible (Q${dialogCredito.toFixed(2)})`);
+                                                notify.error(`El crédito a aplicar excede el disponible (${formatQ(dialogCredito)})`);
                                                 return;
                                             }
                                         } else {
@@ -5489,7 +5449,7 @@ const SchoolPaymentsPage = () => {
                                             }
                                             const total = amt + discount;
                                             if (total > effectivePenaltyDue) {
-                                                notify.error(`El monto total (pago + exoneración) excede la mora adeudada (Q${effectivePenaltyDue.toFixed(2)})`);
+                                                notify.error(`El monto total (pago + exoneración) excede la mora adeudada (${formatQ(effectivePenaltyDue)})`);
                                                 return;
                                             }
                                         }
@@ -5516,7 +5476,7 @@ const SchoolPaymentsPage = () => {
                                                         source: 'manual',
                                                         ...receiptLinkFields
                                                     });
-                                                    notify.success(`Crédito (Q${creditAmt.toFixed(2)}) y boleta (Q${boletaAmt.toFixed(2)}) aplicados a mora`);
+                                                    notify.success(`Crédito (${formatQ(creditAmt)}) y boleta (${formatQ(boletaAmt)}) aplicados a mora`);
                                                 } else {
                                                     notify.success('Crédito aplicado a mora');
                                                 }
@@ -5528,12 +5488,12 @@ const SchoolPaymentsPage = () => {
                                                     realPaymentDate: payPenaltyDate,
                                                     receiptNumber: payPenaltyBoleta,
                                                     bankAccount: payPenaltyAccount,
-                                                    notes: discount > 0 ? `Descuento/Exoneración de mora: Q${discount.toFixed(2)}` : null,
+                                                    notes: discount > 0 ? `Descuento/Exoneración de mora: ${formatQ(discount)}` : null,
                                                     source: 'manual',
                                                     ...receiptLinkFields
                                                 };
                                                 await api.post('/payments/pay-penalty', payloadData);
-                                                notify.success(isExonerating ? `Mora exonerada: Q${discount.toFixed(2)}` : 'Pago de mora registrado exitosamente');
+                                                notify.success(isExonerating ? `Mora exonerada: ${formatQ(discount)}` : 'Pago de mora registrado exitosamente');
                                             }
                                             setOpenRegisterDialog(false);
                                             setIsExonerating(false);
@@ -5542,7 +5502,7 @@ const SchoolPaymentsPage = () => {
                                             setPayPenaltyAmount('');
                                             setPayPenaltyBoleta('');
                                             setPayPenaltyAccount('');
-                                            setPayPenaltyDate(moment().format('YYYY-MM-DD'));
+                                            setPayPenaltyDate(moment(currentDate).format('YYYY-MM-DD'));
                                             setDiscountPenaltyAmount('');
                                             setExonerateAmount('');
                                             setPaymentTab(0);
@@ -5760,11 +5720,11 @@ const SchoolPaymentsPage = () => {
                             <DialogContent>
                                 <Box sx={{ mb: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
                                     <Typography variant="body2" sx={{ mb: 1 }}>
-                                        <strong>Mora {hasFrozenPeriods ? 'Congelada' : 'Acumulada'}:</strong> Q {effectivePenaltyDue.toFixed(2)}
+                                        <strong>Mora {hasFrozenPeriods ? 'Congelada' : 'Acumulada'}:</strong> {formatQ(effectivePenaltyDue)}
                                     </Typography>
                                     {dialogCredito > 0 && (
                                         <Typography variant="body2" sx={{ color: 'success.main' }}>
-                                            <strong>Crédito disponible:</strong> Q {dialogCredito.toFixed(2)}
+                                            <strong>Crédito disponible:</strong> {formatQ(dialogCredito)}
                                         </Typography>
                                     )}
                                     {hasFrozenPeriods && (
@@ -5803,7 +5763,7 @@ const SchoolPaymentsPage = () => {
                                             }}
                                             fullWidth
                                         >
-                                            Usar crédito (Q {Math.min(dialogCredito, effectivePenaltyDue).toFixed(2)})
+                                            Usar crédito ({formatQ(Math.min(dialogCredito, effectivePenaltyDue))})
                                         </Button>
                                     </Box>
                                 )}
@@ -5822,13 +5782,13 @@ const SchoolPaymentsPage = () => {
                                                 value={payPenaltyAmount}
                                                 onChange={(e) => setPayPenaltyAmount(e.target.value)}
                                                 inputProps={{ min: 0.01, step: '0.01', max: payPenaltyUseCredit ? dialogCredito : effectivePenaltyDue }}
-                                                helperText={payPenaltyUseCredit ? `Máximo del crédito: Q ${dialogCredito.toFixed(2)}` : undefined}
+                                                helperText={payPenaltyUseCredit ? `Máximo del crédito: ${formatQ(dialogCredito)}` : undefined}
                                                 sx={{ mb: 2 }}
                                             />
                                             {payPenaltyUseCredit && cashRemainder > 0 && (
                                                 <Box sx={{ mb: 2, p: 1.5, bgcolor: '#fff3e0', borderRadius: 1, border: '1px solid #ffb74d' }}>
                                                     <Typography variant="body2" sx={{ color: 'warning.dark' }}>
-                                                        ⚠️ El crédito no cubre toda la mora. <strong>Restante a pagar con boleta: Q {cashRemainder.toFixed(2)}</strong>
+                                                        ⚠️ El crédito no cubre toda la mora. <strong>Restante a pagar con boleta: {formatQ(cashRemainder)}</strong>
                                                     </Typography>
                                                 </Box>
                                             )}
@@ -5841,7 +5801,7 @@ const SchoolPaymentsPage = () => {
                                                 <>
                                                     <TextField
                                                         fullWidth
-                                                        label={payPenaltyUseCredit ? `Fecha de pago del restante (Q ${cashRemainder.toFixed(2)})` : 'Fecha de Pago'}
+                                                        label={payPenaltyUseCredit ? `Fecha de pago del restante (${formatQ(cashRemainder)})` : 'Fecha de Pago'}
                                                         type="date"
                                                         value={payPenaltyDate}
                                                         onChange={(e) => setPayPenaltyDate(e.target.value)}
@@ -5873,7 +5833,7 @@ const SchoolPaymentsPage = () => {
                                     setPayPenaltyAmount('');
                                     setPayPenaltyBoleta('');
                                     setPayPenaltyAccount('');
-                                    setPayPenaltyDate(moment().format('YYYY-MM-DD'));
+                                    setPayPenaltyDate(moment(currentDate).format('YYYY-MM-DD'));
                                     setPayPenaltyUseCredit(false);
                                 }}>Cancelar</Button>
                                 <Button variant="contained" color={payPenaltyUseCredit ? 'success' : 'primary'} onClick={async () => {
@@ -5890,11 +5850,11 @@ const SchoolPaymentsPage = () => {
                                             return;
                                         }
                                         if (creditAmt > dialogCredito) {
-                                            notify.error(`El crédito a aplicar excede el disponible (Q${dialogCredito.toFixed(2)})`);
+                                            notify.error(`El crédito a aplicar excede el disponible (${formatQ(dialogCredito)})`);
                                             return;
                                         }
                                         if (creditAmt + cashAmt > currentPenalty + 0.005) {
-                                            notify.error(`El total excede la mora adeudada (Q${currentPenalty.toFixed(2)})`);
+                                            notify.error(`El total excede la mora adeudada (${formatQ(currentPenalty)})`);
                                             return;
                                         }
                                     } else {
@@ -5903,7 +5863,7 @@ const SchoolPaymentsPage = () => {
                                             return;
                                         }
                                         if (cashAmt > currentPenalty) {
-                                            notify.error(`El monto excede la mora adeudada (Q${currentPenalty.toFixed(2)})`);
+                                            notify.error(`El monto excede la mora adeudada (${formatQ(currentPenalty)})`);
                                             return;
                                         }
                                     }
@@ -5924,7 +5884,7 @@ const SchoolPaymentsPage = () => {
                                                     bankAccountNumber: payPenaltyAccount,
                                                     paidAt: payPenaltyDate
                                                 });
-                                                notify.success(`Crédito (Q${creditAmt.toFixed(2)}) y boleta (Q${cashAmt.toFixed(2)}) aplicados a mora`);
+                                                notify.success(`Crédito (${formatQ(creditAmt)}) y boleta (${formatQ(cashAmt)}) aplicados a mora`);
                                             } else {
                                                 notify.success('Crédito aplicado a mora');
                                             }
@@ -5942,7 +5902,7 @@ const SchoolPaymentsPage = () => {
                                         setPayPenaltyAmount('');
                                         setPayPenaltyBoleta('');
                                         setPayPenaltyAccount('');
-                                        setPayPenaltyDate(moment().format('YYYY-MM-DD'));
+                                        setPayPenaltyDate(moment(currentDate).format('YYYY-MM-DD'));
                                         setPayPenaltyUseCredit(false);
                                         // Refrescar datos
                                         await fetchAllPayments();
@@ -5967,7 +5927,7 @@ const SchoolPaymentsPage = () => {
                             <DialogContent>
                                 <Box sx={{ mb: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
                                     <Typography variant="body2" sx={{ mb: 1 }}>
-                                        <strong>Mora {hasFrozenPeriods ? 'Congelada' : 'Acumulada'}:</strong> Q {effectivePenaltyDue.toFixed(2)}
+                                        <strong>Mora {hasFrozenPeriods ? 'Congelada' : 'Acumulada'}:</strong> {formatQ(effectivePenaltyDue)}
                                     </Typography>
                                     {hasFrozenPeriods && (
                                         <Typography variant="caption" color="text.secondary">
@@ -6029,7 +5989,7 @@ const SchoolPaymentsPage = () => {
                                         ? registerPaymentTarget?.frozenPenalty 
                                         : registerPaymentTarget?.accumulatedPenalty || 0;
                                     if (amt > currentPenalty) {
-                                        notify.error(`El monto excede la mora (Q${currentPenalty.toFixed(2)})`);
+                                        notify.error(`El monto excede la mora (${formatQ(currentPenalty)})`);
                                         return;
                                     }
                                     try {

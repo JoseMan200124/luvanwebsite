@@ -67,26 +67,12 @@ import SortableTableHead from '../components/table/SortableTableHead';
 import AppTableContainer from '../components/table/AppTableContainer';
 import { MobileCard, MobileField } from '../components/table/MobileCard';
 import { sortRows } from '../utils/tableSort';
-
-moment.tz.setDefault('America/Guatemala');
+import { formatDateTime, formatDate } from '../utils/dateFormat';
+import { formatQ } from '../utils/currency';
 
 // -------------
 // Funciones de formateo
 // -------------
-const formatGuatemalaDatetime = (dateString) => {
-    if (!dateString) {
-        return '—';
-    }
-    return moment.utc(dateString).tz('America/Guatemala').format('DD/MM/YYYY HH:mm');
-};
-
-const formatGuatemalaDate = (dateString) => {
-    if (!dateString) {
-        return '—';
-    }
-    return moment.utc(dateString).tz('America/Guatemala').format('DD/MM/YYYY');
-};
-
 // -------------
 // Estilos con twin.macro
 // -------------
@@ -732,13 +718,13 @@ const ActivityLogPage = () => {
                                                     {bus.currentRoute && !bus.currentRoute.endTime && (
                                                         <div>
                                                             En Ruta (Inicio:{' '}
-                                                            {formatGuatemalaDatetime(bus.currentRoute.startTime)})
+                                                            {formatDateTime(bus.currentRoute.startTime, { utc: true })})
                                                         </div>
                                                     )}
                                                     {bus.currentRoute?.endTime && (
                                                         <div>
                                                             Finalizada a las{' '}
-                                                            {formatGuatemalaDatetime(bus.currentRoute.endTime)}
+                                                            {formatDateTime(bus.currentRoute.endTime, { utc: true })}
                                                         </div>
                                                     )}
                                                 </MobileField>
@@ -859,9 +845,7 @@ const ActivityLogPage = () => {
                                                     )}
                                                     {bus.currentRoute && !bus.currentRoute.endTime && (
                                                         <Chip
-                                                            label={`En Ruta (Inicio: ${formatGuatemalaDatetime(
-                                                                bus.currentRoute.startTime
-                                                            )})`}
+                                                            label={`En Ruta (Inicio: ${formatDateTime(bus.currentRoute.startTime, { utc: true })})`}
                                                             color="primary"
                                                             size="small"
                                                             sx={{ ml: 2 }}
@@ -869,9 +853,7 @@ const ActivityLogPage = () => {
                                                     )}
                                                     {bus.currentRoute?.endTime && (
                                                         <Chip
-                                                            label={`Finalizada a las ${formatGuatemalaDatetime(
-                                                                bus.currentRoute.endTime
-                                                            )}`}
+                                                            label={`Finalizada a las ${formatDateTime(bus.currentRoute.endTime, { utc: true })}`}
                                                             color="secondary"
                                                             size="small"
                                                             sx={{ ml: 2 }}
@@ -1038,7 +1020,7 @@ const ActivityLogPage = () => {
                                             <MobileCard key={incident.id}>
                                                 <MobileField label="Fecha">
                                                     <div>
-                                                        {formatGuatemalaDatetime(incident.fecha)}
+                                                        {formatDateTime(incident.fecha, { utc: true })}
                                                     </div>
                                                 </MobileField>
                                                 <MobileField label="Piloto">
@@ -1091,7 +1073,7 @@ const ActivityLogPage = () => {
                                                 {incPaginated.map((incident) => (
                                                     <TableRow key={incident.id} hover>
                                                         <TableCell>
-                                                            {formatGuatemalaDatetime(incident.fecha)}
+                                                            {formatDateTime(incident.fecha, { utc: true })}
                                                         </TableCell>
                                                         <TableCell>
                                                             {incident.piloto ? incident.piloto.name : '—'}
@@ -1170,7 +1152,7 @@ const ActivityLogPage = () => {
                                             <MobileCard key={eme.id}>
                                                 <MobileField label="Fecha">
                                                     <div>
-                                                        {formatGuatemalaDatetime(eme.fecha)}
+                                                        {formatDateTime(eme.fecha, { utc: true })}
                                                     </div>
                                                 </MobileField>
                                                 <MobileField label="Piloto">
@@ -1216,7 +1198,7 @@ const ActivityLogPage = () => {
                                                 {emePaginated.map((eme) => (
                                                     <TableRow key={eme.id} hover>
                                                         <TableCell>
-                                                            {formatGuatemalaDatetime(eme.fecha)}
+                                                            {formatDateTime(eme.fecha, { utc: true })}
                                                         </TableCell>
                                                         <TableCell>
                                                             {eme.piloto ? eme.piloto.name : '—'}
@@ -1318,10 +1300,10 @@ const ActivityLogPage = () => {
                                                 <div>{pay.finalStatus || pay.status}</div>
                                             </MobileField>
                                             <MobileField label="Próximo Pago">
-                                                <div>{formatGuatemalaDate(pay.nextPaymentDate)}</div>
+                                                <div>{formatDate(pay.nextPaymentDate, { utc: true })}</div>
                                             </MobileField>
                                             <MobileField label="Saldo">
-                                                <div>Q {pay.leftover ?? 0}</div>
+                                                <div>{formatQ(pay.leftover ?? 0)}</div>
                                             </MobileField>
                                             <MobileField label="Acciones">
                                                 {pay.User && (
@@ -1361,9 +1343,9 @@ const ActivityLogPage = () => {
                                                         {pay.finalStatus || pay.status}
                                                     </TableCell>
                                                     <TableCell>
-                                                        {formatGuatemalaDate(pay.nextPaymentDate)}
+                                                        {formatDate(pay.nextPaymentDate, { utc: true })}
                                                     </TableCell>
-                                                    <TableCell>Q {pay.leftover ?? 0}</TableCell>
+                                                    <TableCell>{formatQ(pay.leftover ?? 0)}</TableCell>
                                                     <TableCell>
                                                         {pay.User && (
                                                             <Tooltip title="Ver boletas de pago">
@@ -1513,7 +1495,7 @@ const ActivityLogPage = () => {
                                             )}
                                             <Typography variant="body2">
                                                 <strong>Fecha:</strong>{' '}
-                                                {formatGuatemalaDatetime(b.displayDate || b.uploadedAt)}
+                                                {formatDateTime(b.displayDate || b.uploadedAt, { utc: true })}
                                             </Typography>
                                             <img
                                                 src={b.fileUrl}

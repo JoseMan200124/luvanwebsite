@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, Button, CircularProgress, Typography } from '@mui/material';
 import { Download } from '@mui/icons-material';
-import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../../hooks/useRegisterPageRefresh';
 import FilterBar from '../filters/FilterBar';
 import useFilters from '../../hooks/useFilters';
@@ -13,11 +12,13 @@ import useNotify from '../../hooks/useNotify';
 import { getFuelFinancialStatistics, getFuelClients } from '../../services/fuelStatisticsService';
 import {
     ALL_OPTION, FUEL_TYPES, FUELING_REASONS, GRANULARITIES, DATE_PRESETS, computePresetRange, monthRangeToDates,
-    buildClientsParam, buildListParam, formatMoney, formatGallons, typesWithData
+    buildClientsParam, buildListParam, formatGallons, typesWithData
 } from './fuelStatsUtils';
 import FuelCharts from './FuelCharts';
 import FuelBreakdownTables from './FuelBreakdownTables';
 import { generateFuelStatsPdf } from './fuelStatsPdf';
+import { formatDate } from '../../utils/dateFormat';
+import { formatQ } from '../../utils/currency';
 
 const DEFAULT_PRESET = 'last6Months';
 
@@ -169,7 +170,7 @@ const FuelStatisticsTab = () => {
     }, [selectedClients, selectedFuelTypes, selectedReasons, clientName]);
 
     const rangeLabel = result
-        ? `${moment(result.from).format('DD/MM/YYYY')} — ${moment(result.to).format('DD/MM/YYYY')}`
+        ? `${formatDate(result.from)} — ${formatDate(result.to)}`
         : '';
 
     return (
@@ -199,7 +200,7 @@ const FuelStatisticsTab = () => {
 
                     {/* Tarjetas de resumen */}
                     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 2, mb: 2 }}>
-                        <KpiCard label="Gasto total" value={formatMoney(result.totals.amount)} color="#E65100" />
+                        <KpiCard label="Gasto total" value={formatQ(result.totals.amount, { nullText: 'N/A' })} color="#E65100" />
                         <KpiCard label="Galones" value={formatGallons(result.totals.gallons)} color="#1976D2" />
                         <KpiCard label="Registros" value={String(result.totals.records)} />
                     </Box>
@@ -212,7 +213,7 @@ const FuelStatisticsTab = () => {
                             <KpiCard
                                 key={t.key}
                                 label={`Precio/galón · ${t.label}`}
-                                value={formatMoney(result.totals.byType[t.key].price)}
+                                value={formatQ(result.totals.byType[t.key].price, { nullText: 'N/A' })}
                                 sub={`${formatGallons(result.totals.byType[t.key].gallons)}`}
                                 color={t.color}
                             />

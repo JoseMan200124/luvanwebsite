@@ -5,6 +5,8 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import RotateRightIcon from '@mui/icons-material/RotateRight';
 import moment from 'moment';
+import { formatDateTime, formatMonth } from '../utils/dateFormat';
+import { RECEIPT_STATUS } from '../constants/statuses';
 
 // ReceiptsPane: reusable Boletas UI used by Registrar Pago and ManagePaymentsModal
 // Props:
@@ -19,20 +21,14 @@ import moment from 'moment';
 
 const getReceiptDisplayDate = (receipt) => receipt?.displayDate || receipt?.date || receipt?.createdAt || receipt?.uploadedAt || '';
 
-const formatReceiptDate = (value) => value ? moment.parseZone(value).format('DD/MM/YYYY HH:mm') : '';
+const formatReceiptDate = (value) => value ? formatDateTime(value, { keepZone: true }) : '';
 
 const isAdminUploadedReceipt = (receipt) => {
     const source = String(receipt?.uploadSource || receipt?.uploadedByRole || receipt?.source || '').toUpperCase();
     return source === 'ADMIN' || source === 'ADMINISTRADOR' || receipt?.uploadedByAdmin === true;
 };
 
-const RECEIPT_STATUS_META = {
-    PENDIENTE: { label: 'Pendiente', color: '#2196f3' },
-    REGISTRADA: { label: 'Registrada', color: '#4caf50' },
-    RECHAZADA: { label: 'Rechazada', color: '#9e9e9e' },
-};
-
-const getReceiptStatusMeta = (receipt) => RECEIPT_STATUS_META[receipt?.status] || RECEIPT_STATUS_META.PENDIENTE;
+const getReceiptStatusMeta = (receipt) => RECEIPT_STATUS[receipt?.status] || RECEIPT_STATUS.PENDIENTE;
 
 const ReceiptsPane = ({
     uploadedReceipts = [],
@@ -234,7 +230,7 @@ const ReceiptsPane = ({
                         <Select label="Mes" value={boletaMonth} onChange={(e) => setBoletaMonth(e.target.value)}>
                             <MenuItem value="">(Todos)</MenuItem>
                             {boletaMonthOptions.map(m => (
-                                <MenuItem key={m} value={m}>{moment(m + '-01').format('MMMM YYYY')}</MenuItem>
+                                <MenuItem key={m} value={m}>{formatMonth(m + '-01')}</MenuItem>
                             ))}
                         </Select>
                     </FormControl>

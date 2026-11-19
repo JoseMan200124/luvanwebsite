@@ -51,6 +51,7 @@ import { F } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import useClientScope from '../hooks/useClientScope';
+import { formatDate } from '../utils/dateFormat';
 
 const PROTOCOL_TYPE_OPTIONS = [
     { value: 'protocolo', label: 'Protocolos' },
@@ -384,7 +385,7 @@ const SchoolProtocolsPage = () => {
                 </Typography>
             )}
 
-            <MobileField label="Creado">{new Date(protocol.createdAt).toLocaleDateString()}</MobileField>
+            <MobileField label="Creado">{formatDate(protocol.createdAt)}</MobileField>
         </MobileCard>
     );
 
@@ -414,7 +415,7 @@ const SchoolProtocolsPage = () => {
                             </Typography>
                         )}
                         <Typography variant="body2" color="text.secondary">
-                            Creado: {new Date(protocol.createdAt).toLocaleDateString()}
+                            Creado: {formatDate(protocol.createdAt)}
                         </Typography>
                     </Box>
                 }

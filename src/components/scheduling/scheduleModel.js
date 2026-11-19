@@ -7,6 +7,7 @@
 // Las horas son SIEMPRE de Guatemala, sin importar la zona del navegador: el
 // valor viaja como texto `YYYY-MM-DDTHH:mm` y el backend lo interpreta así.
 import moment from 'moment-timezone';
+import { formatDate } from '../../utils/dateFormat';
 
 export const SCHEDULE_TIMEZONE = 'America/Guatemala';
 const LOCAL_FORMAT = 'YYYY-MM-DDTHH:mm';
@@ -120,7 +121,7 @@ export function describeSchedule(schedule) {
     const recurrence = schedule.recurrence;
 
     if (!recurrence) {
-        return `Una sola vez, el ${start.format('DD/MM/YYYY')} a las ${time}`;
+        return `Una sola vez, el ${formatDate(start)} a las ${time}`;
     }
 
     let text;
@@ -136,7 +137,7 @@ export function describeSchedule(schedule) {
             text += ' (o el último día, si el mes es más corto)';
         }
     }
-    text += `, desde el ${start.format('DD/MM/YYYY')}`;
+    text += `, desde el ${formatDate(start)}`;
     text += recurrence.endDate
         ? ` hasta el ${moment(recurrence.endDate, 'YYYY-MM-DD').format('DD/MM/YYYY')}`
         : ', sin fecha de fin';

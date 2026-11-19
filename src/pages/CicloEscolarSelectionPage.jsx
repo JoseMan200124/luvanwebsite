@@ -77,6 +77,9 @@ import {
 } from '../utils/schoolContext';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
+import { formatClock, formatDateTime } from '../utils/dateFormat';
+import { formatQ } from '../utils/currency';
+import { SCHOOL_OPERATION_STATUS, SCHOOL_ENROLLMENT_STATUS, getStatusMeta } from '../constants/statuses';
 
 const SchoolCard = styled(Card)`
     ${tw`cursor-pointer transition-all duration-300`}
@@ -142,21 +145,6 @@ const StyledAccordionSummary = styled(AccordionSummary)`
         }
     }
 `;
-
-const operationStatusMeta = {
-    ACTIVE: { label: 'Operando', color: 'success' },
-    INACTIVE: { label: 'Sin operación', color: 'default' }
-};
-
-const enrollmentStatusMeta = {
-    OPEN: { label: 'Inscripciones abiertas', color: 'primary' },
-    CLOSED: { label: 'Inscripciones cerradas', color: 'default' }
-};
-
-const getStatusMeta = (map, value) => {
-    const normalized = String(value || '').trim().toUpperCase();
-    return map[normalized] || { label: normalized || 'Sin estado', color: 'default' };
-};
 
 // Opción seleccionable en formato tarjeta (título, etiqueta opcional y viñetas de detalle).
 const ChoiceCard = ({ selected, onSelect, title, tag, details = [] }) => (
@@ -1038,24 +1026,6 @@ const CicloEscolarSelectionPage = () => {
         return acc;
     }, {});
 
-    const formatTimeTo12h = (hhmm) => {
-        if (!hhmm || typeof hhmm !== 'string') {
-            return hhmm;
-        }
-        const m = hhmm.match(/^(\d{1,2}):(\d{2})$/);
-        if (!m) {
-            return hhmm;
-        }
-        const h24 = Number(m[1]);
-        const min = m[2];
-        if (Number.isNaN(h24) || h24 < 0 || h24 > 23) {
-            return hhmm;
-        }
-        const suffix = h24 >= 12 ? 'PM' : 'AM';
-        const h12 = ((h24 + 11) % 12) + 1;
-        return `${h12}:${min} ${suffix}`;
-    };
-
     const isAllDaysSelected = (days) => {
         if (!Array.isArray(days) || days.length === 0) {
             return true;
@@ -1243,7 +1213,7 @@ const CicloEscolarSelectionPage = () => {
                 if (occupancyByDayTime.has(k)) {
                     const existingCode = occupancyByDayTime.get(k);
                     const dayLabel = DAY_LABEL_BY_KEY[day] || day;
-                    const timeLabel = formatTimeTo12h(time);
+                    const timeLabel = formatClock(time);
                     notify.error(`Conflicto de hora base: los horarios "${existingCode}" y "${s.code}" comparten ${timeLabel} en ${dayLabel}.`);
                     return;
                 }
@@ -1459,8 +1429,8 @@ const CicloEscolarSelectionPage = () => {
     };
 
     const renderSchoolStatusChips = (school) => {
-        const operation = getStatusMeta(operationStatusMeta, school.operationStatus || 'ACTIVE');
-        const enrollment = getStatusMeta(enrollmentStatusMeta, school.enrollmentStatus || 'OPEN');
+        const operation = getStatusMeta(SCHOOL_OPERATION_STATUS, school.operationStatus || 'ACTIVE');
+        const enrollment = getStatusMeta(SCHOOL_ENROLLMENT_STATUS, school.enrollmentStatus || 'OPEN');
 
         return (
             <Box sx={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 0.75, mb: 2 }}>
@@ -2747,7 +2717,7 @@ const CicloEscolarSelectionPage = () => {
                                         {getCicloEscolarOptionLabel(school.cicloEscolar) || (school.cicloEscolarId ? `Ciclo ${school.cicloEscolarId}` : 'Sin ciclo escolar')}
                                     </Typography>
                                     <Typography variant="body2" color="text.secondary">
-                                        Período {school.period}: {school.periodCount || 0} cargos, Q{Number(school.totalNetAmount || 0).toFixed(2)}
+                                        Período {school.period}: {school.periodCount || 0} cargos, {formatQ(school.totalNetAmount || 0)}
                                     </Typography>
                                 </Alert>
                             ))}
@@ -2898,7 +2868,7 @@ const CicloEscolarSelectionPage = () => {
                                     selected={paymentsReactivationChoice.chargeEnrollment === true}
                                     onSelect={() => setPaymentsReactivationChoice((prev) => ({ ...prev, chargeEnrollment: true }))}
                                     title="Sí, cobrarla"
-                                    tag={`Q${Number(paymentsReactivationPrompt.enrollmentFeeAmount).toFixed(2)} por alumno`}
+                                    tag={`${formatQ(paymentsReactivationPrompt.enrollmentFeeAmount)} por alumno`}
                                     details={[
                                         'Se aplica el descuento por fecha de inscripción.',
                                         'Las familias recibirán una notificación del cargo.'
@@ -3041,7 +3011,7 @@ const CicloEscolarSelectionPage = () => {
                                             {submissions.map((sub) => (
                                                 <TableRow key={sub.id}>
                                                     <TableCell>
-                                                        {new Date(sub.createdAt).toLocaleString()}
+                                                        {formatDateTime(sub.createdAt)}
                                                     </TableCell>
                                                     <TableCell>
                                                         {sub.data.accountFullName || sub.data.fatherName || sub.data.motherName || '—'}

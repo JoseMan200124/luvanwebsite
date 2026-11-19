@@ -47,6 +47,8 @@ import {
     Add as AddIcon
 } from '@mui/icons-material';
 import moment from 'moment-timezone';
+import { formatDateTime } from '../utils/dateFormat';
+import { formatQ } from '../utils/currency';
 import {
     getFuelRecords,
     getFuelStatistics,
@@ -75,8 +77,6 @@ const failedResponse = (response, fallback) => {
     error.response = { data: { message: response?.message || fallback } };
     return error;
 };
-
-moment.tz.setDefault('America/Guatemala');
 
 // Id del colegio o corporación al que pertenece un bus, según el tipo de cliente.
 const getBusClientId = (bus, type) => {
@@ -849,13 +849,6 @@ const FuelRecordsPage = () => {
         return colors[reason] || 'default';
     };
 
-    const formatCurrency = (amount) => {
-        return new Intl.NumberFormat('es-GT', {
-            style: 'currency',
-            currency: 'GTQ',
-        }).format(amount || 0);
-    };
-
     const editPlateOptions = [...new Set(editBuses.map((bus) => bus.plate).filter(Boolean))]
         .sort((firstPlate, secondPlate) => String(firstPlate).localeCompare(String(secondPlate)));
 
@@ -1020,7 +1013,7 @@ const FuelRecordsPage = () => {
                                     Total Gastado
                                 </Typography>
                                 <Typography variant="h4">
-                                    {formatCurrency(statistics.totalAmount)}
+                                    {formatQ(statistics.totalAmount || 0)}
                                 </Typography>
                             </CardContent>
                         </Card>
@@ -1032,7 +1025,7 @@ const FuelRecordsPage = () => {
                                     Precio Promedio/Galón
                                 </Typography>
                                 <Typography variant="h4">
-                                    {formatCurrency(statistics.averagePrice)}
+                                    {formatQ(statistics.averagePrice || 0)}
                                 </Typography>
                             </CardContent>
                         </Card>
@@ -1087,7 +1080,7 @@ const FuelRecordsPage = () => {
                                         {fuelRecords.map((record) => (
                                             <TableRow key={record.id}>
                                                 <TableCell>
-                                                    {moment(record.recordDate).format('DD/MM/YYYY HH:mm')}
+                                                    {formatDateTime(record.recordDate)}
                                                 </TableCell>
                                                 <TableCell>
                                                     {record.school?.name || record.corporation?.name || 'N/A'}
@@ -1133,11 +1126,11 @@ const FuelRecordsPage = () => {
                                                     {Number.parseFloat(record.gallonage).toFixed(2)}
                                                 </TableCell>
                                                 <TableCell align="right">
-                                                    {formatCurrency(record.pricePerGallon)}
+                                                    {formatQ(record.pricePerGallon || 0)}
                                                 </TableCell>
                                                 <TableCell align="right">
                                                     <Typography variant="body2" fontWeight="bold">
-                                                        {formatCurrency(record.totalAmount)}
+                                                        {formatQ(record.totalAmount || 0)}
                                                     </Typography>
                                                 </TableCell>
                                                 <TableCell align="center">
@@ -1334,7 +1327,7 @@ const FuelRecordsPage = () => {
                                         Fecha y Hora
                                     </Typography>
                                     <Typography variant="body1" gutterBottom>
-                                        {moment(selectedRecord.recordDate).format('DD/MM/YYYY HH:mm')}
+                                        {formatDateTime(selectedRecord.recordDate)}
                                     </Typography>
                                 </Grid>
                                 <Grid item xs={12} sm={6}>
@@ -1400,7 +1393,7 @@ const FuelRecordsPage = () => {
                                         Precio por Galón
                                     </Typography>
                                     <Typography variant="h6" gutterBottom>
-                                        {formatCurrency(selectedRecord.pricePerGallon)}
+                                        {formatQ(selectedRecord.pricePerGallon || 0)}
                                     </Typography>
                                 </Grid>
                                 <Grid item xs={12} sm={4}>
@@ -1408,7 +1401,7 @@ const FuelRecordsPage = () => {
                                         Total Pagado
                                     </Typography>
                                     <Typography variant="h6" color="primary" gutterBottom>
-                                        {formatCurrency(selectedRecord.totalAmount)}
+                                        {formatQ(selectedRecord.totalAmount || 0)}
                                     </Typography>
                                 </Grid>
                                 {selectedRecord.notes && (

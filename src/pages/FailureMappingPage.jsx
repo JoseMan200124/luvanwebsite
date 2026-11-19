@@ -63,8 +63,8 @@ import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
 import FailureMappingFormDialog from '../components/FailureMappingFormDialog';
 import { AuthContext } from '../context/AuthProvider';
-
-moment.tz.setDefault('America/Guatemala');
+import { formatDate, formatDateTime } from '../utils/dateFormat';
+import { useCurrentDate } from '../hooks/useCurrentDate';
 
 const NO_FAILURES_FILTER_VALUE = 'sin_fallas';
 
@@ -89,6 +89,7 @@ const COLUMNS = [
 ];
 
 const FailureMappingPage = () => {
+    const { currentDate } = useCurrentDate();
     const notify = useNotify();
     const confirm = useConfirm();
     const removeDiacritics = (s = '') => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -99,9 +100,6 @@ const FailureMappingPage = () => {
     const isGestor = Number(auth?.user?.roleId || 0) === 1;
     const [formOpen, setFormOpen] = useState(false);
     const [formRecord, setFormRecord] = useState(null);
-    // Un registro pertenece a un día: la fecha se muestra sin hora (la hora de captura es createdAt).
-    const formatFechaRegistro = (r) => moment(r?.fecha, 'YYYY-MM-DD').format('DD/MM/YYYY');
-
     const [incidents, setIncidents] = useState([]);
     const [loading, setLoading] = useState(false);
     // Paginación y orden (en el servidor)
@@ -170,7 +168,7 @@ const FailureMappingPage = () => {
     const [pdfModalClient, setPdfModalClient] = useState(null);
     const pdfModalSchoolId = getClientSchoolId(pdfModalClient);
     const pdfModalCorporationId = getClientCorporationId(pdfModalClient);
-    const [pdfModalMonth, setPdfModalMonth] = useState(moment().startOf('month'));
+    const [pdfModalMonth, setPdfModalMonth] = useState(moment(currentDate).startOf('month'));
     const [pdfModalSchools, setPdfModalSchools] = useState([]);
 
     // Indicadores extra (estructurados por secciones) para Resumen Ejecutivo del PDF
@@ -346,7 +344,7 @@ const FailureMappingPage = () => {
 
     const handleOpenPdfModal = () => {
         setPdfModalClient(null);
-        setPdfModalMonth(moment().startOf('month'));
+        setPdfModalMonth(moment(currentDate).startOf('month'));
         setPdfModalSchools([]);
         // Initialize default sections (Operación e Incidentes) and default Operación indicators
         setPdfExtraSections([
@@ -677,7 +675,7 @@ const FailureMappingPage = () => {
                                         {incidents.map((incident) => (
                                             <TableRow key={incident.id}>
                                                 <TableCell>
-                                                    {formatFechaRegistro(incident)}
+                                                    {formatDate(incident?.fecha)}
                                                     {incident.esRetroactivo && (
                                                         <Chip label="Retroactivo" size="small" color="info" variant="outlined" sx={{ ml: 1 }} />
                                                     )}
@@ -799,13 +797,13 @@ const FailureMappingPage = () => {
                                     </Box>
                                     <>
                                         <Typography variant="body1" gutterBottom>
-                                            {formatFechaRegistro(selectedIncident)}
+                                            {formatDate(selectedIncident?.fecha)}
                                             {selectedIncident.esRetroactivo && (
                                                 <Chip label="Retroactivo" size="small" color="info" variant="outlined" sx={{ ml: 1 }} />
                                             )}
                                         </Typography>
                                         <Typography variant="caption" display="block" color="textSecondary">
-                                            {`Registrado el ${moment(selectedIncident.createdAt).tz('America/Guatemala').format('DD/MM/YYYY hh:mm A')}`}
+                                            {`Registrado el ${formatDateTime(selectedIncident.createdAt)}`}
                                         </Typography>
                                     </>
                                 </Grid>

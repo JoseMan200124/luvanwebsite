@@ -33,13 +33,11 @@ import AppTableContainer from '../components/table/AppTableContainer';
 import { MobileCard, MobileField } from '../components/table/MobileCard';
 import { sortRows } from '../utils/tableSort';
 import { Visibility as VisibilityIcon } from '@mui/icons-material';
-import moment from 'moment-timezone';
 
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
-
-moment.tz.setDefault('America/Guatemala');
+import { formatDateTime } from '../utils/dateFormat';
 
 // Contenedor principal
 // Helper para agrupar por colegio (school)
@@ -282,9 +280,7 @@ const MonitorsManagementPage = () => {
                         </Typography>
                     ) : (
                         incidentsList.map((inc, index) => {
-                            const formattedDate = moment(inc.date)
-                                .tz('America/Guatemala')
-                                .format('DD/MM/YYYY HH:mm:ss');
+                            const formattedDate = formatDateTime(inc.date);
                             return (
                                 <div key={index} style={{ marginBottom: '8px' }}>
                                     <Typography variant="body2" color="textSecondary">
@@ -315,9 +311,7 @@ const MonitorsManagementPage = () => {
                         </Typography>
                     ) : (
                         emergenciesList.map((eme, index) => {
-                            const formattedDate = moment(eme.date)
-                                .tz('America/Guatemala')
-                                .format('DD/MM/YYYY HH:mm:ss');
+                            const formattedDate = formatDateTime(eme.date);
                             return (
                                 <div key={index} style={{ marginBottom: '8px' }}>
                                     <Typography variant="body2" color="textSecondary">

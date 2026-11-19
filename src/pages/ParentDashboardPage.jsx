@@ -60,6 +60,8 @@ import parse from 'html-react-parser';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import useNotify from '../hooks/useNotify';
+import { formatClock, formatDate } from '../utils/dateFormat';
+import { formatQ } from '../utils/currency';
 
 // ---------- Estilos ----------
 const SectionCard = styled(Card)`width:100%;border-radius:10px;`;
@@ -109,28 +111,6 @@ const formatSchoolTime = (value) => {
 };
 
 // Formatea HH:mm -> h:mm AM/PM (si ya viene con AM/PM, lo deja)
-const formatTime12 = (timeStr) => {
-  if (!timeStr) {
-      return '';
-  }
-  const s = String(timeStr).trim();
-  if (/\b(am|pm)\b/i.test(s)) {
-      return s;
-  }
-  const m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-  if (!m) {
-      return s;
-  }
-  let h = Number.parseInt(m[1], 10);
-  const min = m[2];
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  h = h % 12;
-  if (h === 0) {
-      h = 12;
-  }
-  return `${h}:${min} ${ampm}`;
-};
-
 // Normaliza lo que devuelve /parents/:id/route-info (si existe)
 const normalizeParentInfo = (raw) => {
   const data = raw && typeof raw === 'object' ? raw : {};
@@ -1149,7 +1129,7 @@ const ParentDashboardPage = () => {
                   <SectionCard elevation={3}>
                     <CardContent>
                       <Alert severity="info" onClick={() => navigate('/parent/payment')} sx={{ cursor: 'pointer' }}>
-                        Tienes un saldo de inscripción pendiente de Q{Number(pendingEnrollmentFee.amountDue || 0).toFixed(2)}.
+                        Tienes un saldo de inscripción pendiente de {formatQ(pendingEnrollmentFee.amountDue || 0)}.
                         Súbelo con tu boleta de pago habitual. Ver detalle en Información de Pagos.
                       </Alert>
                     </CardContent>
@@ -1357,7 +1337,7 @@ const ParentDashboardPage = () => {
                                               <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.2, fontSize: { xs: '0.95rem', md: '1rem' }, whiteSpace: { xs: 'normal', sm: 'nowrap' }, display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, gap: 0.5, flexWrap: 'wrap' }}>
                                                 <AccessTimeIcon fontSize="small" sx={{ color: 'text.secondary' }} />
                                                 <strong>Hora en parada:</strong>&nbsp;
-                                                <MuiBox component="span" sx={{ color: 'primary.main', fontWeight: 800, display: 'inline-block', whiteSpace: 'nowrap' }}>{formatTime12(slot.time) || safeStr(slot.time)}</MuiBox>
+                                                <MuiBox component="span" sx={{ color: 'primary.main', fontWeight: 800, display: 'inline-block', whiteSpace: 'nowrap' }}>{formatClock(slot.time) || safeStr(slot.time)}</MuiBox>
                                               </Typography>
                                             </MuiBox>
 
@@ -1432,7 +1412,7 @@ const ParentDashboardPage = () => {
                                                   <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.2, fontSize: { xs: '0.95rem', md: '1rem' }, whiteSpace: { xs: 'normal', sm: 'nowrap' }, display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, gap: 0.5, flexWrap: 'wrap' }}>
                                                     <AccessTimeIcon fontSize="small" sx={{ color: 'text.secondary' }} />
                                                     <strong>Hora en parada:</strong>&nbsp;
-                                                    <MuiBox component="span" sx={{ color: 'primary.main', fontWeight: 800, display: 'inline-block', whiteSpace: 'nowrap' }}>{formatTime12(slot.time) || safeStr(slot.time)}</MuiBox>
+                                                    <MuiBox component="span" sx={{ color: 'primary.main', fontWeight: 800, display: 'inline-block', whiteSpace: 'nowrap' }}>{formatClock(slot.time) || safeStr(slot.time)}</MuiBox>
                                                   </Typography>
                                               </MuiBox>
 
@@ -1586,7 +1566,7 @@ const ParentDashboardPage = () => {
                                   </div>
                                   <div style={{ flex: 1 }}>
                                     <div style={{ fontWeight: 700 }}>{c.title || 'Sin título'}</div>
-                                    <div style={{ fontSize: 12, color: 'rgba(0,0,0,0.6)' }}>{c.createdAt ? `Creado el ${new Date(c.createdAt).toLocaleDateString()}` : ''}</div>
+                                    <div style={{ fontSize: 12, color: 'rgba(0,0,0,0.6)' }}>{c.createdAt ? `Creado el ${formatDate(c.createdAt)}` : ''}</div>
                                   </div>
                                   <div>
                                     <Button size="small" variant="contained" onClick={() => handleOpenContractShare(c)} disabled={!schoolOperational} sx={{ backgroundColor: '#0288d1' }}>Firmar</Button>
@@ -1619,7 +1599,7 @@ const ParentDashboardPage = () => {
                                   </div>
                                   <div style={{ flex: 1 }}>
                                     <div style={{ fontWeight: 700 }}>{f.title || f.contract?.title || 'Contrato firmado'}</div>
-                                    <div style={{ fontSize: 12, color: 'rgba(0,0,0,0.6)' }}>{f.createdAt ? `Firmado el ${new Date(f.createdAt).toLocaleDateString()}` : ''}</div>
+                                    <div style={{ fontSize: 12, color: 'rgba(0,0,0,0.6)' }}>{f.createdAt ? `Firmado el ${formatDate(f.createdAt)}` : ''}</div>
                                   </div>
                                   <div>
                                     <Button size="small" variant="outlined" onClick={() => handleOpenFilledView(f)} sx={{ borderColor: '#2e7d32', color: '#2e7d32' }}>Ver</Button>

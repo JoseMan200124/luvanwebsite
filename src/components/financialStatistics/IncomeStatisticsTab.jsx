@@ -36,9 +36,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import moment from 'moment-timezone';
 import 'moment/locale/es';
-
-moment.tz.setDefault('America/Guatemala');
-moment.locale('es');
+import { formatMonth, formatDateTime } from '../../utils/dateFormat';
+import { formatQ } from '../../utils/currency';
 
 const ROWS_PER_PAGE_OPTIONS = [5, 8, 10, 15, 25, 50];
 const DEFAULT_ROWS_PER_PAGE = 8;
@@ -47,9 +46,6 @@ const DEFAULT_ROWS_PER_PAGE = 8;
 // Presentación: el backend calcula TODAS las métricas; el frontend sólo formatea.
 // `null`/`undefined` => "N/A" (p. ej. divisiones por cero resueltas en el backend).
 // ----------------------------------------------------------------------------
-const formatMoneyOrNA = (value) => (value === null || value === undefined)
-    ? 'N/A'
-    : `Q ${Number(value).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const formatPercentOrNA = (value) => (value === null || value === undefined)
     ? 'N/A'
     : `${Number(value).toFixed(1)}%`;
@@ -142,7 +138,7 @@ const formatMetric = (metrics, col, basis) => {
     if (col.type === 'int') {
         return (raw === null || raw === undefined) ? 'N/A' : String(raw);
     }
-    return formatMoneyOrNA(raw);
+    return formatQ(raw, { nullText: 'N/A' });
 };
 
 // Tooltip text helper por métrica — devuelve JSX con descripción principal + secundaria
@@ -398,8 +394,8 @@ const IncomeStatisticsTab = () => {
 
     let rangeLabel = '';
     if (result) {
-        const fromLabel = moment(`${result.from}-01`).format('MMMM YYYY');
-        const toLabel = moment(`${result.to}-01`).format('MMMM YYYY');
+        const fromLabel = formatMonth(`${result.from}-01`);
+        const toLabel = formatMonth(`${result.to}-01`);
         rangeLabel = `${fromLabel} — ${toLabel}`;
     }
 
@@ -437,7 +433,7 @@ const IncomeStatisticsTab = () => {
         pdf.text(`${rangeLabel}  ·  Base ${basisLabel}  ·  ${scope}  ·  ${totalRows} colegio${totalRows === 1 ? '' : 's'}`, marginX, 22);
 
         pdf.setFontSize(9);
-        pdf.text(`Generado el ${now.format('DD/MM/YYYY HH:mm')} (hora Guatemala)`, pageWidth - marginX, 16, { align: 'right' });
+        pdf.text(`Generado el ${formatDateTime(now)} (hora Guatemala)`, pageWidth - marginX, 16, { align: 'right' });
 
         pdf.setDrawColor(230);
         pdf.line(marginX, 26, pageWidth - marginX, 26);
@@ -659,7 +655,7 @@ const IncomeStatisticsTab = () => {
         const maxVal = Math.max(1, ...sorted.map((s) => basisValue(s.metrics?.ingresoTotal, metricsBasis) || 0));
         return sorted.map((s) => {
             const val = basisValue(s.metrics?.ingresoTotal, metricsBasis) || 0;
-            return { name: s.schoolName, pct: Math.round((val / maxVal) * 100), valueText: formatMoneyOrNA(val) };
+            return { name: s.schoolName, pct: Math.round((val / maxVal) * 100), valueText: formatQ(val, { nullText: 'N/A' }) };
         });
     }, [result, metricsBasis]);
 
@@ -916,7 +912,7 @@ const IncomeStatisticsTab = () => {
                                                                         <TableBody>
                                                                             {periods.map((p) => (
                                                                                 <TableRow key={p.period}>
-                                                                                    <TableCell sx={{ textTransform: 'capitalize' }}>{moment(`${p.period}-01`).format('MMMM YYYY')}</TableCell>
+                                                                                    <TableCell sx={{ textTransform: 'capitalize' }}>{formatMonth(`${p.period}-01`)}</TableCell>
                                                                                     {visibleColumns.map((col) => {
                                                                                         const text = formatMetric(p.metrics, col, metricsBasis);
                                                                                         let trendColor;

@@ -17,21 +17,7 @@ import {
 import { useTheme } from '@mui/material/styles';
 import { Save } from '@mui/icons-material';
 import { getScheduleColor, getScheduleLabel } from '../utils/scheduleConfig';
-
-// Formatea "HH:mm" (24h) a "h:mm AM/PM" para mostrar la hora de clase del colegio de forma legible.
-function formatTime12h(hhmm) {
-    if (!hhmm) {
-        return '';
-    }
-    const [hoursStr, minutesStr] = String(hhmm).split(':');
-    const hours = Number.parseInt(hoursStr, 10);
-    if (Number.isNaN(hours)) {
-        return hhmm;
-    }
-    const period = hours >= 12 ? 'PM' : 'AM';
-    const hours12 = hours % 12 === 0 ? 12 : hours % 12;
-    return `${hours12}:${minutesStr} ${period}`;
-}
+import { formatClock } from '../utils/dateFormat';
 
 // Extraído para que cambiar de pestaña solo re-renderice este diálogo, no la tabla de rutas completa.
 // roleTabsEnabled=false oculta el selector Auxiliar/Supervisor y fija el contenido en Supervisor —
@@ -151,7 +137,7 @@ export default function ScheduleThresholdsDialog({
                                 <Typography variant="subtitle1">{scheduleNames[code] || getScheduleLabel(code)}</Typography>
                                 {scheduleTimes[code] && (
                                     <Chip
-                                        label={`Hora colegio: ${formatTime12h(scheduleTimes[code])}`}
+                                        label={`Hora colegio: ${formatClock(scheduleTimes[code])}`}
                                         size="small"
                                         variant="outlined"
                                     />

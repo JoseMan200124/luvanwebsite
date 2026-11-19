@@ -68,6 +68,8 @@ import PageHeader from '../components/layout/PageHeader';
 import useClientScope from '../hooks/useClientScope';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
+import { formatClock, formatDateTime } from '../utils/dateFormat';
+import { SERVICE_STATUS } from '../constants/statuses';
 
 const COLABORADOR_STATUS_OPTIONS = ['Nuevo', 'Duplicado', 'Actualizado', 'Sin asignaciones', 'Activo', 'Inactivo']
     .map((status) => ({ value: status, label: status }));
@@ -106,31 +108,8 @@ const StyledAccordion = styled(Accordion)`
     }
 `;
 
-// Función para convertir tiempo de 24h a 12h con AM/PM
-const formatTime12Hour = (time24) => {
-    if (!time24) {
-        return '';
-    }
-    const [hours, minutes] = time24.split(':');
-    const hour = Number.parseInt(hours, 10);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const hour12 = hour % 12 || 12;
-    return `${hour12}:${minutes} ${ampm}`;
-};
-
 // Traduce el estado de servicio canónico a su etiqueta en español usada en el sistema
-const translateServiceStatus = (status) => {
-    if (!status) {
-        return '';
-    }
-    switch ((status || '').toString()) {
-        case 'ACTIVE': return 'Activo';
-        case 'PAUSED': return 'Pausado';
-        case 'SUSPENDED': return 'Suspendido';
-        case 'INACTIVE': return 'Inactivo';
-        default: return '';
-    }
-};
+const translateServiceStatus = (status) => (status === 'PENDING_START' ? '' : SERVICE_STATUS[status]?.label || '');
 
 // Columnas de la tabla
 const COLUMNS = [
@@ -281,7 +260,7 @@ const ColaboradoresPage = () => {
                 let scheduleName = 'Sin horario';
                 if (scheduleIndex >= 0 && corporationData?.schedules?.[scheduleIndex]) {
                     const sched = corporationData.schedules[scheduleIndex];
-                    scheduleName = `${sched.name} (${formatTime12Hour(sched.entryTime)} - ${formatTime12Hour(sched.exitTime)})`;
+                    scheduleName = `${sched.name} (${formatClock(sched.entryTime)} - ${formatClock(sched.exitTime)})`;
                 }
 
                 worksheet.addRow({
@@ -294,8 +273,8 @@ const ColaboradoresPage = () => {
                     schedule: scheduleName,
                     status: col.status || '',
                     serviceStatus: translateServiceStatus(col.serviceStatus || col.ColaboradorDetail?.serviceStatus || ''),
-                    createdAt: col.createdAt ? moment(col.createdAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : '',
-                    updatedAt: col.updatedAt ? moment(col.updatedAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : ''
+                    createdAt: col.createdAt ? formatDateTime(col.createdAt) : '',
+                    updatedAt: col.updatedAt ? formatDateTime(col.updatedAt) : ''
                 });
             });
 
@@ -884,7 +863,7 @@ const ColaboradoresPage = () => {
                 
                 if (scheduleIndex >= 0 && corporationData?.schedules?.[scheduleIndex]) {
                     const sched = corporationData.schedules[scheduleIndex];
-                    scheduleName = `${sched.name} (${formatTime12Hour(sched.entryTime)} - ${formatTime12Hour(sched.exitTime)})`;
+                    scheduleName = `${sched.name} (${formatClock(sched.entryTime)} - ${formatClock(sched.exitTime)})`;
                 }
                 
                 worksheet.addRow({
@@ -897,7 +876,7 @@ const ColaboradoresPage = () => {
                     schedule: scheduleName,
                     status: Number(col.state) === 1 ? 'Activo' : 'Inactivo',
                     serviceStatus: translateServiceStatus(col.serviceStatus || col.ColaboradorDetail?.serviceStatus || ''),
-                    createdAt: col.createdAt ? moment(col.createdAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : ''
+                    createdAt: col.createdAt ? formatDateTime(col.createdAt) : ''
                 });
             });
             
@@ -975,7 +954,7 @@ const ColaboradoresPage = () => {
 
                 if (scheduleIndex >= 0 && corporationData?.schedules?.[scheduleIndex]) {
                     const sched = corporationData.schedules[scheduleIndex];
-                    scheduleName = `${sched.name} (${formatTime12Hour(sched.entryTime)} - ${formatTime12Hour(sched.exitTime)})`;
+                    scheduleName = `${sched.name} (${formatClock(sched.entryTime)} - ${formatClock(sched.exitTime)})`;
                 }
 
                 worksheet.addRow({
@@ -992,8 +971,8 @@ const ColaboradoresPage = () => {
                     stops: col.ScheduleSlots?.length || 0,
                     status: col.status || 'Activo',
                     serviceStatus: translateServiceStatus(col.serviceStatus || col.ColaboradorDetail?.serviceStatus || ''),
-                    createdAt: col.createdAt ? moment(col.createdAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : '',
-                    updatedAt: col.updatedAt ? moment(col.updatedAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : ''
+                    createdAt: col.createdAt ? formatDateTime(col.createdAt) : '',
+                    updatedAt: col.updatedAt ? formatDateTime(col.updatedAt) : ''
                 });
             });
 
@@ -1119,8 +1098,8 @@ const ColaboradoresPage = () => {
             schedules.forEach((s) => {
                 const entryRaw = s.entryTime || s.entry || s.startTime || s.entry_time || '';
                 const exitRaw = s.exitTime || s.exit || s.endTime || s.exit_time || '';
-                const entryFmt = entryRaw ? formatTime12Hour(entryRaw) : '';
-                const exitFmt = exitRaw ? formatTime12Hour(exitRaw) : '';
+                const entryFmt = entryRaw ? formatClock(entryRaw) : '';
+                const exitFmt = exitRaw ? formatClock(exitRaw) : '';
                 sheet.addRow({
                     name: s.name || '',
                     entryTime: entryFmt,
@@ -1313,7 +1292,7 @@ const ColaboradoresPage = () => {
                     let scheduleName = 'Sin horario';
                     if (scheduleIndex >= 0 && corporationData?.schedules?.[scheduleIndex]) {
                         const sched = corporationData.schedules[scheduleIndex];
-                        scheduleName = `${sched.name} (${formatTime12Hour(sched.entryTime)} - ${formatTime12Hour(sched.exitTime)})`;
+                        scheduleName = `${sched.name} (${formatClock(sched.entryTime)} - ${formatClock(sched.exitTime)})`;
                     }
 
                     // Filtrar slots por día
@@ -1359,10 +1338,10 @@ const ColaboradoresPage = () => {
                         detail.serviceAddress || '',
                         detail.zoneOrSector || '',
                         scheduleName,
-                        entradaSlot ? formatTime12Hour(entradaSlot.time || '') : '',
+                        entradaSlot ? formatClock(entradaSlot.time || '') : '',
                         entradaSlot ? parseRouteNumber(entradaSlot.routeNumber) : null,
                         entradaSlot ? (entradaSlot.note || '') : '',
-                        salidaSlot ? formatTime12Hour(salidaSlot.time || '') : '',
+                        salidaSlot ? formatClock(salidaSlot.time || '') : '',
                         salidaSlot ? parseRouteNumber(salidaSlot.routeNumber) : null,
                         salidaSlot ? (salidaSlot.note || '') : '',
                         detail.emergencyContact || '',
@@ -1591,7 +1570,7 @@ const ColaboradoresPage = () => {
                                             {Array.isArray(corporationData?.schedules) && corporationData.schedules.length > 0 ? (
                                                 corporationData.schedules.map((schedule, idx) => (
                                                     <MenuItem key={idx} value={idx}>
-                                                        {schedule.name} ({formatTime12Hour(schedule.entryTime)} - {formatTime12Hour(schedule.exitTime)})
+                                                        {schedule.name} ({formatClock(schedule.entryTime)} - {formatClock(schedule.exitTime)})
                                                     </MenuItem>
                                                 ))
                                             ) : (
@@ -1892,7 +1871,7 @@ const ColaboradoresPage = () => {
                                                             const schedule = corporationData.schedules[scheduleIndex];
                                                             return (
                                                                 <Chip 
-                                                                    label={`${schedule.name} (${formatTime12Hour(schedule.entryTime)} - ${formatTime12Hour(schedule.exitTime)})`}
+                                                                    label={`${schedule.name} (${formatClock(schedule.entryTime)} - ${formatClock(schedule.exitTime)})`}
                                                                     size="small"
                                                                     color="info"
                                                                     variant="outlined"

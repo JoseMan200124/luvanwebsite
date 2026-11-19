@@ -58,8 +58,7 @@ import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
-
-moment.tz.setDefault('America/Guatemala');
+import { formatDateTime } from '../utils/dateFormat';
 
 const NO_FAILURES_FILTER_VALUE = 'sin_fallas';
 
@@ -573,7 +572,7 @@ const BusIncidentsPage = () => {
                                         {incidents.map((incident) => (
                                             <TableRow key={incident.id}>
                                                 <TableCell>
-                                                    {moment(incident.fecha).format('DD/MM/YYYY hh:mm A')}
+                                                    {formatDateTime(incident.fecha)}
                                                 </TableCell>
                                                 <TableCell>
                                                     <Chip 
@@ -718,7 +717,7 @@ const BusIncidentsPage = () => {
                                         </Box>
                                     ) : (
                                         <Typography variant="body1" gutterBottom>
-                                            {moment(selectedIncident.fecha).format('DD/MM/YYYY hh:mm A')}
+                                            {formatDateTime(selectedIncident.fecha)}
                                         </Typography>
                                     )}
                                 </Grid>

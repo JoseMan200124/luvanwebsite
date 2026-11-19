@@ -37,8 +37,7 @@ import AppTablePagination from '../components/table/AppTablePagination';
 import SortableTableHead from '../components/table/SortableTableHead';
 import AppTableContainer from '../components/table/AppTableContainer';
 import RowActions from '../components/table/RowActions';
-
-moment.tz.setDefault('America/Guatemala');
+import { formatTime, formatDate } from '../utils/dateFormat';
 
 // Columnas de la tabla
 const COLUMNS = [
@@ -327,14 +326,6 @@ const RouteTimeLogsPage = () => {
         return labels[day] || day;
     };
 
-    const formatTime = (dateTime) => {
-        return dateTime ? moment(dateTime).format('hh:mm A') : 'N/A';
-    };
-
-    const formatDateOnly = (dateTime) => {
-        return dateTime ? moment(dateTime).format('DD/MM/YYYY') : '';
-    };
-
     const formatDuration = (minutes) => {
         if (!minutes) {
             return 'N/A';
@@ -418,18 +409,18 @@ const RouteTimeLogsPage = () => {
                 const routeValue = (rawRoute !== '' && /^\d+$/.test(String(rawRoute).trim())) ? Number(String(rawRoute).trim()) : (rawRoute || '');
 
                 const rowValues = [
-                    log.fecha ? moment(log.fecha).format('DD/MM/YYYY') : '',
+                    log.fecha ? formatDate(log.fecha) : '',
                     getDayLabel(log.day),
                     getScheduleLabel(log.schedule),
                     log.school?.name || '',
                     log.monitora?.name || '',
                     log.bus?.plate || '',
                     routeValue,
-                    log.schoolDepartureTime ? moment(log.schoolDepartureTime).format('hh:mm A') : '',
-                    log.boardingTime ? moment(log.boardingTime).format('hh:mm A') : '',
-                    log.firstStopTime ? moment(log.firstStopTime).format('hh:mm A') : '',
-                    log.lastStopTime ? moment(log.lastStopTime).format('hh:mm A') : '',
-                    log.schoolArrivalTime ? moment(log.schoolArrivalTime).format('hh:mm A') : '',
+                    log.schoolDepartureTime ? formatTime(log.schoolDepartureTime) : '',
+                    log.boardingTime ? formatTime(log.boardingTime) : '',
+                    log.firstStopTime ? formatTime(log.firstStopTime) : '',
+                    log.lastStopTime ? formatTime(log.lastStopTime) : '',
+                    log.schoolArrivalTime ? formatTime(log.schoolArrivalTime) : '',
                     typeof log.tripDuration === 'number' ? formatDuration(log.tripDuration) : ''
                 ];
 
@@ -549,7 +540,7 @@ const RouteTimeLogsPage = () => {
                                         {displayedLogs.map((log) => (
                                             <TableRow key={log.id}>
                                                 <TableCell>
-                                                    {moment(log.fecha).format('DD/MM/YYYY')}
+                                                    {formatDate(log.fecha)}
                                                 </TableCell>
                                                 <TableCell>{getDayLabel(log.day)}</TableCell>
                                                 <TableCell>
@@ -575,7 +566,7 @@ const RouteTimeLogsPage = () => {
                                                     <div>
                                                         <div>{formatTime(log.schoolDepartureTime)}</div>
                                                         <Typography variant="caption" color="textSecondary">
-                                                            {formatDateOnly(log.schoolDepartureTime)}
+                                                            {formatDate(log.schoolDepartureTime)}
                                                         </Typography>
                                                     </div>
                                                 </TableCell>
@@ -583,7 +574,7 @@ const RouteTimeLogsPage = () => {
                                                     <div>
                                                         <div>{formatTime(log.boardingTime)}</div>
                                                         <Typography variant="caption" color="textSecondary">
-                                                            {formatDateOnly(log.boardingTime)}
+                                                            {formatDate(log.boardingTime)}
                                                         </Typography>
                                                     </div>
                                                 </TableCell>
@@ -591,7 +582,7 @@ const RouteTimeLogsPage = () => {
                                                     <div>
                                                         <div>{formatTime(log.firstStopTime)}</div>
                                                         <Typography variant="caption" color="textSecondary">
-                                                            {formatDateOnly(log.firstStopTime)}
+                                                            {formatDate(log.firstStopTime)}
                                                         </Typography>
                                                     </div>
                                                 </TableCell>
@@ -599,7 +590,7 @@ const RouteTimeLogsPage = () => {
                                                     <div>
                                                         <div>{formatTime(log.lastStopTime)}</div>
                                                         <Typography variant="caption" color="textSecondary">
-                                                            {formatDateOnly(log.lastStopTime)}
+                                                            {formatDate(log.lastStopTime)}
                                                         </Typography>
                                                     </div>
                                                 </TableCell>
@@ -607,7 +598,7 @@ const RouteTimeLogsPage = () => {
                                                     <div>
                                                         <div>{formatTime(log.schoolArrivalTime)}</div>
                                                         <Typography variant="caption" color="textSecondary">
-                                                            {formatDateOnly(log.schoolArrivalTime)}
+                                                            {formatDate(log.schoolArrivalTime)}
                                                         </Typography>
                                                     </div>
                                                 </TableCell>

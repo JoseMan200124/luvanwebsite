@@ -12,9 +12,12 @@ import {
     Chip,
 } from '@mui/material';
 import { Payment as PaymentIcon, CheckCircle as CheckCircleIcon, Close as CloseIcon, NoteAlt as NoteAltIcon, Download as DownloadIcon, ManageAccounts as ManageAccountsIcon, CalendarMonth as CalendarMonthIcon } from '@mui/icons-material';
-import moment from 'moment';
 import SortableTableHead from './table/SortableTableHead';
 import AppTableContainer from './table/AppTableContainer';
+import { formatDateShort } from '../utils/dateFormat';
+import { formatQ } from '../utils/currency';
+import { PAYMENT_STATUS, SERVICE_STATUS, ENROLLMENT_PAYMENT_STATUS } from '../constants/statuses';
+import StatusChip from './StatusChip';
 
 const paymentShape = PropTypes.shape({
     id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
@@ -54,7 +57,7 @@ const getPaymentViewModel = (payment = {}) => {
         autoDebit: !!(payment.automaticDebit || family.automaticDebit || family.autoDebit),
         studentsCount: family.studentsCount || 0,
         routeType: family.routeType || '-',
-        lastPaymentFormatted: lastPayment ? moment.parseZone(lastPayment).format('DD/MM/YY') : '—',
+        lastPaymentFormatted: formatDateShort(lastPayment, { keepZone: true }),
         // If family discount is configured as percent, show a percent string (e.g. "50%"),
         // otherwise show fixed amount with currency formatting.
         discount: (() => {
@@ -69,7 +72,7 @@ const getPaymentViewModel = (payment = {}) => {
                 }
                 return `${rounded}%`;
             }
-            return `Q ${Number(family.specialFee || family.discount || 0).toFixed(2)}`;
+            return formatQ(family.specialFee || family.discount || 0);
         })(),
         requiresInvoice: !!family.requiresInvoice || !!payment.requiresInvoice || false,
         status,
@@ -80,24 +83,9 @@ const getPaymentViewModel = (payment = {}) => {
     };
 };
 
-const PaymentStatusChip = ({ status }) => {
-    if (status === 'CONFIRMADO') {
-        return <Chip label="Pagado" size="small" color="success" />;
-    }
-    if (status === 'ADELANTADO') {
-        return <Chip label="Adelantado" size="small" color="info" />;
-    }
-    if (status === 'MORA' || status === 'ATRASADO') {
-        return <Chip label="En Mora" size="small" color="error" />;
-    }
-    if (status === 'PENDIENTE') {
-        return <Chip label="Pendiente" size="small" color="warning" />;
-    }
-    if (status === 'PARCIAL') {
-        return <Chip label="Pago Parcial" size="small" sx={{ backgroundColor: '#7c4dff', color: '#fff' }} />;
-    }
-    return <Chip label={status || '-'} size="small" />;
-};
+const PaymentStatusChip = ({ status }) => (
+    <StatusChip domain={PAYMENT_STATUS} value={status} />
+);
 
 PaymentStatusChip.propTypes = {
     status: PropTypes.string,
@@ -107,22 +95,7 @@ export const ServiceStatusChip = ({ serviceStatus, isDeleted }) => {
     if (isDeleted) {
         return <Chip label="Eliminado" size="small" sx={{ backgroundColor: '#000000', color: 'white' }} />;
     }
-    if (serviceStatus === 'ACTIVE') {
-        return <Chip label="Activo" size="small" color="success" />;
-    }
-    if (serviceStatus === 'PAUSED') {
-        return <Chip label="Pausado" size="small" color="warning" />;
-    }
-    if (serviceStatus === 'PENDING_START') {
-        return <Chip label="Pendiente de inicio" size="small" color="info" />;
-    }
-    if (serviceStatus === 'SUSPENDED') {
-        return <Chip label="Suspendido" size="small" color="error" />;
-    }
-    if (serviceStatus === 'INACTIVE') {
-        return <Chip label="Inactivo" size="small" sx={{ backgroundColor: '#9e9e9e', color: 'white' }} />;
-    }
-    return <Chip label="-" size="small" />;
+    return <StatusChip domain={SERVICE_STATUS} value={serviceStatus} />;
 };
 
 ServiceStatusChip.propTypes = {
@@ -189,26 +162,18 @@ PaymentActions.propTypes = {
     onManagePeriodsClick: PropTypes.func,
 };
 
-const ENROLLMENT_CHIP = {
-    PENDIENTE: { label: 'Pendiente', color: 'warning' },
-    PARCIAL: { label: 'Parcial', color: 'info' },
-    PAGADO: { label: 'Pagado', color: 'success' },
-};
-
 const EnrollmentCell = ({ charge }) => {
-    const chip = charge ? ENROLLMENT_CHIP[charge.status] : null;
+    const chip = charge && ['PENDIENTE', 'PARCIAL', 'PAGADO'].includes(charge.status);
     if (!chip) {
         return <span>—</span>;
     }
-    const pending = charge.status === 'PAGADO' ? '' : `Saldo: Q ${Number(charge.amountDue || 0).toFixed(2)}`;
-    return <Chip label={chip.label} size="small" color={chip.color} title={pending} />;
+    const pending = charge.status === 'PAGADO' ? '' : `Saldo: ${formatQ(charge.amountDue || 0)}`;
+    return <StatusChip domain={ENROLLMENT_PAYMENT_STATUS} value={charge.status} title={pending} />;
 };
 
 EnrollmentCell.propTypes = {
     charge: PropTypes.shape({ status: PropTypes.string, amountDue: PropTypes.oneOfType([PropTypes.string, PropTypes.number]) }),
 };
-
-const formatMoney = (value) => `Q ${Number(value || 0).toFixed(2)}`;
 
 // Fila de la "vista de inscripción": solo lo relacionado con el cargo de inscripción del ciclo
 const EnrollmentRow = React.memo(({ payment, charge, onRegisterClick }) => {
@@ -223,9 +188,9 @@ const EnrollmentRow = React.memo(({ payment, charge, onRegisterClick }) => {
             </TableCell>
             <TableCell align="center">{view.lastName}</TableCell>
             <TableCell align="center">{view.studentsCount}</TableCell>
-            <TableCell align="center">{charge ? formatMoney(charge.netAmount) : '—'}</TableCell>
-            <TableCell align="center">{charge ? formatMoney(charge.amountPaid) : '—'}</TableCell>
-            <TableCell align="center" sx={{ fontWeight: 700 }}>{charge ? formatMoney(charge.amountDue) : '—'}</TableCell>
+            <TableCell align="center">{charge ? formatQ(charge.netAmount || 0) : '—'}</TableCell>
+            <TableCell align="center">{charge ? formatQ(charge.amountPaid || 0) : '—'}</TableCell>
+            <TableCell align="center" sx={{ fontWeight: 700 }}>{charge ? formatQ(charge.amountDue || 0) : '—'}</TableCell>
             <TableCell align="center">
                 {onRegisterClick && charge && (
                     <IconButton

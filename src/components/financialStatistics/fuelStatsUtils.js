@@ -74,7 +74,6 @@ export const buildListParam = (selected) => {
 
 const formatNumber = (v) => Number(v).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-export const formatMoney = (v) => (v === null || v === undefined ? 'N/A' : `Q ${formatNumber(v)}`);
 export const formatGallons = (v) => (v === null || v === undefined ? 'N/A' : `${formatNumber(v)} gal`);
 export const formatPercent = (v) => (v === null || v === undefined ? 'N/A' : `${Number(v).toFixed(1)}%`);
 

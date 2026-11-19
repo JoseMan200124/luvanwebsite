@@ -28,6 +28,9 @@ import useTableState from '../hooks/useTableState';
 import AppTablePagination from './table/AppTablePagination';
 import SortableTableHead from './table/SortableTableHead';
 import AppTableContainer from './table/AppTableContainer';
+import { formatDate } from '../utils/dateFormat';
+import { formatQ } from '../utils/currency';
+import { useCurrentDate } from '../hooks/useCurrentDate';
 
 // Columnas de la tabla
 const COLUMNS = [
@@ -39,6 +42,7 @@ const COLUMNS = [
 ];
 
 const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', hideSchoolSelect = false, noWrapper = false }) => {
+    const { currentDate } = useCurrentDate();
     const { hasPermission } = usePermissions();
     // Estado del formulario de registro
     const [formData, setFormData] = useState({
@@ -66,10 +70,10 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
     // Estados para el listado de pagos extraordinarios
     const [extraPayments, setExtraPayments] = useState([]);
     const [filterStartDate, setFilterStartDate] = useState(
-        moment().startOf('month').format('YYYY-MM-DD')
+        moment(currentDate).startOf('month').format('YYYY-MM-DD')
     );
     const [filterEndDate, setFilterEndDate] = useState(
-        moment().endOf('month').format('YYYY-MM-DD')
+        moment(currentDate).endOf('month').format('YYYY-MM-DD')
     );
     // Paginación (en el servidor)
     const table = useTableState();
@@ -526,9 +530,9 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
                                             <TableCell>{payment.familyLastName}</TableCell>
                                             <TableCell>{payment.eventType || payment.customPaymentType || '-'}</TableCell>
                                             <TableCell>
-                                                {payment.eventDate ? moment(payment.eventDate).format('DD/MM/YYYY') : '-'}
+                                                {formatDate(payment.eventDate)}
                                             </TableCell>
-                                            <TableCell>Q {Number.parseFloat(payment.amount).toFixed(2)}</TableCell>
+                                            <TableCell>{formatQ(payment.amount)}</TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>

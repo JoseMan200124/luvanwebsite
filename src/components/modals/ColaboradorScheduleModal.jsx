@@ -4,18 +4,7 @@ import api from '../../utils/axiosConfig';
 import usePermissions from '../../hooks/usePermissions';
 import useNotify from '../../hooks/useNotify';
 import useConfirm from '../../hooks/useConfirm';
-
-// Función para convertir tiempo de 24h a 12h con AM/PM
-const formatTime12Hour = (time24) => {
-    if (!time24) {
-        return '';
-    }
-    const [hours, minutes] = time24.split(':');
-    const hour = Number.parseInt(hours, 10);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const hour12 = hour % 12 || 12;
-    return `${hour12}:${minutes} ${ampm}`;
-};
+import { formatClock } from '../../utils/dateFormat';
 
 // Modal de horarios para colaboradores - similar a StudentScheduleModal
 export default function ColaboradorScheduleModal({ colaborador, corporation, open, onClose, onScheduleUpdated }) {
@@ -432,7 +421,7 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                                                 marginBottom: 6 
                                             }}>
                                                 <div style={{ fontSize: 15, fontWeight: 700 }}>
-                                                    {formatTime12Hour(slot.time)}
+                                                    {formatClock(slot.time)}
                                                 </div>
                                                 <div style={{ display: 'flex', gap: 8 }}>
                                                     <button 
@@ -595,7 +584,7 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                                                 marginBottom: 6 
                                             }}>
                                                 <div style={{ fontSize: 15, fontWeight: 700 }}>
-                                                    {formatTime12Hour(slot.time)}
+                                                    {formatClock(slot.time)}
                                                 </div>
                                                 <div style={{ display: 'flex', gap: 8 }}>
                                                     <button 

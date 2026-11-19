@@ -31,8 +31,7 @@ import api from '../../utils/axiosConfig';
 import { ServiceStatusChip } from '../PaymentTable';
 import { useCurrentDate } from '../../hooks/useCurrentDate';
 import useIsMobile from '../../hooks/useIsMobile';
-
-const formatMoney = (value) => `Q ${Number(value || 0).toFixed(2)}`;
+import { formatQ } from '../../utils/currency';
 
 const emptyDetail = (creditBalance, todayStr) => ({
     refundDate: todayStr,
@@ -261,7 +260,7 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
     const handleFinish = () => {
         const processed = results?.processed || 0;
         const message = processed > 0
-            ? `Se reintegraron ${processed} crédito${processed === 1 ? '' : 's'} a favor por ${formatMoney(results?.totalRefunded)}`
+            ? `Se reintegraron ${processed} crédito${processed === 1 ? '' : 's'} a favor por ${formatQ(results?.totalRefunded || 0)}`
             : null;
         reset();
         onClose?.();
@@ -341,7 +340,7 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
                                     1. Seleccionar familias
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                                    {families.length} familia{families.length === 1 ? '' : 's'} con crédito a favor · Total disponible {formatMoney(totalCreditBalance)}
+                                    {families.length} familia{families.length === 1 ? '' : 's'} con crédito a favor · Total disponible {formatQ(totalCreditBalance || 0)}
                                 </Typography>
                                 <TextField
                                     placeholder="Buscar familia…"
@@ -384,7 +383,7 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
                                                     <TableCell>
                                                         <ServiceStatusChip serviceStatus={family.serviceStatus} isDeleted={false} />
                                                     </TableCell>
-                                                    <TableCell align="right">{formatMoney(family.creditBalance)}</TableCell>
+                                                    <TableCell align="right">{formatQ(family.creditBalance || 0)}</TableCell>
                                                 </TableRow>
                                             ))}
                                         </TableBody>
@@ -396,7 +395,7 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
                                         2. Detalles del reintegro
                                     </Typography>
                                     <Typography variant="body2" color="text.secondary">
-                                        {validSelectedFamilies.length} familia{validSelectedFamilies.length === 1 ? '' : 's'} · {formatMoney(validTotal)}
+                                        {validSelectedFamilies.length} familia{validSelectedFamilies.length === 1 ? '' : 's'} · {formatQ(validTotal || 0)}
                                     </Typography>
                                 </Box>
 
@@ -425,7 +424,7 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
                                             >
                                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
                                                     <Typography variant="subtitle2" fontWeight="bold">{family.familyLastName || '-'}</Typography>
-                                                    <Typography variant="body2" color="text.secondary">Crédito {formatMoney(family.creditBalance)}</Typography>
+                                                    <Typography variant="body2" color="text.secondary">Crédito {formatQ(family.creditBalance || 0)}</Typography>
                                                 </Box>
                                                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
                                                     <TextField
@@ -473,7 +472,7 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
                                                 />
                                                 {isPartial && (
                                                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                                                        ⓘ Reintegro parcial · queda {formatMoney(remaining)} a favor
+                                                        ⓘ Reintegro parcial · queda {formatQ(remaining || 0)} a favor
                                                     </Typography>
                                                 )}
                                             </Paper>
@@ -502,13 +501,13 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
                                         return (
                                             <TableRow key={family.paymentId}>
                                                 <TableCell>{family.familyLastName || '-'}</TableCell>
-                                                <TableCell align="right">{formatMoney(amount)}</TableCell>
+                                                <TableCell align="right">{formatQ(amount || 0)}</TableCell>
                                             </TableRow>
                                         );
                                     })}
                                     <TableRow sx={{ fontWeight: 'bold', backgroundColor: 'action.hover' }}>
                                         <TableCell>Total ({validSelectedFamilies.length} reintegro{validSelectedFamilies.length === 1 ? '' : 's'})</TableCell>
-                                        <TableCell align="right">{formatMoney(validTotal)}</TableCell>
+                                        <TableCell align="right">{formatQ(validTotal || 0)}</TableCell>
                                     </TableRow>
                                 </TableBody>
                             </Table>
@@ -520,7 +519,7 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
                 {step === 'result' && results && (
                     <Box>
                         <Alert severity={results.failed > 0 ? 'warning' : 'success'} sx={{ mb: 2 }}>
-                            {results.processed} reintegro{results.processed === 1 ? '' : 's'} registrado{results.processed === 1 ? '' : 's'} por {formatMoney(results.totalRefunded)}
+                            {results.processed} reintegro{results.processed === 1 ? '' : 's'} registrado{results.processed === 1 ? '' : 's'} por {formatQ(results.totalRefunded || 0)}
                             {results.failed > 0 ? ` · ${results.failed} con error` : ''}
                         </Alert>
                         <TableContainer component={Paper} variant="outlined">
@@ -542,7 +541,7 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
                                             </TableCell>
                                             <TableCell>{r.familyLastName || `Pago #${r.paymentId}`}</TableCell>
                                             <TableCell align="right">
-                                                {r.ok ? formatMoney(r.amount) : r.error}
+                                                {r.ok ? formatQ(r.amount || 0) : r.error}
                                             </TableCell>
                                         </TableRow>
                                     ))}

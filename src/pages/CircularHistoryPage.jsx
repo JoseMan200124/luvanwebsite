@@ -52,8 +52,8 @@ import AppTablePagination from '../components/table/AppTablePagination';
 import SortableTableHead from '../components/table/SortableTableHead';
 import AppTableContainer from '../components/table/AppTableContainer';
 import RowActions from '../components/table/RowActions';
-
-moment.tz.setDefault('America/Guatemala');
+import { formatDateTime } from '../utils/dateFormat';
+import { EMAIL_STATUS } from '../constants/statuses';
 
 const safeStr = (v) => (v == null ? '' : String(v)).trim();
 
@@ -62,12 +62,6 @@ const ALL_CLIENTS_VALUE = 'all';
 const MAX_VISIBLE_SCHOOL_NAMES = 2;
 
 // Resultado de la entrega por correo. Sin dato (null): circulares anteriores o enviadas sin correo.
-const EMAIL_STATUS_CHIP = {
-  sent: { label: 'Enviado', color: 'success' },
-  partial: { label: 'Parcial', color: 'warning' },
-  sending: { label: 'Reenviando', color: 'info' },
-};
-
 const emailDeliveryText = (item) => {
   const sent = Number(item?.emailSentCount) || 0;
   const failed = Number(item?.emailFailedCount) || 0;
@@ -84,7 +78,7 @@ const emailDeliveryText = (item) => {
 const isResendInProgress = (item) => item?.emailStatus === 'sending' && !item?.canResend;
 
 const renderEmailStatus = (item) => {
-  const chip = EMAIL_STATUS_CHIP[item?.emailStatus];
+  const chip = EMAIL_STATUS[item?.emailStatus];
   if (!chip) {
     return '—';
   }
@@ -165,23 +159,6 @@ const withPdfViewerParams = (url) => {
       return u;
   }
   return `${u}#toolbar=0&navpanes=0&scrollbar=0`;
-};
-
-const formatDateTime = (dateString) => {
-  if (!dateString) {
-      return '';
-  }
-  try {
-    return new Date(dateString).toLocaleString('es-ES', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return String(dateString);
-  }
 };
 
 const getRecipientLabel = (recipient) => {
@@ -592,7 +569,7 @@ const CircularHistoryPage = () => {
             <Alert severity="error">{detailError}</Alert>
           ) : (
             <>
-              {EMAIL_STATUS_CHIP[detail?.emailStatus] && detail.emailStatus !== 'sent' && (
+              {EMAIL_STATUS[detail?.emailStatus] && detail.emailStatus !== 'sent' && (
                 <Alert
                   severity={detail.emailStatus === 'sending' ? 'info' : 'warning'}
                   sx={{ mb: 2 }}

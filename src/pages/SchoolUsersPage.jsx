@@ -77,6 +77,8 @@ import PageHeader from '../components/layout/PageHeader';
 import useClientScope from '../hooks/useClientScope';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
+import { SERVICE_STATUS } from '../constants/statuses';
+import StatusChip from '../components/StatusChip';
 
 const FAMILY_STATUS_OPTIONS = ['Nuevo', 'Duplicado', 'Actualizado', 'Sin asignaciones']
     .map((status) => ({ value: status, label: status }));
@@ -245,19 +247,7 @@ const SchoolUsersPage = () => {
         return `${year}${month}${day}_${hours}${minutes}${seconds}`;
     };
 
-    const translateServiceStatus = (status) => {
-        if (!status) {
-            return '';
-        }
-        switch ((status || '').toString()) {
-            case 'ACTIVE': return 'Activo';
-            case 'PAUSED': return 'Pausado';
-            case 'SUSPENDED': return 'Suspendido';
-            case 'PENDING_START': return 'Pendiente de inicio';
-            case 'INACTIVE': return 'Inactivo';
-            default: return '';
-        }
-    };
+    const translateServiceStatus = (status) => SERVICE_STATUS[status]?.label || '';
 
     // Obtener datos del estado de navegación
     const stateSchool = location.state?.school;
@@ -2511,20 +2501,7 @@ const SchoolUsersPage = () => {
                                         {paginatedUsers.map((user) => {
                                             const serviceStatus = user.familyServiceStatus?.status || 'ACTIVE';
                                             const userStatus = getUserStatus(user);
-                                            const getServiceStatusChip = () => {
-                                                if (serviceStatus === 'ACTIVE') {
-                                                    return <Chip label="Activo" size="small" color="success" />;
-                                                } else if (serviceStatus === 'PAUSED') {
-                                                    return <Chip label="Pausado" size="small" color="warning" />;
-                                                } else if (serviceStatus === 'SUSPENDED') {
-                                                    return <Chip label="Suspendido" size="small" color="error" />;
-                                                } else if (serviceStatus === 'PENDING_START') {
-                                                    return <Chip label="Pendiente de inicio" size="small" color="info" />;
-                                                } else if (serviceStatus === 'INACTIVE') {
-                                                    return <Chip label="Inactivo" size="small" sx={{ backgroundColor: '#9e9e9e', color: 'white' }} />;
-                                                }
-                                                return <Chip label="-" size="small" />;
-                                            };
+                                            const getServiceStatusChip = () => <StatusChip domain={SERVICE_STATUS} value={serviceStatus} />;
                                             
                                             return (
                                             <TableRow key={user.id} hover>

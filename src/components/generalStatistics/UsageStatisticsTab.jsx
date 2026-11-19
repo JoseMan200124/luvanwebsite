@@ -35,8 +35,8 @@ import useFilters from '../../hooks/useFilters';
 import useNotify from '../../hooks/useNotify';
 import { F } from '../filters/filterFields';
 import useIsMobile from '../../hooks/useIsMobile';
-
-moment.tz.setDefault('America/Guatemala');
+import { formatNumber } from '../../utils/currency';
+import { formatDateTime } from '../../utils/dateFormat';
 
 const toNumber = (v) => {
     const n = Number(v);
@@ -238,7 +238,7 @@ const UsageStatisticsTab = () => {
         const dateInfo = document.createElement('p');
         dateInfo.style.textAlign = 'center';
         dateInfo.style.marginBottom = '20px';
-        dateInfo.textContent = `Generado el: ${now.format('DD/MM/YYYY HH:mm')} (hora Guatemala)`;
+        dateInfo.textContent = `Generado el: ${formatDateTime(now)} (hora Guatemala)`;
 
         tempDiv.appendChild(heading);
         tempDiv.appendChild(dateInfo);
@@ -340,7 +340,7 @@ const UsageStatisticsTab = () => {
                                                 <CartesianGrid strokeDasharray="3 3" />
                                                 <XAxis
                                                     type="number"
-                                                    tickFormatter={(v) => toNumber(v).toLocaleString()}
+                                                    tickFormatter={(v) => formatNumber(toNumber(v))}
                                                 />
                                                 <YAxis
                                                     type="category"

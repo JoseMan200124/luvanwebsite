@@ -29,7 +29,6 @@ import {
     LocationOff as LocationOffIcon,
     Warning as WarningIcon,
 } from '@mui/icons-material';
-import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { getAllBusEmergencies, getBusEmergencyById, deleteBusEmergency } from '../services/busEmergencyService';
 import api from '../utils/axiosConfig';
@@ -48,8 +47,7 @@ import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
-
-moment.tz.setDefault('America/Guatemala');
+import { formatDateTime } from '../utils/dateFormat';
 
 // Columnas de la tabla
 const COLUMNS = [
@@ -409,7 +407,7 @@ const BusEmergenciesPage = () => {
                                         {emergencies.map((emergency) => (
                                             <TableRow key={emergency.id}>
                                                 <TableCell>
-                                                    {moment(emergency.fecha).format('DD/MM/YYYY HH:mm')}
+                                                    {formatDateTime(emergency.fecha)}
                                                 </TableCell>
                                                 <TableCell>
                                                     <Tooltip title={emergency.mensaje || 'Sin mensaje'}>
@@ -502,7 +500,7 @@ const BusEmergenciesPage = () => {
                                         Fecha y Hora
                                     </Typography>
                                     <Typography variant="body1" gutterBottom>
-                                        {moment(selectedEmergency.fecha).format('DD/MM/YYYY HH:mm:ss')}
+                                        {formatDateTime(selectedEmergency.fecha)}
                                     </Typography>
                                 </Grid>
                                 <Grid item xs={12} sm={6}>

@@ -66,22 +66,3 @@ export const WORK_TYPES = {
     'otro': 'Otro'
 };
 
-/**
- * Estados de solicitudes de mecánica
- */
-export const REQUEST_STATES = {
-    'pendiente': 'Pendiente',
-    'en_proceso': 'En Proceso',
-    'completado': 'Completado',
-    'cancelado': 'Cancelado'
-};
-
-/**
- * Colores para los estados
- */
-export const STATE_COLORS = {
-    'pendiente': 'warning',
-    'en_proceso': 'info',
-    'completado': 'success',
-    'cancelado': 'error'
-};

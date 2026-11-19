@@ -32,7 +32,8 @@ import {
   Create as CreateIcon,
 } from '@mui/icons-material';
 import { styled } from 'twin.macro';
-import moment from 'moment-timezone';
+import { REQUEST_STATUS } from '../constants/statuses';
+import { formatDateTime } from '../utils/dateFormat';
 import ParentNavbar from '../components/ParentNavbar';
 import { getMyRequests, getRequestById, getRequestEvents, REQUEST_TYPE_META } from '../services/requestService';
 
@@ -57,15 +58,7 @@ const SECONDARY = '#FF6B35';
 
 const getStatusMeta = (status) => {
   const value = String(status || '').toLowerCase();
-  const meta = {
-    pending: { label: 'Pendiente', color: '#FB8C00' },
-    in_review: { label: 'En revisión', color: '#42A5F5' },
-    approved: { label: 'Completada', color: '#4CAF50' },
-    rejected: { label: 'Rechazada', color: '#E53935' },
-    completed: { label: 'Completada', color: '#388E3C' },
-    cancelled: { label: 'Cancelada', color: '#9C27B0' },
-  };
-  return meta[value] || { label: value || 'N/A', color: '#757575' };
+  return REQUEST_STATUS[value] || { label: value || 'N/A', color: '#757575' };
 };
 
 const getRequestTypeLabel = (type) => REQUEST_TYPE_META[String(type || '').toLowerCase()]?.label || String(type || 'N/A');
@@ -77,7 +70,6 @@ const REQUEST_TYPE_ICON_MAP = {
   other: CreateIcon,
 };
 
-const formatDate = (date) => (date ? moment(date).tz('America/Guatemala').format('DD/MM/YYYY hh:mm A') : '-');
 
 const getRequestTypeChip = (type) => {
   const normalizedType = String(type || '').toLowerCase();
@@ -128,16 +120,7 @@ const normalizeStatus = (status) => {
 
 const getStatusLabelEs = (status) => {
   const normalized = normalizeStatus(status);
-  const labels = {
-    pending: 'Pendiente',
-    in_review: 'En revisión',
-    approved: 'Completada',
-    rejected: 'Rechazada',
-    completed: 'Completada',
-    cancelled: 'Cancelada',
-  };
-
-  return labels[normalized] || 'Estado actualizado';
+  return REQUEST_STATUS[normalized]?.label || 'Estado actualizado';
 };
 
 // Try to extract a status value from a variety of metadata shapes
@@ -454,7 +437,7 @@ const ParentRequestsPage = () => {
                               {request.title || 'Solicitud sin título'}
                             </Typography>
                             <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                              {formatDate(request.createdAt)}
+                              {formatDateTime(request.createdAt)}
                             </Typography>
                           </Box>
                           <ChevronRightIcon color="disabled" />
@@ -482,7 +465,7 @@ const ParentRequestsPage = () => {
                   {getRequestTypeChip(selectedRequest.requestType)}
                 </Stack>
                 <Typography variant="body2" color="text.secondary">Fecha de creación</Typography>
-                <Typography variant="body1" sx={{ fontWeight: 700, mb: 1 }}>{formatDate(selectedRequest.createdAt)}</Typography>
+                <Typography variant="body1" sx={{ fontWeight: 700, mb: 1 }}>{formatDateTime(selectedRequest.createdAt)}</Typography>
               </Box>
 
               <Box>
@@ -502,7 +485,7 @@ const ParentRequestsPage = () => {
                           {getEventDetailText(event, selectedRequest)}
                         </Typography>
                         <Typography variant="caption" color="text.disabled">
-                          {formatDate(event.createdAt)}
+                          {formatDateTime(event.createdAt)}
                         </Typography>
                       </Box>
                     ))}

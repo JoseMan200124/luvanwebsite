@@ -21,7 +21,6 @@ import {
     Button,
 } from '@mui/material';
 import { Visibility as VisibilityIcon } from '@mui/icons-material';
-import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { getAllStudentIncidents, getStudentIncidentById, INCIDENT_TYPES } from '../services/studentIncidentService';
 import api from '../utils/axiosConfig';
@@ -40,8 +39,7 @@ import AppTablePagination from '../components/table/AppTablePagination';
 import SortableTableHead from '../components/table/SortableTableHead';
 import AppTableContainer from '../components/table/AppTableContainer';
 import RowActions from '../components/table/RowActions';
-
-moment.tz.setDefault('America/Guatemala');
+import { formatDateTime } from '../utils/dateFormat';
 
 const SCHEDULE_OPTIONS = DEFAULT_SCHEDULE_CODES.map((code) => ({ value: code, label: SCHEDULE_LABELS[code] || code }));
 
@@ -328,7 +326,7 @@ const StudentIncidentsPage = () => {
                                         {incidents.map((incident) => (
                                             <TableRow key={incident.id}>
                                                 <TableCell>
-                                                    {moment(incident.fecha).format('DD/MM/YYYY HH:mm')}
+                                                    {formatDateTime(incident.fecha)}
                                                 </TableCell>
                                                 <TableCell>
                                                     {incident.student ? (incident.student.fullName || 'N/A') : 'N/A'}
@@ -400,7 +398,7 @@ const StudentIncidentsPage = () => {
                                         Fecha y Hora
                                     </Typography>
                                     <Typography variant="body1" gutterBottom>
-                                        {moment(selectedIncident.fecha).format('DD/MM/YYYY HH:mm')}
+                                        {formatDateTime(selectedIncident.fecha)}
                                     </Typography>
                                 </Grid>
                                 <Grid item xs={12} sm={6}>

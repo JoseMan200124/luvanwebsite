@@ -1,7 +1,6 @@
 // src/pages/ScheduledSendsPage.jsx
 import { useCallback, useEffect, useRef, useState } from 'react';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
-import moment from 'moment-timezone';
 import {
     Accordion, AccordionDetails, AccordionSummary, Box, Button, Chip, CircularProgress, Dialog,
     DialogActions, DialogContent, DialogTitle,
@@ -29,12 +28,15 @@ import AppTableContainer from '../components/table/AppTableContainer';
 import RowActions from '../components/table/RowActions';
 import CircularMasivaModal from '../components/CircularMasivaModal';
 import SendNotificationModal from '../components/SendNotificationModal';
-import { SCHEDULE_TIMEZONE, describeSchedule } from '../components/scheduling/scheduleModel';
+import { describeSchedule } from '../components/scheduling/scheduleModel';
 import AudienceDetail, { AudienceSummaryText } from '../components/scheduling/AudienceDetail';
 import { OUTCOME_REASON_LABEL as REASON_LABEL } from '../utils/outcomeReasons';
 import {
     cancelScheduledSend, getScheduledSend, listScheduledSends, resendScheduledSendFailures,
 } from '../services/scheduledSendService';
+import { formatDateTime } from '../utils/dateFormat';
+import { SCHEDULED_SEND_STATUS, SCHEDULED_RUN_STATUS, getStatusLabel } from '../constants/statuses';
+import StatusChip from '../components/StatusChip';
 
 // Secciones desplegables de la vista (una por estado). `hint` explica qué significa cada estado.
 const SECTIONS = [
@@ -46,21 +48,6 @@ const SECTIONS = [
     { status: 'cancelled', label: 'Cancelados', hint: 'No se enviarán más ocurrencias', color: 'default' },
 ];
 const DEFAULT_EXPANDED = { active: true };
-const STATUS_CHIP = {
-    active: { label: 'Activo', color: 'primary' },
-    completed: { label: 'Completado', color: 'success' },
-    partial: { label: 'Parcial', color: 'warning' },
-    failed: { label: 'Fallido', color: 'error' },
-    skipped: { label: 'Omitido', color: 'default' },
-    cancelled: { label: 'Cancelado', color: 'default' },
-};
-const RUN_CHIP = {
-    running: { label: 'Enviando', color: 'info' },
-    sent: { label: 'Enviado', color: 'success' },
-    partial: { label: 'Parcial', color: 'warning' },
-    failed: { label: 'Falló', color: 'error' },
-    skipped: { label: 'Omitido', color: 'warning' },
-};
 const KIND_LABEL = { circular: 'Circular', notification: 'Notificación' };
 const KIND_OPTIONS = [
     { value: 'circular', label: 'Circulares' },
@@ -69,7 +56,6 @@ const KIND_OPTIONS = [
 const KIND_PERMISSION = { circular: 'mail-enviar-circular', notification: 'notificaciones-crear' };
 
 // Hora de Guatemala, como se programó (el aviso de la página lo indica).
-const formatDateTime = (value) => (value ? moment(value).tz(SCHEDULE_TIMEZONE).format('DD/MM/YYYY HH:mm') : '—');
 // Reparto del correo cuando algunos destinatarios no lo recibieron (envío parcial o fallido).
 const formatDelivery = (run) => (run?.failedRecipientsCount > 0
     ? `Correo enviado a ${run.recipientsCount ?? 0} y falló a ${run.failedRecipientsCount} destinatarios`
@@ -184,7 +170,7 @@ const StatusSection = ({ section, kind, refreshKey, expanded, onToggle, onError,
                                     <TableCell>{item.runCount}</TableCell>
                                     <TableCell>
                                         <Tooltip title={formatDelivery(item.lastRun)}>
-                                            <Chip size="small" color={STATUS_CHIP[item.status]?.color} label={STATUS_CHIP[item.status]?.label || item.status} />
+                                            <StatusChip domain={SCHEDULED_SEND_STATUS} value={item.status} />
                                         </Tooltip>
                                         {formatDelivery(item.lastRun) && (
                                             <Typography variant="caption" color="text.secondary" display="block">
@@ -193,7 +179,7 @@ const StatusSection = ({ section, kind, refreshKey, expanded, onToggle, onError,
                                         )}
                                         {item.schedule?.recurrence && item.lastRun && (
                                             <Typography variant="caption" color="text.secondary" display="block">
-                                                Último envío: {RUN_CHIP[item.lastRun.status]?.label || item.lastRun.status}
+                                                Último envío: {getStatusLabel(SCHEDULED_RUN_STATUS, item.lastRun.status)}
                                             </Typography>
                                         )}
                                         {REASON_LABEL[item.lastRun?.outcomeReason] && (
@@ -402,7 +388,7 @@ const ScheduledSendsPage = () => {
                                         {detail.runs.map((run) => (
                                             <TableRow key={run.scheduledFor}>
                                                 <TableCell>{formatDateTime(run.scheduledFor)}</TableCell>
-                                                <TableCell><Chip size="small" color={RUN_CHIP[run.status]?.color} label={RUN_CHIP[run.status]?.label || run.status} /></TableCell>
+                                                <TableCell><StatusChip domain={SCHEDULED_RUN_STATUS} value={run.status} /></TableCell>
                                                 <TableCell>
                                                     {run.failedRecipientsCount > 0
                                                         ? `${run.recipientsCount ?? 0} enviados · ${run.failedRecipientsCount} fallidos`

@@ -5,7 +5,8 @@ import { Box, Typography } from '@mui/material';
 import {
     LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
-import { toPriceChartData, toSpendChartData, formatMoney } from './fuelStatsUtils';
+import { toPriceChartData, toSpendChartData } from './fuelStatsUtils';
+import { formatQ } from '../../utils/currency';
 
 const cardSx = { bgcolor: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 1, p: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' };
 const titleSx = { fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#6B7280', fontWeight: 600, mb: 1.5 };
@@ -38,7 +39,7 @@ const FuelCharts = ({ series, visibleTypes }) => {
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
                         <XAxis dataKey="label" tick={axisTick} minTickGap={16} />
                         <YAxis tick={axisTick} domain={['auto', 'auto']} tickFormatter={(v) => `Q ${v}`} width={64} />
-                        <Tooltip formatter={(value) => formatMoney(value)} />
+                        <Tooltip formatter={(value) => formatQ(value, { nullText: 'N/A' })} />
                         <Legend iconType="plainline" />
                         {visibleTypes.map((t) => (
                             <Line
@@ -65,7 +66,7 @@ const FuelCharts = ({ series, visibleTypes }) => {
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
                         <XAxis dataKey="label" tick={axisTick} minTickGap={16} />
                         <YAxis tick={axisTick} tickFormatter={(v) => `Q ${Number(v).toLocaleString('es-GT')}`} width={80} />
-                        <Tooltip formatter={(value) => formatMoney(value)} />
+                        <Tooltip formatter={(value) => formatQ(value, { nullText: 'N/A' })} />
                         <Legend />
                         {stackedTypes.map((t) => (
                             <Bar key={t.key} dataKey={t.key} name={t.label} stackId="gasto" fill={t.color} stroke="#fff" strokeWidth={1} />
