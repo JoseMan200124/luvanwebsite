@@ -46,7 +46,6 @@ import moment from 'moment';
 import api from '../utils/axiosConfig';
 import usePermissions from '../hooks/usePermissions';
 import PermissionGuard from './PermissionGuard';
-import dateService from '../services/dateService';
 import ReceiptsPane from './ReceiptsPane';
 import RetroactiveApplyModal from './modals/RetroactiveApplyModal';
 import PaymentFlowTimeline from './PaymentFlowTimeline';
@@ -904,21 +903,11 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
             if (!reason) {
                 return;
             }
-            try {
-                const currentDate = await dateService.getCurrentDate();
-                handleAction('freezeGlobalPenalty', {
-                    freezeDate: currentDate.format('YYYY-MM-DD'),
-                    reason,
-                    notes: reason
-                });
-            } catch (error) {
-                console.error('Error getting current date:', error);
-                handleAction('freezeGlobalPenalty', {
-                    freezeDate: moment().format('YYYY-MM-DD'),
-                    reason,
-                    notes: reason
-                });
-            }
+            // Sin freezeDate: el backend congela con su propia fecha de hoy (Guatemala), no con el reloj del navegador.
+            handleAction('freezeGlobalPenalty', {
+                reason,
+                notes: reason
+            });
         } else if (globalFreezeDialogMode === 'unfreeze') {
             handleAction('unfreezeGlobalPenalty', {
                 notes: 'Mora global descongelada desde hoy'

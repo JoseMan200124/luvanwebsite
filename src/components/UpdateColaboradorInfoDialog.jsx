@@ -114,7 +114,11 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
     const fetchCorporationData = async (id, prefill = null) => {
         setLoading(true);
         try {
-            const response = await api.get(`/corporations/${id}`);
+            // Solo horarios y campos extra: los da el endpoint público de inscripción (sin datos sensibles).
+            const response = await api.get(`/public/corporations/enroll/${id}`, {
+                skipAuth: true,
+                skipSchoolCycleContext: true
+            });
 
             if (response.data?.corporation) {
                 const corp = response.data.corporation;

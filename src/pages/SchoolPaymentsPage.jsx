@@ -2497,20 +2497,15 @@ const SchoolPaymentsPage = () => {
                 await api.post(`/payments/${payment.id}/exonerate-penalty`, { discountAmount: amount, type: 'EXONERATION' });
                 notify.success('Mora exonerada');
             } else if (actionName === 'freezePenalty') {
-                // Congelar mora con fecha específica del backend (simulada o real)
-                let freezeDate;
-                if (payload?.freezeDate) {
-                    freezeDate = payload.freezeDate;
-                } else {
-                    // Obtener fecha actual del backend
-                    const currentDate = await getCurrentDate();
-                    freezeDate = currentDate.format('YYYY-MM-DD');
-                }
-                console.log('[FREEZE_PENALTY] Sending request:', { paymentId: payment.id, freezeDate });
-                const response = await api.post('/payments/penalties/freeze', { 
+                // Sin fecha elegida por el usuario no se manda freezeDate: el backend congela con su propia
+                // fecha de hoy (Guatemala). Así un reloj del navegador mal puesto no cambia la mora congelada.
+                const freezeDate = payload?.freezeDate || undefined;
+                const fechaNota = freezeDate ? moment(freezeDate) : await getCurrentDate();
+                console.log('[FREEZE_PENALTY] Sending request:', { paymentId: payment.id, freezeDate: freezeDate || '(backend)' });
+                const response = await api.post('/payments/penalties/freeze', {
                     paymentId: payment.id,
                     freezeDate,
-                    notes: `Mora congelada manualmente el ${formatDate(freezeDate)}`
+                    notes: `Mora congelada manualmente el ${fechaNota.format('DD/MM/YYYY')}`
                 });
                 console.log('[FREEZE_PENALTY] Response received:', response.data);
                 notify.success('Mora congelada');

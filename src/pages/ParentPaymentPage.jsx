@@ -802,9 +802,8 @@ const ParentPaymentPage = () => {
         const unwrap = (result) => (result.status === 'fulfilled' ? result.value : null);
 
         try {
-            const [routeRes, serviceRes, accountRes, historyRes, receiptsRes, enrollmentRes] = await Promise.allSettled([
+            const [routeRes, accountRes, historyRes, receiptsRes, enrollmentRes] = await Promise.allSettled([
                 api.get(`/parents/${userId}/route-info`, { signal }),
-                api.get(`/parents/${userId}/service-status`, { signal }),
                 api.get(`/payments/family-account/${userId}`, { signal }),
                 api.get(`/parents/${userId}/payment-history`, { params: { limit: 80 }, signal }),
                 api.get(`/parents/${userId}/receipts`, { signal }),
@@ -819,7 +818,8 @@ const ParentPaymentPage = () => {
             const schoolHasContracts = routeData?.schoolHasContracts === true;
             setRouteInfo(routeData);
             setHasSignedContract(schoolHasContracts ? routeData?.parentHasSignedContract === true : true);
-            setServiceStatus(unwrap(serviceRes)?.data?.serviceStatus || routeData?.serviceStatus || null);
+            // route-info lo calcula después de la suspensión/reactivación automática por contrato.
+            setServiceStatus(routeData?.serviceStatus || null);
             setPaymentAccount(unwrap(accountRes)?.data?.familyAccount || null);
             setPaymentHistory(unwrap(historyRes)?.data || null);
             setReceipts(unwrap(receiptsRes)?.data?.receipts || []);

@@ -37,6 +37,7 @@ import AssignmentHistoryPage from './pages/AssignmentHistoryPage';
 import BusAssignmentHistoryPage from './pages/BusAssignmentHistoryPage';
 import HistoricalDataPage from './pages/HistoricalDataPage';
 import { MODULE_GROUPS } from './components/layout/moduleGroups';
+import kitLocal from './kitLocal';
 
 export const modules = [
     {
@@ -238,4 +239,6 @@ export const modules = [
             },
         ],
     },
+    // Módulos del kit de pruebas local (vacío fuera de local)
+    ...kitLocal.modulos,
 ];

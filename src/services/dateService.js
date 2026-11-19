@@ -2,66 +2,77 @@ import moment from 'moment';
 import api from '../utils/axiosConfig';
 
 /**
- * Servicio para manejar fechas simuladas del backend
- * Permite que el frontend use la misma fecha que el backend cuando está simulando
+ * Fecha actual para la lógica de la web ("hoy" en pagos, estadísticas, etc.).
+ *
+ * Sale del reloj del SERVIDOR en hora de Guatemala, no del navegador: un PC con la hora mal puesta o
+ * con otra zona horaria no debe correr "hoy". Se mide una vez la diferencia con GET /health (público,
+ * sin BD) y se aplica al reloj del navegador; se vuelve a medir cada pocos minutos.
+ *
+ * En local, el kit de pruebas parchea Date.now en el navegador (y deja el original en
+ * Date.now.original) con la misma fecha simulada que el backend: en ese caso no se suma desfase.
  */
+
+// Guatemala está en UTC-6 todo el año (sin horario de verano).
+const OFFSET_GUATEMALA_MIN = -6 * 60;
+const VIGENCIA_MS = 5 * 60 * 1000;
+const REINTENTO_MS = 30 * 1000;
+
+const kitActivo = () => typeof Date.now.original === 'function';
+
 class DateService {
-    constructor() {
-        this.simulatedDate = null;
-        this.lastFetch = null;
-        this.cacheDuration = 60000; // 1 minuto de cache
+    desfaseMs = 0;
+
+    proximaMedicion = 0;
+
+    enCurso = null;
+
+    /** Mide (si toca) la diferencia entre el reloj del servidor y el del navegador. */
+    sincronizar() {
+        if (this.enCurso) {
+            return this.enCurso;
+        }
+        if (Date.now() < this.proximaMedicion) {
+            return Promise.resolve();
+        }
+        const inicio = Date.now();
+        this.enCurso = api.get('/health', { skipAuth: true })
+            .then((response) => {
+                const servidor = Date.parse(response?.data?.timestamp);
+                if (Number.isNaN(servidor)) {
+                    throw new TypeError('GET /health sin timestamp');
+                }
+                const fin = Date.now();
+                // El servidor respondió en algún momento entre inicio y fin: se toma el punto medio.
+                this.desfaseMs = servidor - Math.round((inicio + fin) / 2);
+                this.proximaMedicion = fin + VIGENCIA_MS;
+            })
+            .catch((error) => {
+                // Sin servidor se usa el reloj del navegador (desfase anterior, 0 al inicio).
+                console.warn('[DateService] No se pudo medir la hora del servidor:', error?.message);
+                this.proximaMedicion = Date.now() + REINTENTO_MS;
+            })
+            .finally(() => {
+                this.enCurso = null;
+            });
+        return this.enCurso;
     }
 
-    /**
-     * Obtiene la fecha actual del backend (simulada o real)
-     * @returns {Promise<moment.Moment>}
-     */
+    ahora() {
+        const desfase = kitActivo() ? 0 : this.desfaseMs;
+        return moment(Date.now() + desfase).utcOffset(OFFSET_GUATEMALA_MIN);
+    }
+
     async getCurrentDate() {
-        // Si tenemos cache reciente, usarlo
-        if (this.simulatedDate && this.lastFetch && (Date.now() - this.lastFetch < this.cacheDuration)) {
-            return moment(this.simulatedDate);
-        }
-
-        try {
-            const response = await api.get('/admin/system-date');
-            this.simulatedDate = response.data.currentDate;
-            this.lastFetch = Date.now();
-            return moment(this.simulatedDate);
-        } catch (error) {
-            console.warn('[DateService] Error fetching system date, using local date:', error.message);
-            // Si falla, usar fecha local
-            return moment();
-        }
+        await this.sincronizar();
+        return this.ahora();
     }
 
-    /**
-     * Obtiene la fecha actual de forma síncrona (usa cache o fecha local)
-     * @returns {moment.Moment}
-     */
+    /** Sin esperar la red: usa el último desfase medido y pide uno nuevo si ya venció. */
     getCurrentDateSync() {
-        if (this.simulatedDate && this.lastFetch && (Date.now() - this.lastFetch < this.cacheDuration)) {
-            return moment(this.simulatedDate);
-        }
-        return moment();
-    }
-
-    /**
-     * Invalida el cache para forzar nueva consulta al backend
-     */
-    invalidateCache() {
-        this.simulatedDate = null;
-        this.lastFetch = null;
-    }
-
-    /**
-     * Establece manualmente la fecha simulada (útil para tests)
-     */
-    setSimulatedDate(date) {
-        this.simulatedDate = date;
-        this.lastFetch = Date.now();
+        this.sincronizar();
+        return this.ahora();
     }
 }
 
-// Exportar instancia singleton
 const dateService = new DateService();
 export default dateService;
