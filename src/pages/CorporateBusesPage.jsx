@@ -34,6 +34,8 @@ import useNotify from '../hooks/useNotify';
 
 const CorporateBusesPage = () => {
     const { hasPermission } = usePermissions();
+    // Sin este permiso la tabla es solo de consulta: los selectores de bus/piloto no deben dejar editar un borrador que no se puede guardar.
+    const puedeAsignar = hasPermission('routes-assign-staff');
     const { auth } = useContext(AuthContext);
     const { fiscalYear, corporationId } = useParams();
     const location = useLocation();
@@ -424,14 +426,16 @@ const CorporateBusesPage = () => {
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                         <Typography variant="h6">Asignación de Rutas, Buses, Pilotos y Monitoras</Typography>
                         <Box sx={{ display: 'flex', gap: 2 }}>
-                            <Button 
-                                variant="outlined" 
-                                startIcon={<Clear />} 
-                                onClick={handleClearAssignments}
-                                disabled={saving}
-                            >
-                                Limpiar
-                            </Button>
+                            <PermissionGuard permission="routes-assign-staff">
+                                <Button
+                                    variant="outlined"
+                                    startIcon={<Clear />}
+                                    onClick={handleClearAssignments}
+                                    disabled={saving}
+                                >
+                                    Limpiar
+                                </Button>
+                            </PermissionGuard>
                             <Button
                                 variant="outlined"
                                 startIcon={<Refresh />}
@@ -496,6 +500,7 @@ const CorporateBusesPage = () => {
                                                 <TableCell>
                                                     <Autocomplete
                                                         disableClearable={false}
+                                                        disabled={!puedeAsignar}
                                                         options={availableBuses}
                                                         getOptionLabel={(option) => option ? `${option.plate} (${option.capacity || 'N/A'})` : ''}
                                                         isOptionEqualToValue={(option, value) => option && value && option.id === value.id}
@@ -517,7 +522,7 @@ const CorporateBusesPage = () => {
                                                 </TableCell>
                                                 <TableCell>
                                                     <Autocomplete
-                                                        disabled={false}
+                                                        disabled={!puedeAsignar}
                                                         options={availablePilotsForThisRoute}
                                                         getOptionLabel={(option) => option ? (option.name || option.email) : ''}
                                                         isOptionEqualToValue={(option, value) => option && value && option.id === value.id}

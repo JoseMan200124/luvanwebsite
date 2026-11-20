@@ -62,13 +62,12 @@ function App() {
         modules.forEach((module) => {
             module.submodules.forEach((submodule) => {
                 const C = submodule.component;
-                const skipSchoolContext = submodule.key === 'corporaciones';
                 routes.push(
                     <Route
                         key={submodule.path}
                         path={submodule.path}
                         element={
-                            <ProtectedRoute moduleKey={submodule.key} requireSchoolContext={skipSchoolContext ? false : undefined}>
+                            <ProtectedRoute moduleKey={submodule.key}>
                                 <C />
                             </ProtectedRoute>
                         }
