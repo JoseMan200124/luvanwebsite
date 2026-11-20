@@ -14,10 +14,6 @@ import {
     TableCell,
     TableBody,
     Box,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions
 } from '@mui/material';
 import Autocomplete from '@mui/material/Autocomplete';
 import api from '../utils/axiosConfig';
@@ -31,6 +27,8 @@ import AppTableContainer from './table/AppTableContainer';
 import { formatDate } from '../utils/dateFormat';
 import { formatQ } from '../utils/currency';
 import { useCurrentDate } from '../hooks/useCurrentDate';
+import AppDialog from './dialogs/AppDialog';
+import MoneyField from './form/MoneyField';
 
 // Columnas de la tabla
 const COLUMNS = [
@@ -463,10 +461,9 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
                     </>
                 )}
                 <Grid item xs={12}>
-                    <TextField
+                    <MoneyField
                         name="amount"
                         label="Monto"
-                        type="number"
                         variant="outlined"
                         fullWidth
                         value={formData.amount}
@@ -549,32 +546,30 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
 
 
             {/* Diálogo para agregar usuario */}
-            <Dialog open={userDialogOpen} onClose={handleCloseUserDialog}>
-                <DialogTitle>Agregar Usuario</DialogTitle>
-                <DialogContent>
-                    <TextField
-                        autoFocus
-                        margin="dense"
-                        label="Nombre del Usuario"
-                        type="text"
-                        fullWidth
-                        value={newUserName}
-                        onChange={e => setNewUserName(e.target.value)}
-                        onKeyDown={e => {
-                            if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleAddUserToList();
-                            }
-                        }}
-                    />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseUserDialog}>Cancelar</Button>
-                    <Button onClick={handleAddUserToList} variant="contained">
-                        Agregar
-                    </Button>
-                </DialogActions>
-            </Dialog>
+            <AppDialog
+                open={userDialogOpen}
+                onClose={handleCloseUserDialog}
+                title="Agregar usuario"
+                size="sm"
+                onSubmit={handleAddUserToList}
+                submitLabel="Agregar"
+            >
+                <TextField
+                    autoFocus
+                    margin="dense"
+                    label="Nombre del Usuario"
+                    type="text"
+                    fullWidth
+                    value={newUserName}
+                    onChange={e => setNewUserName(e.target.value)}
+                    onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddUserToList();
+                        }
+                    }}
+                />
+            </AppDialog>
         </>
     );
 

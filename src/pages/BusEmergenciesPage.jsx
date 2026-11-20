@@ -16,10 +16,6 @@ import {
     Chip,
     IconButton,
     Tooltip,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     Button,
 } from '@mui/material';
 import { 
@@ -48,6 +44,7 @@ import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
 import { formatDateTime } from '../utils/dateFormat';
+import AppDialog from '../components/dialogs/AppDialog';
 
 // Columnas de la tabla
 const COLUMNS = [
@@ -478,123 +475,115 @@ const BusEmergenciesPage = () => {
                 </Paper>
 
                 {/* Modal de Detalles */}
-                <Dialog
+                <AppDialog
                     open={detailsOpen}
                     onClose={handleCloseDetails}
-                    maxWidth="md"
-                    fullWidth
+                    title="Detalle de la emergencia"
+                    icon={<WarningIcon />}
+                    tone="danger"
+                    size="md"
+                    readOnly
                 >
-                    <DialogTitle>
-                        <WarningIcon color="error" sx={{ mr: 1, verticalAlign: 'middle' }} />
-                        Detalles de la Emergencia
-                    </DialogTitle>
-                    <DialogContent dividers>
-                        {loadingDetails ? (
-                            <Box display="flex" justifyContent="center" p={3}>
-                                <CircularProgress />
-                            </Box>
-                        ) : selectedEmergency ? (
-                            <Grid container spacing={2}>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Fecha y Hora
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {formatDateTime(selectedEmergency.fecha)}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Creado por
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedEmergency.piloto?.name || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Placa del Bus
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedEmergency.placaBus || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Número de Ruta
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedEmergency.numeroRuta || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Colegio
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedEmergency.colegio || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                {selectedEmergency.corporacion && (
-                                    <Grid item xs={12} sm={6}>
-                                        <Typography variant="subtitle2" color="textSecondary">
-                                            Corporación
-                                        </Typography>
-                                        <Typography variant="body1" gutterBottom>
-                                            {selectedEmergency.corporacion}
-                                        </Typography>
-                                    </Grid>
-                                )}
-                                <Grid item xs={12}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Ubicación GPS
-                                    </Typography>
-                                    {selectedEmergency.latitud && selectedEmergency.longitud ? (
-                                        <Box sx={{ mt: 1 }}>
-                                            <Typography variant="body2" gutterBottom>
-                                                Latitud: {selectedEmergency.latitud}, Longitud: {selectedEmergency.longitud}
-                                            </Typography>
-                                            <Button
-                                                variant="contained"
-                                                color="success"
-                                                startIcon={<LocationOnIcon />}
-                                                onClick={() => openGoogleMaps(selectedEmergency.latitud, selectedEmergency.longitud)}
-                                            >
-                                                Ver en Google Maps
-                                            </Button>
-                                        </Box>
-                                    ) : (
-                                        <Chip 
-                                            icon={<LocationOffIcon />}
-                                            label="Sin ubicación GPS disponible" 
-                                            color="default"
-                                            sx={{ mt: 1 }}
-                                        />
-                                    )}
-                                </Grid>
-                                <Grid item xs={12}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Mensaje de Emergencia
-                                    </Typography>
-                                    <Paper sx={{ p: 2, mt: 1, backgroundColor: '#ffebee' }}>
-                                        <Typography variant="body1">
-                                            {selectedEmergency.mensaje || 'Emergencia generada'}
-                                        </Typography>
-                                    </Paper>
-                                </Grid>
+                    {loadingDetails ? (
+                        <Box display="flex" justifyContent="center" p={3}>
+                            <CircularProgress />
+                        </Box>
+                    ) : selectedEmergency ? (
+                        <Grid container spacing={2}>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Fecha y Hora
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {formatDateTime(selectedEmergency.fecha)}
+                                </Typography>
                             </Grid>
-                        ) : (
-                            <Typography align="center" color="textSecondary">
-                                No se pudieron cargar los detalles
-                            </Typography>
-                        )}
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCloseDetails} color="primary">
-                            Cerrar
-                        </Button>
-                    </DialogActions>
-                </Dialog>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Creado por
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedEmergency.piloto?.name || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Placa del Bus
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedEmergency.placaBus || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Número de Ruta
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedEmergency.numeroRuta || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Colegio
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedEmergency.colegio || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            {selectedEmergency.corporacion && (
+                                <Grid item xs={12} sm={6}>
+                                    <Typography variant="subtitle2" color="textSecondary">
+                                        Corporación
+                                    </Typography>
+                                    <Typography variant="body1" gutterBottom>
+                                        {selectedEmergency.corporacion}
+                                    </Typography>
+                                </Grid>
+                            )}
+                            <Grid item xs={12}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Ubicación GPS
+                                </Typography>
+                                {selectedEmergency.latitud && selectedEmergency.longitud ? (
+                                    <Box sx={{ mt: 1 }}>
+                                        <Typography variant="body2" gutterBottom>
+                                            Latitud: {selectedEmergency.latitud}, Longitud: {selectedEmergency.longitud}
+                                        </Typography>
+                                        <Button
+                                            variant="contained"
+                                            color="success"
+                                            startIcon={<LocationOnIcon />}
+                                            onClick={() => openGoogleMaps(selectedEmergency.latitud, selectedEmergency.longitud)}
+                                        >
+                                            Ver en Google Maps
+                                        </Button>
+                                    </Box>
+                                ) : (
+                                    <Chip 
+                                        icon={<LocationOffIcon />}
+                                        label="Sin ubicación GPS disponible" 
+                                        color="default"
+                                        sx={{ mt: 1 }}
+                                    />
+                                )}
+                            </Grid>
+                            <Grid item xs={12}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Mensaje de Emergencia
+                                </Typography>
+                                <Paper sx={{ p: 2, mt: 1, backgroundColor: '#ffebee' }}>
+                                    <Typography variant="body1">
+                                        {selectedEmergency.mensaje || 'Emergencia generada'}
+                                    </Typography>
+                                </Paper>
+                            </Grid>
+                        </Grid>
+                    ) : (
+                        <Typography align="center" color="textSecondary">
+                            No se pudieron cargar los detalles
+                        </Typography>
+                    )}
+                </AppDialog>
             </PageContainer>
     );
 };

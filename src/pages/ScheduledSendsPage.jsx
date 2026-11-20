@@ -2,14 +2,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import {
-    Accordion, AccordionDetails, AccordionSummary, Box, Button, Chip, CircularProgress, Dialog,
-    DialogActions, DialogContent, DialogTitle,
-    Alert, Stack, Table, TableBody, TableCell, TableHead,
+    Accordion, AccordionDetails, AccordionSummary, Box, Button, Chip, CircularProgress, Alert, Stack, Table, TableBody, TableCell, TableHead,
     TableRow, Tooltip, Typography,
 } from '@mui/material';
 import {
     Cancel as CancelIcon, Edit as EditIcon, ExpandMore as ExpandMoreIcon, Replay as ReplayIcon,
-    Visibility as VisibilityIcon,
+    Visibility as VisibilityIcon, ScheduleSend as ScheduleSendIcon,
 } from '@mui/icons-material';
 import api from '../utils/axiosConfig';
 import FilterBar from '../components/filters/FilterBar';
@@ -37,6 +35,7 @@ import {
 import { formatDateTime } from '../utils/dateFormat';
 import { SCHEDULED_SEND_STATUS, SCHEDULED_RUN_STATUS, getStatusLabel } from '../constants/statuses';
 import StatusChip from '../components/StatusChip';
+import AppDialog from '../components/dialogs/AppDialog';
 
 // Secciones desplegables de la vista (una por estado). `hint` explica qué significa cada estado.
 const SECTIONS = [
@@ -353,69 +352,73 @@ const ScheduledSendsPage = () => {
             ))}
 
             {/* Detalle */}
-            <Dialog open={!!detail} onClose={() => setDetail(null)} maxWidth="md" fullWidth>
-                <DialogTitle>{detail ? `${KIND_LABEL[detail.kind]}: ${itemTitle(detail)}` : ''}</DialogTitle>
-                <DialogContent dividers>
-                    {detail && (
-                        <Stack spacing={2}>
-                            <Typography variant="body2"><strong>Programación:</strong> {describeSchedule(detail.schedule)}</Typography>
-                            <Typography variant="body2"><strong>Próximo envío:</strong> {formatDateTime(detail.nextRunAt)}</Typography>
-                            <Box><Typography variant="body2" sx={{ mb: 0.5 }}><strong>Audiencia</strong></Typography><AudienceDetail detail={detail.audienceDetail} /></Box>
-                            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                                <strong>{detail.kind === 'circular' ? 'Mensaje' : 'Mensaje push'}:</strong>{' '}
-                                {detail.kind === 'circular' ? detail.content?.body : detail.content?.message}
+            <AppDialog
+                open={!!detail}
+                onClose={() => setDetail(null)}
+                title={detail ? itemTitle(detail) : ''}
+                subtitle={detail ? KIND_LABEL[detail.kind] : undefined}
+                icon={<ScheduleSendIcon />}
+                size="md"
+                readOnly
+            >
+                {detail && (
+                    <Stack spacing={2}>
+                        <Typography variant="body2"><strong>Programación:</strong> {describeSchedule(detail.schedule)}</Typography>
+                        <Typography variant="body2"><strong>Próximo envío:</strong> {formatDateTime(detail.nextRunAt)}</Typography>
+                        <Box><Typography variant="body2" sx={{ mb: 0.5 }}><strong>Audiencia</strong></Typography><AudienceDetail detail={detail.audienceDetail} /></Box>
+                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                            <strong>{detail.kind === 'circular' ? 'Mensaje' : 'Mensaje push'}:</strong>{' '}
+                            {detail.kind === 'circular' ? detail.content?.body : detail.content?.message}
+                        </Typography>
+                        {detail.kind === 'circular' && (
+                            <Typography variant="body2">
+                                <strong>Correo:</strong> {detail.content?.sendEmail ? 'Sí' : 'No'} · <strong>Adjunto:</strong> {detail.attachment?.name || 'Sin adjunto'}
                             </Typography>
-                            {detail.kind === 'circular' && (
-                                <Typography variant="body2">
-                                    <strong>Correo:</strong> {detail.content?.sendEmail ? 'Sí' : 'No'} · <strong>Adjunto:</strong> {detail.attachment?.name || 'Sin adjunto'}
-                                </Typography>
-                            )}
-                            <Typography variant="subtitle2">Envíos realizados</Typography>
-                            {detail.runs.length === 0 ? (
-                                <Typography variant="body2" color="text.secondary">Todavía no se ha enviado.</Typography>
-                            ) : (
-                                <Table size="small">
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>Programado para</TableCell>
-                                            <TableCell>Resultado</TableCell>
-                                            <TableCell>Destinatarios</TableCell>
-                                            <TableCell>Detalle</TableCell>
-                                            <TableCell />
+                        )}
+                        <Typography variant="subtitle2">Envíos realizados</Typography>
+                        {detail.runs.length === 0 ? (
+                            <Typography variant="body2" color="text.secondary">Todavía no se ha enviado.</Typography>
+                        ) : (
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell>Programado para</TableCell>
+                                        <TableCell>Resultado</TableCell>
+                                        <TableCell>Destinatarios</TableCell>
+                                        <TableCell>Detalle</TableCell>
+                                        <TableCell />
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {detail.runs.map((run) => (
+                                        <TableRow key={run.scheduledFor}>
+                                            <TableCell>{formatDateTime(run.scheduledFor)}</TableCell>
+                                            <TableCell><StatusChip domain={SCHEDULED_RUN_STATUS} value={run.status} /></TableCell>
+                                            <TableCell>
+                                                {run.failedRecipientsCount > 0
+                                                    ? `${run.recipientsCount ?? 0} enviados · ${run.failedRecipientsCount} fallidos`
+                                                    : (run.recipientsCount ?? '—')}
+                                            </TableCell>
+                                            <TableCell>{[REASON_LABEL[run.outcomeReason], run.errorMessage].filter(Boolean).join(' · ') || '—'}</TableCell>
+                                            <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                                                {run.canResend && (
+                                                    <PermissionGuard permission={KIND_PERMISSION[detail.kind]}>
+                                                        <Tooltip title="Envía el correo solo a quienes no lo recibieron. No duplica la circular ni la notificación en el sistema.">
+                                                            <Button size="small" variant="outlined" startIcon={<ReplayIcon />} onClick={() => handleResend(run)}>
+                                                                Reenviar a fallidos
+                                                            </Button>
+                                                        </Tooltip>
+                                                    </PermissionGuard>
+                                                )}
+                                            </TableCell>
                                         </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {detail.runs.map((run) => (
-                                            <TableRow key={run.scheduledFor}>
-                                                <TableCell>{formatDateTime(run.scheduledFor)}</TableCell>
-                                                <TableCell><StatusChip domain={SCHEDULED_RUN_STATUS} value={run.status} /></TableCell>
-                                                <TableCell>
-                                                    {run.failedRecipientsCount > 0
-                                                        ? `${run.recipientsCount ?? 0} enviados · ${run.failedRecipientsCount} fallidos`
-                                                        : (run.recipientsCount ?? '—')}
-                                                </TableCell>
-                                                <TableCell>{[REASON_LABEL[run.outcomeReason], run.errorMessage].filter(Boolean).join(' · ') || '—'}</TableCell>
-                                                <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
-                                                    {run.canResend && (
-                                                        <PermissionGuard permission={KIND_PERMISSION[detail.kind]}>
-                                                            <Tooltip title="Envía el correo solo a quienes no lo recibieron. No duplica la circular ni la notificación en el sistema.">
-                                                                <Button size="small" variant="outlined" startIcon={<ReplayIcon />} onClick={() => handleResend(run)}>
-                                                                    Reenviar a fallidos
-                                                                </Button>
-                                                            </Tooltip>
-                                                        </PermissionGuard>
-                                                    )}
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            )}
-                        </Stack>
-                    )}
-                </DialogContent>
-                <DialogActions><Button onClick={() => setDetail(null)}>Cerrar</Button></DialogActions>
-            </Dialog>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        )}
+                    </Stack>
+                )}
+            </AppDialog>
 
             <CircularMasivaModal
                 open={editing?.kind === 'circular'}

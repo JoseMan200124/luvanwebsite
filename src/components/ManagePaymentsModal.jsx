@@ -1,9 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     Grid,
     Typography,
     Switch,
@@ -38,7 +34,9 @@ import {
     PlayArrow as PlayArrowIcon, 
     Restore,
     NoteAlt as NoteAltIcon,
-    Timeline as TimelineIcon
+    Timeline as TimelineIcon,
+    Payments as PaymentsIcon,
+    InfoOutlined as InfoOutlinedIcon
 } from '@mui/icons-material';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
@@ -54,6 +52,9 @@ import useConfirm from '../hooks/useConfirm';
 import { formatDate, formatDateShort } from '../utils/dateFormat';
 import { formatQ } from '../utils/currency';
 import { SERVICE_STATUS } from '../constants/statuses';
+import { validate, hasErrors, focusFirstError } from '../utils/validators';
+import AppDialog from './dialogs/AppDialog';
+import MoneyField from './form/MoneyField';
 
 // cache TTL (ms)
 const PAYMENT_HIST_CACHE_TTL = 1000 * 60 * 5; // 5 minutes
@@ -533,6 +534,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     const [openExonerateDialog, setOpenExonerateDialog] = useState(false);
     const [openDiscountModal, setOpenDiscountModal] = useState(false);
     const [exonerateAmount, setExonerateAmount] = useState('');
+    const [exonerateError, setExonerateError] = useState('');
     const [globalFreezeDialogMode, setGlobalFreezeDialogMode] = useState(null);
     const [globalFreezeReason, setGlobalFreezeReason] = useState('');
 
@@ -917,654 +919,636 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
     };
 
     return (
-        <Dialog open={open} onClose={onClose} fullWidth maxWidth="md" fullScreen={isMobile} PaperProps={{ sx: { m: { xs: 0, sm: 2 }, maxHeight: { xs: '100dvh', sm: 'calc(100% - 64px)' } } }}>
-            <DialogTitle>Gestión de Pagos</DialogTitle>
-            <DialogContent sx={{ p: { xs: 1.5, sm: 3 } }}>
-                <Grid container spacing={2} sx={{ mb: 2 }}>
-                    <Grid item xs={12} sm={6}>
-                        <Box sx={{ border: 'none', borderRadius: 1, p: 2, backgroundColor: '#fafafa' }}>
-                            <Typography variant="subtitle1">Familia</Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                                <Typography variant="h6"><strong>{family.familyLastName || '-'}</strong></Typography>
-                                {/** status badge */}
-                                {isDeleted ? (
-                                    <Box component="span" sx={{ ml: 1 }}>
-                                        <Box sx={{ display: 'inline-flex', alignItems: 'center', px: 1, py: 0.5, borderRadius: 1, bgcolor: '#000000', color: 'white', fontSize: 12 }}>
-                                            ELIMINADO
-                                        </Box>
+        <AppDialog
+            open={open}
+            onClose={onClose}
+            title="Gestión de pagos"
+            icon={<PaymentsIcon />}
+            size="md"
+            readOnly
+            contentSx={{ p: { xs: 1.5, sm: 3 } }}
+        >
+            <Grid container spacing={2} sx={{ mb: 2 }}>
+                <Grid item xs={12} sm={6}>
+                    <Box sx={{ border: 'none', borderRadius: 1, p: 2, backgroundColor: '#fafafa' }}>
+                        <Typography variant="subtitle1">Familia</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                            <Typography variant="h6"><strong>{family.familyLastName || '-'}</strong></Typography>
+                            {/** status badge */}
+                            {isDeleted ? (
+                                <Box component="span" sx={{ ml: 1 }}>
+                                    <Box sx={{ display: 'inline-flex', alignItems: 'center', px: 1, py: 0.5, borderRadius: 1, bgcolor: '#000000', color: 'white', fontSize: 12 }}>
+                                        ELIMINADO
                                     </Box>
-                                ) : (() => {
-                                    // Check service status and render badge for multiple states
-                                    const svcStatus = (localPayment || payment)?.serviceStatus || (payment?.User?.familyServiceStatus?.status) || 'ACTIVE';
-                                    const resumeAt = (localPayment || payment)?.resumeDate || payment?.User?.familyServiceStatus?.resumeAt || payment?.User?.FamilyDetail?.resumeAt;
+                                </Box>
+                            ) : (() => {
+                                // Check service status and render badge for multiple states
+                                const svcStatus = (localPayment || payment)?.serviceStatus || (payment?.User?.familyServiceStatus?.status) || 'ACTIVE';
+                                const resumeAt = (localPayment || payment)?.resumeDate || payment?.User?.familyServiceStatus?.resumeAt || payment?.User?.FamilyDetail?.resumeAt;
 
-                                    const renderBadge = () => {
-                                        let label = '-';
-                                        let sx = { display: 'inline-flex', alignItems: 'center', px: 1, py: 0.5, borderRadius: 1, color: 'white', fontSize: 12 };
+                                const renderBadge = () => {
+                                    let label = '-';
+                                    let sx = { display: 'inline-flex', alignItems: 'center', px: 1, py: 0.5, borderRadius: 1, color: 'white', fontSize: 12 };
 
-                                        if (svcStatus === 'ACTIVE') {
-                                            label = SERVICE_STATUS.ACTIVE.label;
-                                            sx = { ...sx, bgcolor: 'success.main' };
-                                        } else if (svcStatus === 'PAUSED') {
-                                            label = SERVICE_STATUS.PAUSED.label;
-                                            sx = { ...sx, bgcolor: 'warning.main' };
-                                        } else if (svcStatus === 'PENDING_START') {
-                                            label = SERVICE_STATUS.PENDING_START.label;
-                                            sx = { ...sx, bgcolor: 'info.main' };
-                                        } else if (svcStatus === 'SUSPENDED') {
-                                            label = SERVICE_STATUS.SUSPENDED.label;
-                                            sx = { ...sx, bgcolor: 'error.main' };
-                                        } else if (svcStatus === 'INACTIVE') {
-                                            label = SERVICE_STATUS.INACTIVE.label;
-                                            sx = { ...sx, bgcolor: '#9e9e9e' };
-                                        } else {
-                                            label = svcStatus;
-                                            sx = { ...sx, bgcolor: '#757575' };
-                                        }
+                                    if (svcStatus === 'ACTIVE') {
+                                        label = SERVICE_STATUS.ACTIVE.label;
+                                        sx = { ...sx, bgcolor: 'success.main' };
+                                    } else if (svcStatus === 'PAUSED') {
+                                        label = SERVICE_STATUS.PAUSED.label;
+                                        sx = { ...sx, bgcolor: 'warning.main' };
+                                    } else if (svcStatus === 'PENDING_START') {
+                                        label = SERVICE_STATUS.PENDING_START.label;
+                                        sx = { ...sx, bgcolor: 'info.main' };
+                                    } else if (svcStatus === 'SUSPENDED') {
+                                        label = SERVICE_STATUS.SUSPENDED.label;
+                                        sx = { ...sx, bgcolor: 'error.main' };
+                                    } else if (svcStatus === 'INACTIVE') {
+                                        label = SERVICE_STATUS.INACTIVE.label;
+                                        sx = { ...sx, bgcolor: '#9e9e9e' };
+                                    } else {
+                                        label = svcStatus;
+                                        sx = { ...sx, bgcolor: '#757575' };
+                                    }
 
-                                        const content = (
-                                            <Box component="span" sx={{ ml: 1 }}>
-                                                <Box sx={sx}>{label}</Box>
-                                            </Box>
+                                    const content = (
+                                        <Box component="span" sx={{ ml: 1 }}>
+                                            <Box sx={sx}>{label}</Box>
+                                        </Box>
+                                    );
+
+                                    if (svcStatus === 'PAUSED' && resumeAt) {
+                                        const formatted = (() => {
+                                            try {
+                                                return formatDate(resumeAt, { keepZone: true });
+                                            } catch (e) {
+                                                return String(resumeAt);
+                                            }
+                                        })();
+                                        return (
+                                            <Tooltip title={`Se reactivará automáticamente el ${formatted}`}>
+                                                <span>{content}</span>
+                                            </Tooltip>
                                         );
+                                    }
 
-                                        if (svcStatus === 'PAUSED' && resumeAt) {
-                                            const formatted = (() => {
-                                                try {
-                                                    return formatDate(resumeAt, { keepZone: true });
-                                                } catch (e) {
-                                                    return String(resumeAt);
+                                    return content;
+                                };
+
+                                return renderBadge();
+                            })()}
+                        </Box>
+
+                        <Box sx={{ display: 'flex', gap: 2, mb: 1, flexWrap: 'wrap' }}>
+                            <Box>
+                                <Typography variant="caption" color="text.secondary">Cant. Hijos</Typography>
+                                <Typography variant="body1">{family.studentsCount || 0}</Typography>
+                            </Box>
+                            <Box>
+                                <Typography variant="caption" color="text.secondary">Tipo de Ruta</Typography>
+                                <Typography variant="body1">{family.routeType || '-'}</Typography>
+                            </Box>
+                        </Box>
+
+                        <Box sx={{ display: 'flex', alignItems: { xs: 'stretch', sm: 'baseline' }, gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
+                            <Box>
+                                <Typography variant="caption" color="text.secondary">Tarifa</Typography>
+                                <Typography variant="h5">{formatQ(totalAfterDiscount)}</Typography>
+                            </Box>
+                            <Box sx={{ ml: { xs: 0, sm: 'auto' } }}>
+                                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexDirection: { xs: 'column', sm: 'row' } }}>
+                                    <Box>
+                                        <Typography variant="caption" color="text.secondary">Descuento</Typography>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <TextField
+                                                size="small"
+                                                type="number"
+                                                value={discountValue}
+                                                onChange={(e) => setDiscountValue(e.target.value)}
+                                                disabled={isDeleted}
+                                                sx={{
+                                                    width: 120,
+                                                    '& input[type=number]': { MozAppearance: 'textfield' },
+                                                    '& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 },
+                                                }}
+                                                InputProps={{
+                                                    startAdornment: (
+                                                        <InputAdornment position="start" sx={{ mr: 0.5 }}>
+                                                            <Select
+                                                                value={discountType}
+                                                                onChange={(e) => setDiscountType(e.target.value)}
+                                                                variant="standard"
+                                                                disableUnderline
+                                                                disabled={isDeleted}
+                                                                sx={{
+                                                                    fontSize: '1rem',
+                                                                    '& .MuiSelect-select': { paddingRight: '15px !important' },
+                                                                }}
+                                                            >
+                                                                <MenuItem value="amount">Q</MenuItem>
+                                                                <MenuItem value="percentage">%</MenuItem>
+                                                            </Select>
+                                                        </InputAdornment>
+                                                    ),
+                                                }}
+                                            />
+                                            <Button variant="outlined" size="small" onClick={() => {
+                                                if (isDeleted) {
+                                                    return;
                                                 }
-                                            })();
-                                            return (
-                                                <Tooltip title={`Se reactivará automáticamente el ${formatted}`}>
-                                                    <span>{content}</span>
-                                                </Tooltip>
-                                            );
-                                        }
-
-                                        return content;
-                                    };
-
-                                    return renderBadge();
-                                })()}
-                            </Box>
-
-                            <Box sx={{ display: 'flex', gap: 2, mb: 1, flexWrap: 'wrap' }}>
-                                <Box>
-                                    <Typography variant="caption" color="text.secondary">Cant. Hijos</Typography>
-                                    <Typography variant="body1">{family.studentsCount || 0}</Typography>
-                                </Box>
-                                <Box>
-                                    <Typography variant="caption" color="text.secondary">Tipo de Ruta</Typography>
-                                    <Typography variant="body1">{family.routeType || '-'}</Typography>
-                                </Box>
-                            </Box>
-
-                            <Box sx={{ display: 'flex', alignItems: { xs: 'stretch', sm: 'baseline' }, gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
-                                <Box>
-                                    <Typography variant="caption" color="text.secondary">Tarifa</Typography>
-                                    <Typography variant="h5">{formatQ(totalAfterDiscount)}</Typography>
-                                </Box>
-                                <Box sx={{ ml: { xs: 0, sm: 'auto' } }}>
-                                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexDirection: { xs: 'column', sm: 'row' } }}>
-                                        <Box>
-                                            <Typography variant="caption" color="text.secondary">Descuento</Typography>
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                <TextField
-                                                    size="small"
-                                                    type="number"
-                                                    value={discountValue}
-                                                    onChange={(e) => setDiscountValue(e.target.value)}
-                                                    disabled={isDeleted}
-                                                    sx={{
-                                                        width: 120,
-                                                        '& input[type=number]': { MozAppearance: 'textfield' },
-                                                        '& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 },
-                                                    }}
-                                                    InputProps={{
-                                                        startAdornment: (
-                                                            <InputAdornment position="start" sx={{ mr: 0.5 }}>
-                                                                <Select
-                                                                    value={discountType}
-                                                                    onChange={(e) => setDiscountType(e.target.value)}
-                                                                    variant="standard"
-                                                                    disableUnderline
-                                                                    disabled={isDeleted}
-                                                                    sx={{
-                                                                        fontSize: '1rem',
-                                                                        '& .MuiSelect-select': { paddingRight: '15px !important' },
-                                                                    }}
-                                                                >
-                                                                    <MenuItem value="amount">Q</MenuItem>
-                                                                    <MenuItem value="percentage">%</MenuItem>
-                                                                </Select>
-                                                            </InputAdornment>
-                                                        ),
-                                                    }}
-                                                />
-                                                <Button variant="outlined" size="small" onClick={() => {
-                                                    if (isDeleted) {
-                                                        return;
-                                                    }
-                                                    setOpenDiscountModal(true);
-                                                }} disabled={isDeleted}>Aplicar</Button>
-                                            </Box>
+                                                setOpenDiscountModal(true);
+                                            }} disabled={isDeleted}>Aplicar</Button>
                                         </Box>
                                     </Box>
                                 </Box>
                             </Box>
                         </Box>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                        <Box sx={{ display: 'flex', gap: 1, alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: { xs: 'flex-start', sm: 'flex-end' }, flexDirection: { xs: 'column', sm: 'row' } }}>
-                            {/* Muestran el estado de la familia: sin la llave se ven pero no se pueden cambiar */}
-                            <FormControlLabel control={<Switch checked={autoDebit} onChange={(e) => { setAutoDebit(e.target.checked); if (!isDeleted) {
-                                onAction('toggleAutoDebit', { payment, value: e.target.checked });
-                            } }} disabled={isDeleted || !hasPermission('activar-debito-automatico')} />} label="Débito Automático" />
-                            <FormControlLabel control={<Switch checked={requiresInvoice} onChange={(e) => { setRequiresInvoice(e.target.checked); if (!isDeleted) {
-                                onAction('toggleRequiresInvoice', { payment, value: e.target.checked });
-                            } }} disabled={isDeleted || !hasPermission('pagos-toggle-factura')} />} label="Factura" />
-                        </Box>
-                        {/* Download button removed per request */}
-                    </Grid>
+                    </Box>
                 </Grid>
+                <Grid item xs={12} sm={6}>
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: { xs: 'flex-start', sm: 'flex-end' }, flexDirection: { xs: 'column', sm: 'row' } }}>
+                        {/* Muestran el estado de la familia: sin la llave se ven pero no se pueden cambiar */}
+                        <FormControlLabel control={<Switch checked={autoDebit} onChange={(e) => { setAutoDebit(e.target.checked); if (!isDeleted) {
+                            onAction('toggleAutoDebit', { payment, value: e.target.checked });
+                        } }} disabled={isDeleted || !hasPermission('activar-debito-automatico')} />} label="Débito Automático" />
+                        <FormControlLabel control={<Switch checked={requiresInvoice} onChange={(e) => { setRequiresInvoice(e.target.checked); if (!isDeleted) {
+                            onAction('toggleRequiresInvoice', { payment, value: e.target.checked });
+                        } }} disabled={isDeleted || !hasPermission('pagos-toggle-factura')} />} label="Factura" />
+                    </Box>
+                    {/* Download button removed per request */}
+                </Grid>
+            </Grid>
 
-                <Box sx={{ display: 'flex', gap: 1, mb: 2, justifyContent: 'center', width: '100%', flexWrap: 'wrap' }}>
-                    <PermissionGuard permission="padres-ver-boletas">
-                        <Button variant="outlined" startIcon={<ReceiptIcon />} onClick={() => { if (!isDeleted) {
-                            handleAction('receipts');
-                        } }} disabled={isDeleted}>Boletas</Button>
-                    </PermissionGuard>
-                    {hasPermission(isGlobalPenaltyFrozen ? 'mora-descongelar' : 'mora-congelar') && (
-                        <Button
-                            variant="outlined"
-                            color={isGlobalPenaltyFrozen ? "success" : "primary"}
-                            startIcon={isGlobalPenaltyFrozen ? <PlayArrowIcon /> : <PauseIcon />}
-                            onClick={() => {
-                                if (isDeleted) {
-                                    return;
-                                }
-                                handleOpenGlobalFreezeDialog(isGlobalPenaltyFrozen ? 'unfreeze' : 'freeze');
-                            }}
-                            disabled={isDeleted}
-                        >
-                            {isGlobalPenaltyFrozen ? 'Descongelar mora global' : 'Congelar mora global'}
-                        </Button>
-                    )}
-                    {/* State changes handled elsewhere; action buttons removed */}
-                    {/* Delete/Revert payment */}
-                    <PermissionGuard permission="pagos-revertir-ultimo">
-                        <Button variant="outlined" color="warning" startIcon={<Restore />} onClick={async () => {
+            <Box sx={{ display: 'flex', gap: 1, mb: 2, justifyContent: 'center', width: '100%', flexWrap: 'wrap' }}>
+                <PermissionGuard permission="padres-ver-boletas">
+                    <Button variant="outlined" startIcon={<ReceiptIcon />} onClick={() => { if (!isDeleted) {
+                        handleAction('receipts');
+                    } }} disabled={isDeleted}>Boletas</Button>
+                </PermissionGuard>
+                {hasPermission(isGlobalPenaltyFrozen ? 'mora-descongelar' : 'mora-congelar') && (
+                    <Button
+                        variant="outlined"
+                        color={isGlobalPenaltyFrozen ? "success" : "primary"}
+                        startIcon={isGlobalPenaltyFrozen ? <PlayArrowIcon /> : <PauseIcon />}
+                        onClick={() => {
                             if (isDeleted) {
                                 return;
                             }
-                            const ok = await confirm({
-                                title: 'Revertir último pago',
-                                message: 'Se revertirá el último pago registrado. Esta acción no se puede deshacer.',
-                                confirmLabel: 'Revertir pago',
-                                tone: 'danger',
-                            });
-                            if (ok) {
-                                handleAction('deletePayment');
-                            }
-                        }} disabled={isDeleted}>Revertir pago</Button>
-                    </PermissionGuard>
-                </Box>
-
-                <Dialog open={!!globalFreezeDialogMode} onClose={handleCloseGlobalFreezeDialog} maxWidth="xs" fullWidth fullScreen={isMobile}>
-                    <DialogTitle>
-                        {globalFreezeDialogMode === 'freeze' ? 'Congelar mora global' : 'Descongelar mora global'}
-                    </DialogTitle>
-                    <DialogContent>
-                        {globalFreezeDialogMode === 'freeze' ? (
-                            <Stack spacing={2} sx={{ mt: 1 }}>
-                                <Typography variant="body2" color="text.secondary">
-                                    Esta acción pausa la mora de la familia completa. Los períodos actuales y futuros no generarán nueva mora hasta descongelar.
-                                </Typography>
-                                <TextField
-                                    label="Razón"
-                                    value={globalFreezeReason}
-                                    onChange={(event) => setGlobalFreezeReason(event.target.value)}
-                                    fullWidth
-                                    required
-                                    multiline
-                                    minRows={2}
-                                    autoFocus
-                                />
-                                <Typography variant="caption" color="text.secondary">
-                                    Mora actual: {formatQ(activePayment.penaltyDue || 0)}
-                                </Typography>
-                            </Stack>
-                        ) : (
-                            <Stack spacing={1.5} sx={{ mt: 1 }}>
-                                <Typography variant="body2" color="text.secondary">
-                                    La mora volverá a generarse desde hoy. No se cobrará retroactivo por los días en que estuvo congelada.
-                                </Typography>
-                                {activePayment.penaltyGlobalFrozenAt && (
-                                    <Typography variant="caption" color="text.secondary">
-                                        Congelada desde: {formatDate(activePayment.penaltyGlobalFrozenAt, { keepZone: true })}
-                                    </Typography>
-                                )}
-                            </Stack>
-                        )}
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCloseGlobalFreezeDialog}>Cancelar</Button>
-                        <Button
-                            variant="contained"
-                            color={globalFreezeDialogMode === 'unfreeze' ? 'success' : 'primary'}
-                            onClick={handleConfirmGlobalFreezeAction}
-                            disabled={globalFreezeDialogMode === 'freeze' && !globalFreezeReason.trim()}
-                        >
-                            Confirmar
-                        </Button>
-                    </DialogActions>
-                </Dialog>
-
-                {/* Exonerate Dialog */}
-                <Dialog open={openExonerateDialog} onClose={() => setOpenExonerateDialog(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
-                    <DialogTitle>Exonerar Mora</DialogTitle>
-                    <DialogContent>
-                        <Typography variant="body2" sx={{ mb: 1 }}>Ingrese el monto a exonerar (Q)</Typography>
-                        <TextField fullWidth type="number" value={exonerateAmount} onChange={(e) => setExonerateAmount(e.target.value)} />
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={() => { setOpenExonerateDialog(false); setExonerateAmount(''); }}>Cancelar</Button>
-                        <Button variant="contained" onClick={() => {
-                            const amt = Number(exonerateAmount || 0);
-                            if (!amt || Number.isNaN(amt) || amt <= 0) {
-                                return;
-                            }
-                            handleAction('exoneratePenalty', { exonerateAmount: amt });
-                            setOpenExonerateDialog(false);
-                            setExonerateAmount('');
-                        }}>Exonerar</Button>
-                    </DialogActions>
-                </Dialog>
-
-                {/* Dialog: Boletas (Receipts) */}
-                <Dialog open={openReceiptsDialog} onClose={() => { setOpenReceiptsDialog(false); setUploadedReceipts([]); setSelectedReceipt(null); setReceiptZoom(1); }} fullWidth maxWidth="md" fullScreen={isMobile}>
-                    <DialogTitle>Boletas</DialogTitle>
-                    <DialogContent dividers sx={{ p: { xs: 1.5, sm: 3 } }}>
-                        <ReceiptsPane
-                            uploadedReceipts={uploadedReceipts}
-                            uploadedReceiptsLoading={uploadedReceiptsLoading}
-                            boletaMonth={boletaMonth}
-                            setBoletaMonth={setBoletaMonth}
-                            boletaMonthOptions={boletaMonthOptions}
-                            filteredUploadedReceipts={filteredUploadedReceipts}
-                            selectedReceipt={selectedReceipt}
-                            setSelectedReceipt={setSelectedReceipt}
-                            receiptZoom={receiptZoom}
-                            setReceiptZoom={setReceiptZoom}
-                            downloadFile={downloadFile}
-                            canManageReceipts={hasPermission('admin-subir-boletas')}
-                            onChangeReceiptStatus={handleChangeReceiptStatus}
-                        />
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={() => { setOpenReceiptsDialog(false); setUploadedReceipts([]); setSelectedReceipt(null); setReceiptZoom(1); }}>Cerrar</Button>
-                    </DialogActions>
-                </Dialog>
-
-                {/* Discount modal */}
-                <RetroactiveApplyModal
-                    open={openDiscountModal}
-                    onClose={() => setOpenDiscountModal(false)}
-                    mode="DISCOUNT"
-                    payment={localPayment || payment}
-                    currentDiscount={discountType === 'amount' ? discountValue : 0}
-                    currentPercent={discountType === 'percentage' ? discountValue : null}
-                    onApplied={() => {
-                        (async () => {
-                            invalidateHistoryCacheForPayment();
-
-                            // Refresh local payment snapshot inside this modal
-                            try {
-                                const id = (localPayment || payment)?.id;
-                                if (id) {
-                                    const res = await api.get(`/payments/${id}`);
-                                    if (res?.data) {
-                                        setLocalPayment(res.data.payment || res.data);
-                                    }
-                                }
-                            } catch (err) {
-                                console.error('Error fetching updated payment after applying discount', err);
-                            }
-
-                            // Ask parent page to refresh list/analysis (no legacy discount-save flow)
-                            onAction('refreshPayments', { payment: (localPayment || payment) });
-                        })();
-                    }}
-                />
-                {!histLoading && sortedHistories.length > 0 && (
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontStyle: 'italic' }}>
-                        ℹ️ Mostrando solo pagos realizados. Para ver el flujo completo (créditos automáticos, distribuciones, etc.) usa la pestaña "Flujo Completo".
-                    </Typography>
-                )}
-
-                <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 1 }}>
-                    <Tabs
-                        value={tabValue}
-                        onChange={(e, newVal) => setTabValue(newVal)}
-                        variant="fullWidth"
-                        textColor="primary"
-                        indicatorColor="primary"
+                            handleOpenGlobalFreezeDialog(isGlobalPenaltyFrozen ? 'unfreeze' : 'freeze');
+                        }}
+                        disabled={isDeleted}
                     >
-                        <Tab
-                            value="payments"
-                            label="Pagos Registrados"
-                            icon={<ReceiptIcon fontSize="small" />}
-                            iconPosition="start"
-                        />
-                        <Tab
-                            value="flow"
-                            label="Flujo Completo"
-                            icon={<TimelineIcon fontSize="small" />}
-                            iconPosition="start"
-                        />
-                    </Tabs>
-                </Box>
+                        {isGlobalPenaltyFrozen ? 'Descongelar mora global' : 'Congelar mora global'}
+                    </Button>
+                )}
+                {/* State changes handled elsewhere; action buttons removed */}
+                {/* Delete/Revert payment */}
+                <PermissionGuard permission="pagos-revertir-ultimo">
+                    <Button variant="outlined" color="warning" startIcon={<Restore />} onClick={async () => {
+                        if (isDeleted) {
+                            return;
+                        }
+                        const ok = await confirm({
+                            title: 'Revertir último pago',
+                            message: 'Se revertirá el último pago registrado. Esta acción no se puede deshacer.',
+                            confirmLabel: 'Revertir pago',
+                            tone: 'danger',
+                        });
+                        if (ok) {
+                            handleAction('deletePayment');
+                        }
+                    }} disabled={isDeleted}>Revertir pago</Button>
+                </PermissionGuard>
+            </Box>
 
-                {/* Tab: Pagos Registrados (historial simplificado) */}
-                {tabValue === 'payments' && (
-                <Box sx={{ overflowX: 'auto', maxWidth: '100%' }}>
-                {isMobile ? (
-                    <Stack spacing={1.25}>
-                        {(!histLoading && sortedHistories.length === 0) && (
-                            <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
-                                <Typography variant="body2" color="text.secondary">No hay transacciones registradas.</Typography>
-                            </Paper>
-                        )}
-                        {histLoading && (
-                            <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
-                                <Typography variant="body2" color="text.secondary">Cargando historial...</Typography>
-                            </Paper>
-                        )}
-                        {!histLoading && sortedHistories.map((h) => (
-                            <HistoryMobileCard
-                                key={h.id || `${h.lastPaymentDate || ''}-${Number(h.amountPaid || 0)}`}
-                                history={h}
-                                onToggleInvoiceRow={hasPermission('pagos-v2-toggle-factura') ? handleToggleInvoiceRow : undefined}
-                                onOpenNotes={(notes) => { setTxNotes(notes || ''); setOpenTxNotes(true); }}
-                                onOpenExplanation={handleOpenExplanation}
-                            />
-                        ))}
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-start', maxWidth: '100%' }}>
-                            <AppTablePagination
-                                count={histTotal}
-                                {...histTable.paginationProps}
-                                sx={{
-                                    '& .MuiTablePagination-toolbar': { justifyContent: 'flex-start', paddingLeft: 0, flexWrap: 'wrap' },
-                                    '& .MuiTablePagination-spacer': { display: 'none' }
-                                }}
-                            />
-                        </Box>
+            <AppDialog
+                open={!!globalFreezeDialogMode}
+                onClose={handleCloseGlobalFreezeDialog}
+                title={globalFreezeDialogMode === 'freeze' ? 'Congelar mora global' : 'Descongelar mora global'}
+                size="xs"
+                onSubmit={handleConfirmGlobalFreezeAction}
+                submitLabel="Confirmar"
+                submitDisabled={globalFreezeDialogMode === 'freeze' && !globalFreezeReason.trim()}
+            >
+                {globalFreezeDialogMode === 'freeze' ? (
+                    <Stack spacing={2} sx={{ mt: 1 }}>
+                        <Typography variant="body2" color="text.secondary">
+                            Esta acción pausa la mora de la familia completa. Los períodos actuales y futuros no generarán nueva mora hasta descongelar.
+                        </Typography>
+                        <TextField
+                            label="Razón"
+                            value={globalFreezeReason}
+                            onChange={(event) => setGlobalFreezeReason(event.target.value)}
+                            fullWidth
+                            required
+                            multiline
+                            minRows={2}
+                            autoFocus
+                        />
+                        <Typography variant="caption" color="text.secondary">
+                            Mora actual: {formatQ(activePayment.penaltyDue || 0)}
+                        </Typography>
                     </Stack>
                 ) : (
-                <Table size="small" sx={{ width: '100%' }}>
-                    <SortableTableHead columns={HISTORY_COLUMNS} {...histTable.sortProps} />
-                    <TableBody>
-                        {(!histLoading && sortedHistories.length === 0) && (
-                            <TableRow>
-                                <TableCell colSpan={8} align="center">No hay transacciones registradas.</TableCell>
-                            </TableRow>
-                        )}
-                        {histLoading && (
-                            <TableRow>
-                                <TableCell colSpan={8} align="center">Cargando historial...</TableCell>
-                            </TableRow>
-                        )}
-                        {!histLoading && sortedHistories.map((h) => {
-                            const dateVal = h.lastPaymentDate || null;
-                            const amountVal = Number(h.amountPaid || 0);
-                            const typeVal = h.type || 'PAYMENT';
-                            const sourceVal = h.source || 'MANUAL';
-                            const receiptVal = h.receiptNumber || '—';
-                            const invoiceReq = !!h.requiresInvoice;
-                            const notesVal = h.notes || '';
-                            const key = h.id || `${dateVal || ''}-${amountVal}`;
-
-                            const typeMeta = getTransactionTypeMeta(typeVal);
-                            const sourceMeta = getTransactionSourceMeta(sourceVal);
-
-                            return (
-                                <TableRow key={key} hover>
-                                    <TableCell align="center">
-                                        <Typography variant="body2">{formatDateShort(dateVal, { keepZone: true })}</Typography>
-                                    </TableCell>
-                                    <TableCell align="center">
-                                        <TransactionBadge label={typeMeta.label} backgroundColor={typeMeta.backgroundColor} />
-                                    </TableCell>
-                                    <TableCell align="center">
-                                        <TransactionBadge label={sourceMeta.label} backgroundColor={sourceMeta.backgroundColor} compact />
-                                    </TableCell>
-                                    <TableCell align="center">
-                                        <Typography variant="body2" sx={{ fontWeight: 600, color: amountVal >= 0 ? 'success.main' : 'error.main' }}>{formatQ(amountVal)}</Typography>
-                                    </TableCell>
-                                    <TableCell align="center">
-                                        <Typography variant="body2">{formatQ(h.extraordinaryDiscount || 0)}</Typography>
-                                    </TableCell>
-                                    <TableCell align="center">
-                                        <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                                            {receiptVal}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell align="center">
-                                        <Checkbox checked={invoiceReq} onChange={() => handleToggleInvoiceRow(h)} disabled={!hasPermission('pagos-v2-toggle-factura')} />
-                                    </TableCell>
-                                    <TableCell align="left">
-                                        <MuiIconButton size="small" onClick={() => { setTxNotes(h.notes || ''); setOpenTxNotes(true); }} title={notesVal ? 'Ver notas' : 'Agregar nota'}>
-                                            <NoteAltIcon fontSize="small" color={notesVal ? 'action' : 'disabled'} />
-                                        </MuiIconButton>
-                                    </TableCell>
-                                </TableRow>
-                            );
-                        })}
-
-                        <TableRow>
-                            <TableCell colSpan={8} sx={{ border: 'none', py: 1 }}>
-                                <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
-                                    <AppTablePagination
-                                        count={histTotal}
-                                        {...histTable.paginationProps}
-                                        sx={{
-                                            '& .MuiTablePagination-toolbar': { justifyContent: 'flex-start', paddingLeft: 0, flexWrap: 'wrap' },
-                                            '& .MuiTablePagination-spacer': { display: 'none' }
-                                        }}
-                                    />
-                                </Box>
-                            </TableCell>
-                        </TableRow>
-                    </TableBody>
-                </Table>
-                )}
-                </Box>
-                )}
-
-                {/* Tab: Flujo Completo */}
-                {tabValue === 'flow' && (
-                    <PaymentFlowTimeline
-                        paymentId={payment?.id}
-                        userId={payment?.userId || payment?.User?.id}
-                        familyLastName={family.familyLastName || ''}
-                    />
-                )}
-
-                {/* Dialog: Vista rápida de Notas de Transacciones */}
-                <Dialog open={openTxNotes} onClose={() => setOpenTxNotes(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
-                    <DialogTitle>Notas de Transacción</DialogTitle>
-                    <DialogContent>
-                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{txNotes || '—'}</Typography>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={() => setOpenTxNotes(false)}>Cerrar</Button>
-                    </DialogActions>
-                </Dialog>
-
-                {/* Dialog: Explicación detallada de Transacción */}
-                <Dialog open={openTxExplanation} onClose={() => setOpenTxExplanation(false)} maxWidth="sm" fullWidth fullScreen={isMobile}
-                    PaperProps={{ sx: { borderRadius: 2 } }}>
-                    <DialogTitle sx={{
-                        pb: 1,
-                        borderBottom: '1px solid #e0e0e0',
-                        backgroundColor: '#f5f7fa',
-                        fontWeight: 700
-                    }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Box sx={{
-                                width: 32, height: 32, borderRadius: '50%',
-                                backgroundColor: '#e3f2fd', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontSize: '1rem'
-                            }}>ℹ️</Box>
-                            <Box>
-                                <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: '0.95rem' }}>
-                                    {txExplanation.title}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                    Detalle de cómo se distribuyó esta transacción
-                                </Typography>
-                            </Box>
-                        </Box>
-                    </DialogTitle>
-                    <DialogContent sx={{ pt: 2.5 }}>
-                        <Typography
-                            variant="body2"
-                            sx={{
-                                whiteSpace: 'pre-wrap',
-                                fontFamily: 'system-ui, -apple-system, sans-serif',
-                                lineHeight: 1.8,
-                                '& strong': { fontWeight: 600 }
-                            }}
-                        >
-                            {txExplanation.text || 'No hay información disponible para esta transacción.'}
+                    <Stack spacing={1.5} sx={{ mt: 1 }}>
+                        <Typography variant="body2" color="text.secondary">
+                            La mora volverá a generarse desde hoy. No se cobrará retroactivo por los días en que estuvo congelada.
                         </Typography>
-                    </DialogContent>
-                    <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid #e0e0e0' }}>
-                        <Button onClick={() => setOpenTxExplanation(false)} variant="outlined" size="small">
-                            Cerrar
-                        </Button>
-                    </DialogActions>
-                </Dialog>
+                        {activePayment.penaltyGlobalFrozenAt && (
+                            <Typography variant="caption" color="text.secondary">
+                                Congelada desde: {formatDate(activePayment.penaltyGlobalFrozenAt, { keepZone: true })}
+                            </Typography>
+                        )}
+                    </Stack>
+                )}
+            </AppDialog>
 
-                {/* Dialog: Leyenda / Ayuda de la Tabla de Historial (mejor visual) */}
-                <Dialog open={openHelpLegend} onClose={() => setOpenHelpLegend(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
-                    <DialogTitle>Leyenda - Historial de Pagos</DialogTitle>
-                    <DialogContent>
-                        <Grid container spacing={2}>
-                            <Grid item xs={12}>
-                                <Typography variant="subtitle1" sx={{ mb: 1 }}>Columnas y etiquetas</Typography>
-                            </Grid>
-                            <Grid item xs={12}>
-                                <Typography variant="subtitle2" sx={{ mb: 1, display: 'inline-block', px: 1, py: 0.5, bgcolor: 'grey.100', borderRadius: 1, fontWeight: 700, textTransform: 'uppercase', fontSize: '0.9rem' }}>Período Aplicado</Typography>
-                                <List dense>
-                                    <ListItem alignItems="flex-start">
-                                        <ListItemText
-                                            primary={
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                    <Typography variant="caption" sx={{ px: 0.6, py: 0.15, borderRadius: '3px', fontSize: '0.65rem', fontWeight: 600, backgroundColor: '#fff3e0', color: '#e65100' }}>
-                                                        ✓ Tarifa
-                                                    </Typography>
-                                                    <Typography variant="caption" sx={{ fontSize: '0.65rem' }}>Ene 2026 Q910.00</Typography>
-                                                </Box>
-                                            }
-                                            secondary="Pago aplicado directamente al período. Muestra el mes y monto asignado."
-                                        />
-                                    </ListItem>
-                                    <ListItem alignItems="flex-start">
-                                        <ListItemText
-                                            primary={
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                    <Typography variant="caption" sx={{ px: 0.6, py: 0.15, borderRadius: '3px', fontSize: '0.65rem', fontWeight: 600, backgroundColor: '#e3f2fd', color: '#1565c0' }}>
-                                                        ↘ Crédito
-                                                    </Typography>
-                                                    <Typography variant="caption" sx={{ fontSize: '0.65rem' }}>Jun 2026 Q12.13</Typography>
-                                                </Box>
-                                            }
-                                            secondary="Indica que se usó crédito disponible para pagar parte de la tarifa de ese período."
-                                        />
-                                    </ListItem>
-                                    <ListItem alignItems="flex-start">
-                                        <ListItemText
-                                            primary={
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                    <Typography variant="caption" sx={{ px: 0.6, py: 0.15, borderRadius: '3px', fontSize: '0.65rem', fontWeight: 600, backgroundColor: '#e8f5e9', color: '#2e7d32' }}>
-                                                        ↗ Crédito
-                                                    </Typography>
-                                                    <Typography variant="caption" sx={{ fontSize: '0.65rem' }}>Crédito Q12.13</Typography>
-                                                </Box>
-                                            }
-                                            secondary="Muestra que esta transacción generó crédito (sobrepago). El monto se agregó al saldo de crédito disponible."
-                                        />
-                                    </ListItem>
-                                </List>
-                            </Grid>
+            {/* Exonerate Dialog */}
+            <AppDialog
+                open={openExonerateDialog}
+                onClose={() => setOpenExonerateDialog(false)}
+                title="Exonerar mora"
+                size="sm"
+                onSubmit={() => {
+                    const found = validate({ exonerateAmount }, { exonerateAmount: ['required', 'positive'] });
+                    setExonerateError(found.exonerateAmount || '');
+                    if (hasErrors(found)) {
+                        focusFirstError(found);
+                        return;
+                    }
+                    handleAction('exoneratePenalty', { exonerateAmount: Number(exonerateAmount) });
+                    setOpenExonerateDialog(false);
+                    setExonerateAmount('');
+                }}
+                submitLabel="Exonerar"
+            >
+                <MoneyField
+                    label="Monto a exonerar"
+                    name="exonerateAmount"
+                    required
+                    value={exonerateAmount}
+                    onChange={(e) => { setExonerateAmount(e.target.value); setExonerateError(''); }}
+                    error={Boolean(exonerateError)}
+                    helperText={exonerateError}
+                />
+            </AppDialog>
 
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" sx={{ mb: 1, display: 'inline-block', px: 1, py: 0.5, bgcolor: 'grey.100', borderRadius: 1, fontWeight: 700, textTransform: 'uppercase', fontSize: '0.9rem' }}>Tipo</Typography>
-                                <List dense>
-                                    <ListItem alignItems="flex-start">
-                                        <ListItemText
-                                            primary={<Chip label="TARIFA" size="small" sx={{ fontWeight: 700, backgroundColor: '#e8f5e9', color: 'rgba(0,0,0,0.87)' }} />}
-                                            secondary="Pago de la tarifa mensual."
-                                        />
-                                    </ListItem>
-                                    <ListItem alignItems="flex-start">
-                                        <ListItemText
-                                            primary={<Chip label="MORA"  size="small" sx={{ fontWeight: 700, backgroundColor: '#fff3e0', color: 'rgba(0,0,0,0.87)' }} />}
-                                            secondary="Pago aplicado a mora."
-                                        />
-                                    </ListItem>
-                                    <ListItem alignItems="flex-start">
-                                        <ListItemText
-                                            primary={<Chip label="CREDITO" size="small" sx={{ fontWeight: 700, backgroundColor: '#e1f5fe', color: 'rgba(0,0,0,0.87)' }} />}
-                                            secondary="Transacción que representa uso/actualización de crédito o descuentos."
-                                        />
-                                    </ListItem>
-                                </List>
-                            </Grid>
+            {/* Dialog: Boletas (Receipts) */}
+            <AppDialog
+                open={openReceiptsDialog}
+                onClose={() => { setOpenReceiptsDialog(false); setUploadedReceipts([]); setSelectedReceipt(null); setReceiptZoom(1); }}
+                title="Boletas"
+                size="md"
+                readOnly
+                contentSx={{ p: { xs: 1.5, sm: 3 } }}
+            >
+                <ReceiptsPane
+                    uploadedReceipts={uploadedReceipts}
+                    uploadedReceiptsLoading={uploadedReceiptsLoading}
+                    boletaMonth={boletaMonth}
+                    setBoletaMonth={setBoletaMonth}
+                    boletaMonthOptions={boletaMonthOptions}
+                    filteredUploadedReceipts={filteredUploadedReceipts}
+                    selectedReceipt={selectedReceipt}
+                    setSelectedReceipt={setSelectedReceipt}
+                    receiptZoom={receiptZoom}
+                    setReceiptZoom={setReceiptZoom}
+                    downloadFile={downloadFile}
+                    canManageReceipts={hasPermission('admin-subir-boletas')}
+                    onChangeReceiptStatus={handleChangeReceiptStatus}
+                />
+            </AppDialog>
 
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" sx={{ mb: 1, display: 'inline-block', px: 1, py: 0.5, bgcolor: 'grey.100', borderRadius: 1, fontWeight: 700, textTransform: 'uppercase', fontSize: '0.9rem' }}>Fuente</Typography>
-                                <List dense>
-                                    <ListItem alignItems="flex-start">
-                                        <ListItemText
-                                                primary={<Chip label="MANUAL" size="small" sx={{ fontWeight: 700, backgroundColor: '#fff9c4', color: 'rgba(0,0,0,0.87)' }} />}
-                                                secondary="Registro manual en el sistema."
-                                            />
-                                    </ListItem>
-                                    <ListItem alignItems="flex-start">
-                                        <ListItemText
-                                            primary={<Chip label="AUTO_DEBIT" size="small" sx={{ fontWeight: 700, backgroundColor: '#c8e6c9', color: 'rgba(0,0,0,0.87)' }} />}
-                                            secondary="Débito automático."
-                                        />
-                                    </ListItem>
-                                    <ListItem alignItems="flex-start">
-                                        <ListItemText
-                                            primary={<Chip label="CREDIT_AUTO" size="small" sx={{ fontWeight: 700, backgroundColor: '#b3e5fc', color: 'rgba(0,0,0,0.87)' }} />}
-                                            secondary="Uso automático de crédito disponible."
-                                        />
-                                    </ListItem>
-                                    <ListItem alignItems="flex-start">
-                                        <ListItemText
-                                            primary={<Chip label="FULL_DISCOUNT" size="small" sx={{ fontWeight: 700, backgroundColor: '#d1c4e9', color: 'rgba(0,0,0,0.87)' }} />}
-                                            secondary="Descuento total aplicado automáticamente."
-                                        />
-                                    </ListItem>
-                                </List>
-                            </Grid>
-                        </Grid>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={() => setOpenHelpLegend(false)}>Cerrar</Button>
-                    </DialogActions>
-                </Dialog>
-            </DialogContent>
-            <DialogActions sx={{ px: { xs: 1.5, sm: 3 }, flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' } }}>
-                <Button onClick={onClose} fullWidth={isMobile}>Cerrar</Button>
-            </DialogActions>
-        </Dialog>
+            {/* Discount modal */}
+            <RetroactiveApplyModal
+                open={openDiscountModal}
+                onClose={() => setOpenDiscountModal(false)}
+                mode="DISCOUNT"
+                payment={localPayment || payment}
+                currentDiscount={discountType === 'amount' ? discountValue : 0}
+                currentPercent={discountType === 'percentage' ? discountValue : null}
+                onApplied={() => {
+                    (async () => {
+                        invalidateHistoryCacheForPayment();
+
+                        // Refresh local payment snapshot inside this modal
+                        try {
+                            const id = (localPayment || payment)?.id;
+                            if (id) {
+                                const res = await api.get(`/payments/${id}`);
+                                if (res?.data) {
+                                    setLocalPayment(res.data.payment || res.data);
+                                }
+                            }
+                        } catch (err) {
+                            console.error('Error fetching updated payment after applying discount', err);
+                        }
+
+                        // Ask parent page to refresh list/analysis (no legacy discount-save flow)
+                        onAction('refreshPayments', { payment: (localPayment || payment) });
+                    })();
+                }}
+            />
+            {!histLoading && sortedHistories.length > 0 && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontStyle: 'italic' }}>
+                    ℹ️ Mostrando solo pagos realizados. Para ver el flujo completo (créditos automáticos, distribuciones, etc.) usa la pestaña "Flujo Completo".
+                </Typography>
+            )}
+
+            <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 1 }}>
+                <Tabs
+                    value={tabValue}
+                    onChange={(e, newVal) => setTabValue(newVal)}
+                    variant="fullWidth"
+                    textColor="primary"
+                    indicatorColor="primary"
+                >
+                    <Tab
+                        value="payments"
+                        label="Pagos Registrados"
+                        icon={<ReceiptIcon fontSize="small" />}
+                        iconPosition="start"
+                    />
+                    <Tab
+                        value="flow"
+                        label="Flujo Completo"
+                        icon={<TimelineIcon fontSize="small" />}
+                        iconPosition="start"
+                    />
+                </Tabs>
+            </Box>
+
+            {/* Tab: Pagos Registrados (historial simplificado) */}
+            {tabValue === 'payments' && (
+            <Box sx={{ overflowX: 'auto', maxWidth: '100%' }}>
+            {isMobile ? (
+                <Stack spacing={1.25}>
+                    {(!histLoading && sortedHistories.length === 0) && (
+                        <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
+                            <Typography variant="body2" color="text.secondary">No hay transacciones registradas.</Typography>
+                        </Paper>
+                    )}
+                    {histLoading && (
+                        <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
+                            <Typography variant="body2" color="text.secondary">Cargando historial...</Typography>
+                        </Paper>
+                    )}
+                    {!histLoading && sortedHistories.map((h) => (
+                        <HistoryMobileCard
+                            key={h.id || `${h.lastPaymentDate || ''}-${Number(h.amountPaid || 0)}`}
+                            history={h}
+                            onToggleInvoiceRow={hasPermission('pagos-v2-toggle-factura') ? handleToggleInvoiceRow : undefined}
+                            onOpenNotes={(notes) => { setTxNotes(notes || ''); setOpenTxNotes(true); }}
+                            onOpenExplanation={handleOpenExplanation}
+                        />
+                    ))}
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-start', maxWidth: '100%' }}>
+                        <AppTablePagination
+                            count={histTotal}
+                            {...histTable.paginationProps}
+                            sx={{
+                                '& .MuiTablePagination-toolbar': { justifyContent: 'flex-start', paddingLeft: 0, flexWrap: 'wrap' },
+                                '& .MuiTablePagination-spacer': { display: 'none' }
+                            }}
+                        />
+                    </Box>
+                </Stack>
+            ) : (
+            <Table size="small" sx={{ width: '100%' }}>
+                <SortableTableHead columns={HISTORY_COLUMNS} {...histTable.sortProps} />
+                <TableBody>
+                    {(!histLoading && sortedHistories.length === 0) && (
+                        <TableRow>
+                            <TableCell colSpan={8} align="center">No hay transacciones registradas.</TableCell>
+                        </TableRow>
+                    )}
+                    {histLoading && (
+                        <TableRow>
+                            <TableCell colSpan={8} align="center">Cargando historial...</TableCell>
+                        </TableRow>
+                    )}
+                    {!histLoading && sortedHistories.map((h) => {
+                        const dateVal = h.lastPaymentDate || null;
+                        const amountVal = Number(h.amountPaid || 0);
+                        const typeVal = h.type || 'PAYMENT';
+                        const sourceVal = h.source || 'MANUAL';
+                        const receiptVal = h.receiptNumber || '—';
+                        const invoiceReq = !!h.requiresInvoice;
+                        const notesVal = h.notes || '';
+                        const key = h.id || `${dateVal || ''}-${amountVal}`;
+
+                        const typeMeta = getTransactionTypeMeta(typeVal);
+                        const sourceMeta = getTransactionSourceMeta(sourceVal);
+
+                        return (
+                            <TableRow key={key} hover>
+                                <TableCell align="center">
+                                    <Typography variant="body2">{formatDateShort(dateVal, { keepZone: true })}</Typography>
+                                </TableCell>
+                                <TableCell align="center">
+                                    <TransactionBadge label={typeMeta.label} backgroundColor={typeMeta.backgroundColor} />
+                                </TableCell>
+                                <TableCell align="center">
+                                    <TransactionBadge label={sourceMeta.label} backgroundColor={sourceMeta.backgroundColor} compact />
+                                </TableCell>
+                                <TableCell align="center">
+                                    <Typography variant="body2" sx={{ fontWeight: 600, color: amountVal >= 0 ? 'success.main' : 'error.main' }}>{formatQ(amountVal)}</Typography>
+                                </TableCell>
+                                <TableCell align="center">
+                                    <Typography variant="body2">{formatQ(h.extraordinaryDiscount || 0)}</Typography>
+                                </TableCell>
+                                <TableCell align="center">
+                                    <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                                        {receiptVal}
+                                    </Typography>
+                                </TableCell>
+                                <TableCell align="center">
+                                    <Checkbox checked={invoiceReq} onChange={() => handleToggleInvoiceRow(h)} disabled={!hasPermission('pagos-v2-toggle-factura')} />
+                                </TableCell>
+                                <TableCell align="left">
+                                    <MuiIconButton size="small" onClick={() => { setTxNotes(h.notes || ''); setOpenTxNotes(true); }} title={notesVal ? 'Ver notas' : 'Agregar nota'}>
+                                        <NoteAltIcon fontSize="small" color={notesVal ? 'action' : 'disabled'} />
+                                    </MuiIconButton>
+                                </TableCell>
+                            </TableRow>
+                        );
+                    })}
+
+                    <TableRow>
+                        <TableCell colSpan={8} sx={{ border: 'none', py: 1 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
+                                <AppTablePagination
+                                    count={histTotal}
+                                    {...histTable.paginationProps}
+                                    sx={{
+                                        '& .MuiTablePagination-toolbar': { justifyContent: 'flex-start', paddingLeft: 0, flexWrap: 'wrap' },
+                                        '& .MuiTablePagination-spacer': { display: 'none' }
+                                    }}
+                                />
+                            </Box>
+                        </TableCell>
+                    </TableRow>
+                </TableBody>
+            </Table>
+            )}
+            </Box>
+            )}
+
+            {/* Tab: Flujo Completo */}
+            {tabValue === 'flow' && (
+                <PaymentFlowTimeline
+                    paymentId={payment?.id}
+                    userId={payment?.userId || payment?.User?.id}
+                    familyLastName={family.familyLastName || ''}
+                />
+            )}
+
+            {/* Dialog: Vista rápida de Notas de Transacciones */}
+            <AppDialog
+                open={openTxNotes}
+                onClose={() => setOpenTxNotes(false)}
+                title="Notas de transacción"
+                size="sm"
+                readOnly
+            >
+                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{txNotes || '—'}</Typography>
+            </AppDialog>
+
+            {/* Dialog: Explicación detallada de Transacción */}
+            <AppDialog
+                open={openTxExplanation}
+                onClose={() => setOpenTxExplanation(false)}
+                title={txExplanation.title}
+                subtitle="Detalle de cómo se distribuyó esta transacción"
+                icon={<InfoOutlinedIcon />}
+                size="sm"
+                readOnly
+            >
+                <Typography
+                    variant="body2"
+                    sx={{
+                        whiteSpace: 'pre-wrap',
+                        fontFamily: 'system-ui, -apple-system, sans-serif',
+                        lineHeight: 1.8,
+                        '& strong': { fontWeight: 600 }
+                    }}
+                >
+                    {txExplanation.text || 'No hay información disponible para esta transacción.'}
+                </Typography>
+            </AppDialog>
+
+            {/* Dialog: Leyenda / Ayuda de la Tabla de Historial (mejor visual) */}
+            <AppDialog
+                open={openHelpLegend}
+                onClose={() => setOpenHelpLegend(false)}
+                title="Leyenda - historial de pagos"
+                size="sm"
+                readOnly
+            >
+                <Grid container spacing={2}>
+                    <Grid item xs={12}>
+                        <Typography variant="subtitle1" sx={{ mb: 1 }}>Columnas y etiquetas</Typography>
+                    </Grid>
+                    <Grid item xs={12}>
+                        <Typography variant="subtitle2" sx={{ mb: 1, display: 'inline-block', px: 1, py: 0.5, bgcolor: 'grey.100', borderRadius: 1, fontWeight: 700, textTransform: 'uppercase', fontSize: '0.9rem' }}>Período Aplicado</Typography>
+                        <List dense>
+                            <ListItem alignItems="flex-start">
+                                <ListItemText
+                                    primary={
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                            <Typography variant="caption" sx={{ px: 0.6, py: 0.15, borderRadius: '3px', fontSize: '0.65rem', fontWeight: 600, backgroundColor: '#fff3e0', color: '#e65100' }}>
+                                                ✓ Tarifa
+                                            </Typography>
+                                            <Typography variant="caption" sx={{ fontSize: '0.65rem' }}>Ene 2026 Q910.00</Typography>
+                                        </Box>
+                                    }
+                                    secondary="Pago aplicado directamente al período. Muestra el mes y monto asignado."
+                                />
+                            </ListItem>
+                            <ListItem alignItems="flex-start">
+                                <ListItemText
+                                    primary={
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                            <Typography variant="caption" sx={{ px: 0.6, py: 0.15, borderRadius: '3px', fontSize: '0.65rem', fontWeight: 600, backgroundColor: '#e3f2fd', color: '#1565c0' }}>
+                                                ↘ Crédito
+                                            </Typography>
+                                            <Typography variant="caption" sx={{ fontSize: '0.65rem' }}>Jun 2026 Q12.13</Typography>
+                                        </Box>
+                                    }
+                                    secondary="Indica que se usó crédito disponible para pagar parte de la tarifa de ese período."
+                                />
+                            </ListItem>
+                            <ListItem alignItems="flex-start">
+                                <ListItemText
+                                    primary={
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                            <Typography variant="caption" sx={{ px: 0.6, py: 0.15, borderRadius: '3px', fontSize: '0.65rem', fontWeight: 600, backgroundColor: '#e8f5e9', color: '#2e7d32' }}>
+                                                ↗ Crédito
+                                            </Typography>
+                                            <Typography variant="caption" sx={{ fontSize: '0.65rem' }}>Crédito Q12.13</Typography>
+                                        </Box>
+                                    }
+                                    secondary="Muestra que esta transacción generó crédito (sobrepago). El monto se agregó al saldo de crédito disponible."
+                                />
+                            </ListItem>
+                        </List>
+                    </Grid>
+
+                    <Grid item xs={12} sm={6}>
+                        <Typography variant="subtitle2" sx={{ mb: 1, display: 'inline-block', px: 1, py: 0.5, bgcolor: 'grey.100', borderRadius: 1, fontWeight: 700, textTransform: 'uppercase', fontSize: '0.9rem' }}>Tipo</Typography>
+                        <List dense>
+                            <ListItem alignItems="flex-start">
+                                <ListItemText
+                                    primary={<Chip label="TARIFA" size="small" sx={{ fontWeight: 700, backgroundColor: '#e8f5e9', color: 'rgba(0,0,0,0.87)' }} />}
+                                    secondary="Pago de la tarifa mensual."
+                                />
+                            </ListItem>
+                            <ListItem alignItems="flex-start">
+                                <ListItemText
+                                    primary={<Chip label="MORA"  size="small" sx={{ fontWeight: 700, backgroundColor: '#fff3e0', color: 'rgba(0,0,0,0.87)' }} />}
+                                    secondary="Pago aplicado a mora."
+                                />
+                            </ListItem>
+                            <ListItem alignItems="flex-start">
+                                <ListItemText
+                                    primary={<Chip label="CREDITO" size="small" sx={{ fontWeight: 700, backgroundColor: '#e1f5fe', color: 'rgba(0,0,0,0.87)' }} />}
+                                    secondary="Transacción que representa uso/actualización de crédito o descuentos."
+                                />
+                            </ListItem>
+                        </List>
+                    </Grid>
+
+                    <Grid item xs={12} sm={6}>
+                        <Typography variant="subtitle2" sx={{ mb: 1, display: 'inline-block', px: 1, py: 0.5, bgcolor: 'grey.100', borderRadius: 1, fontWeight: 700, textTransform: 'uppercase', fontSize: '0.9rem' }}>Fuente</Typography>
+                        <List dense>
+                            <ListItem alignItems="flex-start">
+                                <ListItemText
+                                        primary={<Chip label="MANUAL" size="small" sx={{ fontWeight: 700, backgroundColor: '#fff9c4', color: 'rgba(0,0,0,0.87)' }} />}
+                                        secondary="Registro manual en el sistema."
+                                    />
+                            </ListItem>
+                            <ListItem alignItems="flex-start">
+                                <ListItemText
+                                    primary={<Chip label="AUTO_DEBIT" size="small" sx={{ fontWeight: 700, backgroundColor: '#c8e6c9', color: 'rgba(0,0,0,0.87)' }} />}
+                                    secondary="Débito automático."
+                                />
+                            </ListItem>
+                            <ListItem alignItems="flex-start">
+                                <ListItemText
+                                    primary={<Chip label="CREDIT_AUTO" size="small" sx={{ fontWeight: 700, backgroundColor: '#b3e5fc', color: 'rgba(0,0,0,0.87)' }} />}
+                                    secondary="Uso automático de crédito disponible."
+                                />
+                            </ListItem>
+                            <ListItem alignItems="flex-start">
+                                <ListItemText
+                                    primary={<Chip label="FULL_DISCOUNT" size="small" sx={{ fontWeight: 700, backgroundColor: '#d1c4e9', color: 'rgba(0,0,0,0.87)' }} />}
+                                    secondary="Descuento total aplicado automáticamente."
+                                />
+                            </ListItem>
+                        </List>
+                    </Grid>
+                </Grid>
+            </AppDialog>
+        </AppDialog>
     );
 };
 

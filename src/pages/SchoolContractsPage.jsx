@@ -5,9 +5,6 @@ import {
     List,
     ListItem,
     ListItemText,
-    Dialog,
-    DialogTitle,
-    DialogContent,
     Typography,
     IconButton,
     Divider,
@@ -24,7 +21,8 @@ import {
     CloudUpload as CloudUploadIcon,
     ContentCopy as ContentCopyIcon,
     Visibility as VisibilityIcon,
-    Add as AddIcon
+    Add as AddIcon,
+    Description as DescriptionIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import FilterBar from '../components/filters/FilterBar';
@@ -47,10 +45,12 @@ import SignatureCanvas from 'react-signature-canvas';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import useNotify from '../hooks/useNotify';
+import { MESSAGES, focusFirstError } from '../utils/validators';
 import useConfirm from '../hooks/useConfirm';
 import useIsMobile from '../hooks/useIsMobile';
 import { MobileCard } from '../components/table/MobileCard';
 import { formatDateTime } from '../utils/dateFormat';
+import AppDialog from '../components/dialogs/AppDialog';
 
 // Tarjeta móvil de contratos: borde gris fino sin sombra, como antes del bloque B
 const CONTRACT_CARD_SX = { p: 2, mb: 1.5, backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: '8px' };
@@ -72,6 +72,7 @@ const SchoolContractsPage = () => {
     const [openEditor, setOpenEditor] = useState(false);
     const [currentContract, setCurrentContract] = useState(null);
     const [contractTitle, setContractTitle] = useState('');
+    const [titleError, setTitleError] = useState('');
     const [editorData, setEditorData] = useState('');
 
     // Para placeholders y firmas
@@ -368,7 +369,8 @@ const SchoolContractsPage = () => {
     // ---------------------------
     const handleSaveOrUpdate = async () => {
         if (!contractTitle.trim()) {
-            notify.warning('Por favor, ingresa un título para el contrato');
+            setTitleError(MESSAGES.required);
+            focusFirstError({ contractTitle: MESSAGES.required });
             return;
         }
         try {
@@ -652,6 +654,7 @@ const SchoolContractsPage = () => {
     // Cerrar el diálogo de creación/edición
     // ---------------------------
     const handleCloseEditor = () => {
+        setTitleError('');
         setOpenEditor(false);
         setCurrentContract(null);
         setContractTitle('');
@@ -1006,83 +1009,80 @@ const SchoolContractsPage = () => {
                 </Box>
 
                 {/* Diálogo Crear/Editar Contrato */}
-                <Dialog open={openEditor} onClose={handleCloseEditor} maxWidth="lg" fullWidth>
-                    <DialogTitle>{currentContract ? 'Editar Contrato' : 'Crear Contrato'}</DialogTitle>
-                    <DialogContent>
-                        <Grid container spacing={2}>
-                            <Grid item xs={12} md={6}>
-                                <TextField
-                                    label="Título del Contrato"
-                                    value={contractTitle}
-                                    onChange={(e) => setContractTitle(e.target.value)}
-                                    fullWidth
-                                    margin="normal"
+                <AppDialog
+                    open={openEditor}
+                    onClose={handleCloseEditor}
+                    title={currentContract ? 'Editar contrato' : 'Nuevo contrato'}
+                    icon={<DescriptionIcon />}
+                    size="lg"
+                    onSubmit={handleSaveOrUpdate}
+                    submitLabel={currentContract ? 'Actualizar contrato' : 'Guardar contrato'}
+                    readOnly={!hasPermission(currentContract ? 'contratos-editar' : 'contratos-crear')}
+                    extraActions={(
+                        <Button variant="outlined" color="secondary" onClick={handleGeneratePDF} sx={{ mr: 'auto' }}>
+                            Generar PDF
+                        </Button>
+                    )}
+                >
+                    <Grid container spacing={2}>
+                        <Grid item xs={12} md={6}>
+                            <TextField
+                                label="Título del contrato"
+                                name="contractTitle"
+                                required
+                                error={Boolean(titleError)}
+                                helperText={titleError}
+                                value={contractTitle}
+                                onChange={(e) => { setContractTitle(e.target.value); setTitleError(''); }}
+                                fullWidth
+                                margin="normal"
+                            />
+
+                            <div style={{ marginBottom: '10px' }}>
+                                <input
+                                    accept=".docx"
+                                    style={{ display: 'none' }}
+                                    id="upload-word"
+                                    type="file"
+                                    onChange={handleWordUpload}
                                 />
+                                <label htmlFor="upload-word">
+                                    <Button
+                                        variant="outlined"
+                                        component="span"
+                                        startIcon={<CloudUploadIcon />}
+                                    >
+                                        Subir Word
+                                    </Button>
+                                </label>
+                            </div>
 
-                                <div style={{ marginBottom: '10px' }}>
-                                    <input
-                                        accept=".docx"
-                                        style={{ display: 'none' }}
-                                        id="upload-word"
-                                        type="file"
-                                        onChange={handleWordUpload}
-                                    />
-                                    <label htmlFor="upload-word">
-                                        <Button
-                                            variant="outlined"
-                                            component="span"
-                                            startIcon={<CloudUploadIcon />}
-                                        >
-                                            Subir Word
-                                        </Button>
-                                    </label>
-                                </div>
-
-                                <ErrorBoundary>
-                                    <SimpleEditor editorData={editorData} setEditorData={setEditorData} />
-                                </ErrorBoundary>
-                            </Grid>
-                            <Grid item xs={12} md={6}>
-                                <Typography variant="h6">Vista Previa del Contrato</Typography>
-                                <Divider style={{ margin: '10px 0' }} />
-                                <div
-                                    style={{
-                                        border: '1px solid #ccc',
-                                        padding: '20px',
-                                        borderRadius: '4px',
-                                        minHeight: '400px',
-                                        backgroundColor: '#fff',
-                                        overflowY: 'auto',
-                                        fontFamily: "'Times New Roman', serif",
-                                        lineHeight: '1.5',
-                                        textAlign: 'justify'
-                                    }}
-                                    id="contract-preview"
-                                >
-                                    {renderContent(editorData)}
-                                </div>
-                            </Grid>
+                            <ErrorBoundary>
+                                <SimpleEditor editorData={editorData} setEditorData={setEditorData} />
+                            </ErrorBoundary>
                         </Grid>
-                        <div style={{ marginTop: '20px', textAlign: 'right' }}>
-                            {hasPermission(currentContract ? 'contratos-editar' : 'contratos-crear') && (
-                                <Button variant="contained" color="primary" onClick={handleSaveOrUpdate}>
-                                    {currentContract ? 'Actualizar Contrato' : 'Guardar Contrato'}
-                                </Button>
-                            )}
-                            <Button variant="contained" style={{ marginLeft: '10px' }} onClick={handleCloseEditor}>
-                                Cancelar
-                            </Button>
-                            <Button
-                                variant="outlined"
-                                color="secondary"
-                                style={{ marginLeft: '10px' }}
-                                onClick={handleGeneratePDF}
+                        <Grid item xs={12} md={6}>
+                            <Typography variant="h6">Vista Previa del Contrato</Typography>
+                            <Divider style={{ margin: '10px 0' }} />
+                            <div
+                                style={{
+                                    border: '1px solid #ccc',
+                                    padding: '20px',
+                                    borderRadius: '4px',
+                                    minHeight: '400px',
+                                    backgroundColor: '#fff',
+                                    overflowY: 'auto',
+                                    fontFamily: "'Times New Roman', serif",
+                                    lineHeight: '1.5',
+                                    textAlign: 'justify'
+                                }}
+                                id="contract-preview"
                             >
-                                Generar PDF
-                            </Button>
-                        </div>
-                    </DialogContent>
-                </Dialog>
+                                {renderContent(editorData)}
+                            </div>
+                        </Grid>
+                    </Grid>
+                </AppDialog>
 
                 {/* Diálogo de confirmación para eliminar contrato llenado */}
             </>

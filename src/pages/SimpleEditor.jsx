@@ -6,12 +6,7 @@ import EditorToolbar, { modules, formats } from '../components/EditorToolbar';
 import 'react-quill/dist/quill.snow.css';
 
 import {
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     TextField,
-    Button,
     Select,
     MenuItem,
     InputLabel,
@@ -20,6 +15,7 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import useNotify from '../hooks/useNotify';
+import AppDialog from '../components/dialogs/AppDialog';
 
 const SimpleEditor = ({ editorData, setEditorData }) => {
     const notify = useNotify();
@@ -98,48 +94,37 @@ const SimpleEditor = ({ editorData, setEditorData }) => {
             </Fab>
 
             {/* Diálogo para insertar placeholder */}
-            <Dialog
+            <AppDialog
                 open={openPlaceholderDialog}
                 onClose={() => setOpenPlaceholderDialog(false)}
+                title="Insertar campo"
+                size="sm"
+                onSubmit={handleInsertPlaceholder}
+                submitLabel="Insertar"
             >
-                <DialogTitle>Insertar Campo</DialogTitle>
-                <DialogContent>
-                    <TextField
-                        label="Nombre del Campo"
-                        value={placeholderName}
-                        onChange={(e) => setPlaceholderName(e.target.value)}
-                        fullWidth
-                        margin="normal"
-                        placeholder="e.g., NOMBRE, EDAD"
-                    />
-                    <FormControl fullWidth margin="normal">
-                        <InputLabel id="placeholder-type-label">Tipo de Campo</InputLabel>
-                        <Select
-                            labelId="placeholder-type-label"
-                            value={placeholderType}
-                            onChange={(e) => setPlaceholderType(e.target.value)}
-                            label="Tipo de Campo"
-                        >
-                            <MenuItem value="text">Texto</MenuItem>
-                            <MenuItem value="number">Número</MenuItem>
-                            <MenuItem value="date">Fecha</MenuItem>
-                            <MenuItem value="signature">Firma</MenuItem>
-                        </Select>
-                    </FormControl>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setOpenPlaceholderDialog(false)}>
-                        Cancelar
-                    </Button>
-                    <Button
-                        onClick={handleInsertPlaceholder}
-                        variant="contained"
-                        color="primary"
+                <TextField
+                    label="Nombre del Campo"
+                    value={placeholderName}
+                    onChange={(e) => setPlaceholderName(e.target.value)}
+                    fullWidth
+                    margin="normal"
+                    placeholder="e.g., NOMBRE, EDAD"
+                />
+                <FormControl fullWidth margin="normal">
+                    <InputLabel id="placeholder-type-label">Tipo de Campo</InputLabel>
+                    <Select
+                        labelId="placeholder-type-label"
+                        value={placeholderType}
+                        onChange={(e) => setPlaceholderType(e.target.value)}
+                        label="Tipo de Campo"
                     >
-                        Insertar
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                        <MenuItem value="text">Texto</MenuItem>
+                        <MenuItem value="number">Número</MenuItem>
+                        <MenuItem value="date">Fecha</MenuItem>
+                        <MenuItem value="signature">Firma</MenuItem>
+                    </Select>
+                </FormControl>
+            </AppDialog>
         </div>
     );
 };

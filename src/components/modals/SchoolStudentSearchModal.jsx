@@ -3,10 +3,6 @@
 import React, { useState, useContext, useCallback } from 'react';
 import {
     Paper,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     Button,
     Table,
     TableBody,
@@ -15,18 +11,17 @@ import {
     Typography,
     CircularProgress,
     Box,
-    IconButton,
     TextField,
     Grid
 } from '@mui/material';
-import { Close as CloseIcon, PersonSearch } from '@mui/icons-material';
+import { PersonSearch } from '@mui/icons-material';
 import { AuthContext } from '../../context/AuthProvider';
 import api from '../../utils/axiosConfig';
 import { getScheduleLabel } from '../../utils/scheduleConfig';
 import useTableState from '../../hooks/useTableState';
-import useIsMobile from '../../hooks/useIsMobile';
 import SortableTableHead from '../table/SortableTableHead';
 import AppTableContainer from '../table/AppTableContainer';
+import AppDialog from '../dialogs/AppDialog';
 
 const MIN_FIELD_LENGTH = 2;
 
@@ -53,7 +48,6 @@ const COLUMNS = [
 ];
 
 const SchoolStudentSearchModal = ({ open, onClose, schoolId, cicloEscolarId }) => {
-    const isMobile = useIsMobile();
     const { auth } = useContext(AuthContext);
 
     const [fields, setFields] = useState(EMPTY_FIELDS);
@@ -276,83 +270,58 @@ const SchoolStudentSearchModal = ({ open, onClose, schoolId, cicloEscolarId }) =
     };
 
     return (
-        <Dialog
+        <AppDialog
             open={open}
             onClose={handleClose}
-            maxWidth="lg"
-            fullWidth
-            fullScreen={isMobile}
-            PaperProps={{ sx: { borderRadius: { xs: 0, sm: 2 } } }}
+            title="Buscar estudiantes por parada"
+            icon={<PersonSearch />}
+            size="lg"
+            readOnly
+            contentSx={{ p: 0 }}
+            extraActions={(
+                <Typography variant="body2" color="textSecondary" sx={{ mr: 'auto' }}>
+                    {hasSearched && !loading && !error
+                        ? `${visibleStudents.length} estudiante${visibleStudents.length !== 1 ? 's' : ''} encontrado${visibleStudents.length !== 1 ? 's' : ''}`
+                        : ''}
+                </Typography>
+            )}
         >
-            <DialogTitle sx={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: { xs: 'flex-start', sm: 'center' },
-                gap: 1,
-                backgroundColor: 'primary.main',
-                color: 'white',
-                py: 2
-            }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-                    <PersonSearch />
-                    <Typography variant="h6" component="div" sx={{ overflowWrap: 'anywhere' }}>
-                        Buscar estudiantes por parada
+            <Box sx={{ p: 2 }}>
+                <Grid container spacing={2}>
+                    {SEARCH_FIELDS.map(({ key, label }) => (
+                        <Grid item xs={12} sm={6} md={4} key={key}>
+                            <TextField
+                                variant="outlined"
+                                size="small"
+                                fullWidth
+                                label={label}
+                                placeholder={`Buscar por ${label.toLowerCase()}...`}
+                                value={fields[key]}
+                                onChange={handleFieldChange(key)}
+                                onKeyPress={handleKeyPress}
+                            />
+                        </Grid>
+                    ))}
+                </Grid>
+                <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    <Button variant="contained" onClick={handleSearch} disabled={!canSearch}>
+                        Buscar
+                    </Button>
+                    <Button
+                        variant="outlined"
+                        onClick={handleClear}
+                        disabled={loading || (!hasSearched && Object.values(fields).every((v) => !v))}
+                    >
+                        Limpiar
+                    </Button>
+                    <Typography variant="caption" color="textSecondary" sx={{ alignSelf: 'center' }}>
+                        Se buscan solo los campos con al menos {MIN_FIELD_LENGTH} caracteres.
                     </Typography>
                 </Box>
-                <IconButton onClick={handleClose} sx={{ color: 'white' }} size="small">
-                    <CloseIcon />
-                </IconButton>
-            </DialogTitle>
+            </Box>
 
-            <DialogContent sx={{ p: 0 }}>
-                <Box sx={{ p: 2 }}>
-                    <Grid container spacing={2}>
-                        {SEARCH_FIELDS.map(({ key, label }) => (
-                            <Grid item xs={12} sm={6} md={4} key={key}>
-                                <TextField
-                                    variant="outlined"
-                                    size="small"
-                                    fullWidth
-                                    label={label}
-                                    placeholder={`Buscar por ${label.toLowerCase()}...`}
-                                    value={fields[key]}
-                                    onChange={handleFieldChange(key)}
-                                    onKeyPress={handleKeyPress}
-                                />
-                            </Grid>
-                        ))}
-                    </Grid>
-                    <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                        <Button variant="contained" onClick={handleSearch} disabled={!canSearch}>
-                            Buscar
-                        </Button>
-                        <Button
-                            variant="outlined"
-                            onClick={handleClear}
-                            disabled={loading || (!hasSearched && Object.values(fields).every((v) => !v))}
-                        >
-                            Limpiar
-                        </Button>
-                        <Typography variant="caption" color="textSecondary" sx={{ alignSelf: 'center' }}>
-                            Se buscan solo los campos con al menos {MIN_FIELD_LENGTH} caracteres.
-                        </Typography>
-                    </Box>
-                </Box>
-
-                {renderBody()}
-            </DialogContent>
-
-            <DialogActions sx={{ p: 2, backgroundColor: 'grey.50' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                    <Typography variant="body2" color="textSecondary">
-                        {hasSearched && !loading && !error
-                            ? `${visibleStudents.length} estudiante${visibleStudents.length !== 1 ? 's' : ''} encontrado${visibleStudents.length !== 1 ? 's' : ''}`
-                            : ''}
-                    </Typography>
-                    <Button onClick={handleClose} variant="contained">Cerrar</Button>
-                </Box>
-            </DialogActions>
-        </Dialog>
+            {renderBody()}
+        </AppDialog>
     );
 };
 

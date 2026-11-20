@@ -1,13 +1,8 @@
 // src/components/UpdateColaboradorInfoDialog.jsx
 import React, { useContext, useEffect, useState } from 'react';
 import {
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     Typography,
     TextField,
-    Button,
     MenuItem,
     Select,
     FormControl,
@@ -23,10 +18,12 @@ import { AuthContext } from '../context/AuthProvider';
 import { getPasswordChangeError } from '../utils/passwordPolicy';
 import useNotify from '../hooks/useNotify';
 import { formatClock } from '../utils/dateFormat';
+import AppDialog from './dialogs/AppDialog';
 
 const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved }) => {
     const { logout } = useContext(AuthContext);
     const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
 
     const [corporationId, setCorporationId] = useState('');
 
@@ -223,6 +220,7 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
             payload.currentPassword = currentPassword;
         }
 
+        setSaving(true);
         try {
             await api.put(`/update-colaborador-info/${corporationId}`, payload);
 
@@ -240,6 +238,8 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
             console.error('Error al enviar formulario:', error);
             const messageToShow = 'Ocurrió un error al enviar tu registro. Intenta de nuevo.';
             notify.error(error?.response?.data?.message || messageToShow);
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -248,116 +248,116 @@ const UpdateColaboradorInfoDialog = ({ open, onClose, initialData = {}, onSaved 
     }
 
     return (
-        <Dialog open={open} onClose={() => onClose?.()} fullWidth maxWidth="md">
-            <DialogTitle>Actualizar Datos de Colaborador</DialogTitle>
-            <DialogContent dividers>
-                {loading ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CircularProgress /></Box>
-                ) : (
-                    <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
-                        <Typography variant="h6" sx={{ mb: 1 }}>Información del Colaborador</Typography>
+        <AppDialog
+            open={open}
+            onClose={() => onClose?.()}
+            title="Actualizar datos de colaborador"
+            size="md"
+            onSubmit={handleSubmit}
+            submitLabel="Actualizar datos"
+            submitting={saving}
+        >
+            {loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CircularProgress /></Box>
+            ) : (
+                <Box sx={{ mt: 1 }}>
+                    <Typography variant="h6" sx={{ mb: 1 }}>Información del Colaborador</Typography>
 
-                        <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
-                            <TextField label="Nombres" fullWidth margin="normal" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
-                            <TextField label="Apellidos" fullWidth margin="normal" value={lastName} onChange={(e) => setLastName(e.target.value)} />
-                        </Box>
+                    <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
+                        <TextField label="Nombres" fullWidth margin="normal" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
+                        <TextField label="Apellidos" fullWidth margin="normal" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+                    </Box>
 
-                        <TextField label="Número de empleado" fullWidth margin="normal" value={employeeNumber} disabled />
+                    <TextField label="Número de empleado" fullWidth margin="normal" value={employeeNumber} disabled />
 
-                        <TextField label="Teléfono" fullWidth margin="normal" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="50241234567" />
+                    <TextField label="Teléfono" fullWidth margin="normal" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="50241234567" />
 
-                        <TextField label="Dirección de Servicio" fullWidth margin="normal" value={serviceAddress} onChange={(e) => setServiceAddress(e.target.value)} required placeholder="Ej: Calle Principal 123, Zona 10" />
+                    <TextField label="Dirección de Servicio" fullWidth margin="normal" value={serviceAddress} onChange={(e) => setServiceAddress(e.target.value)} required placeholder="Ej: Calle Principal 123, Zona 10" />
 
-                        <TextField label="Zona o Sector" fullWidth margin="normal" value={zoneOrSector} onChange={(e) => setZoneOrSector(e.target.value)} required placeholder="Ej: Zona 1, Sector A" />
+                    <TextField label="Zona o Sector" fullWidth margin="normal" value={zoneOrSector} onChange={(e) => setZoneOrSector(e.target.value)} required placeholder="Ej: Zona 1, Sector A" />
 
+                    <FormControl fullWidth margin="normal">
+                        <InputLabel>Tipo de Ruta</InputLabel>
+                        <Select value={routeType} onChange={(e) => setRouteType(e.target.value)} label="Tipo de Ruta" required>
+                            <MenuItem value="Completa">Completa</MenuItem>
+                            <MenuItem value="Media PM">Media PM</MenuItem>
+                            <MenuItem value="Media AM">Media AM</MenuItem>
+                        </Select>
+                    </FormControl>
+
+                    {schedules && schedules.length > 0 && (
                         <FormControl fullWidth margin="normal">
-                            <InputLabel>Tipo de Ruta</InputLabel>
-                            <Select value={routeType} onChange={(e) => setRouteType(e.target.value)} label="Tipo de Ruta" required>
-                                <MenuItem value="Completa">Completa</MenuItem>
-                                <MenuItem value="Media PM">Media PM</MenuItem>
-                                <MenuItem value="Media AM">Media AM</MenuItem>
+                            <InputLabel>Horario</InputLabel>
+                            <Select value={selectedSchedule} onChange={(e) => setSelectedSchedule(Number(e.target.value))} label="Horario">
+                                <MenuItem value={-1}>-- Seleccione --</MenuItem>
+                                {schedules.map((s, idx) => (
+                                    <MenuItem key={idx} value={idx}>{(() => {
+                                        const name = s.name || `Horario ${idx+1}`;
+                                        const entry = s.entryTime || s.entry || s.startTime || s.entry_time || '';
+                                        const exit = s.exitTime || s.exit || s.endTime || s.exit_time || '';
+                                        const entryFmt = entry ? formatClock(entry) : '';
+                                        const exitFmt = exit ? formatClock(exit) : '';
+                                        const times = entryFmt || exitFmt ? ` (${entryFmt}${entryFmt && exitFmt ? ' - ' : ''}${exitFmt})` : '';
+                                        return name + times;
+                                    })()}</MenuItem>
+                                ))}
                             </Select>
                         </FormControl>
+                    )}
 
-                        {schedules && schedules.length > 0 && (
-                            <FormControl fullWidth margin="normal">
-                                <InputLabel>Horario</InputLabel>
-                                <Select value={selectedSchedule} onChange={(e) => setSelectedSchedule(Number(e.target.value))} label="Horario">
-                                    <MenuItem value={-1}>-- Seleccione --</MenuItem>
-                                    {schedules.map((s, idx) => (
-                                        <MenuItem key={idx} value={idx}>{(() => {
-                                            const name = s.name || `Horario ${idx+1}`;
-                                            const entry = s.entryTime || s.entry || s.startTime || s.entry_time || '';
-                                            const exit = s.exitTime || s.exit || s.endTime || s.exit_time || '';
-                                            const entryFmt = entry ? formatClock(entry) : '';
-                                            const exitFmt = exit ? formatClock(exit) : '';
-                                            const times = entryFmt || exitFmt ? ` (${entryFmt}${entryFmt && exitFmt ? ' - ' : ''}${exitFmt})` : '';
-                                            return name + times;
-                                        })()}</MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        )}
+                    <Divider sx={{ my: 2 }} />
 
-                        <Divider sx={{ my: 2 }} />
+                    <Typography variant="h6" sx={{ mb: 1 }}>Contacto de Emergencia</Typography>
+                    <TextField label="Contacto de Emergencia" fullWidth margin="normal" value={emergencyContact} onChange={(e) => setEmergencyContact(e.target.value)} required />
+                    <TextField label="Parentesco" fullWidth margin="normal" value={emergencyRelationship} onChange={(e) => setEmergencyRelationship(e.target.value)} required />
+                    <TextField label="Celular" fullWidth margin="normal" value={emergencyPhone} onChange={(e) => setEmergencyPhone(e.target.value)} required />
 
-                        <Typography variant="h6" sx={{ mb: 1 }}>Contacto de Emergencia</Typography>
-                        <TextField label="Contacto de Emergencia" fullWidth margin="normal" value={emergencyContact} onChange={(e) => setEmergencyContact(e.target.value)} required />
-                        <TextField label="Parentesco" fullWidth margin="normal" value={emergencyRelationship} onChange={(e) => setEmergencyRelationship(e.target.value)} required />
-                        <TextField label="Celular" fullWidth margin="normal" value={emergencyPhone} onChange={(e) => setEmergencyPhone(e.target.value)} required />
+                    {extraFields.length > 0 && (
+                        <>
+                            <Divider sx={{ my: 2 }} />
+                            <Typography variant="h6" sx={{ mb: 1 }}>Campos Adicionales</Typography>
+                            {extraFields.map((field, idx) => (
+                                <Box key={idx} sx={{ mb: 2 }}>
+                                    <Typography variant="subtitle2" sx={{ mb: 1 }}>{field.fieldName}{field.required && ' *'}</Typography>
+                                    {field.type === 'text' && (
+                                        <TextField placeholder={field.fieldName} fullWidth required={field.required} value={getExtraValue(field.fieldName) || ''} onChange={(e) => setFormExtraValues({ ...formExtraValues, [field.fieldName]: e.target.value })} />
+                                    )}
+                                    {field.type === 'number' && (
+                                        <TextField type="number" placeholder={field.fieldName} fullWidth required={field.required} value={getExtraValue(field.fieldName) || ''} onChange={(e) => setFormExtraValues({ ...formExtraValues, [field.fieldName]: e.target.value })} />
+                                    )}
+                                    {field.type === 'date' && (
+                                        <TextField type="date" fullWidth required={field.required} InputLabelProps={{ shrink: true }} placeholder={field.fieldName} value={getExtraValue(field.fieldName) || ''} onChange={(e) => setFormExtraValues({ ...formExtraValues, [field.fieldName]: e.target.value })} />
+                                    )}
+                                    {field.type === 'select' && (
+                                        <FormControl fullWidth required={field.required}>
+                                            <InputLabel>{field.fieldName}</InputLabel>
+                                            <Select value={getExtraValue(field.fieldName) || ''} onChange={(e) => setFormExtraValues({ ...formExtraValues, [field.fieldName]: e.target.value })}>
+                                                <MenuItem value="">-- Seleccione --</MenuItem>
+                                                {(field.options || []).map((opt, i) => (<MenuItem key={i} value={opt}>{opt}</MenuItem>))}
+                                            </Select>
+                                        </FormControl>
+                                    )}
+                                </Box>
+                            ))}
+                        </>
+                    )}
 
-                        {extraFields.length > 0 && (
-                            <>
-                                <Divider sx={{ my: 2 }} />
-                                <Typography variant="h6" sx={{ mb: 1 }}>Campos Adicionales</Typography>
-                                {extraFields.map((field, idx) => (
-                                    <Box key={idx} sx={{ mb: 2 }}>
-                                        <Typography variant="subtitle2" sx={{ mb: 1 }}>{field.fieldName}{field.required && ' *'}</Typography>
-                                        {field.type === 'text' && (
-                                            <TextField placeholder={field.fieldName} fullWidth required={field.required} value={getExtraValue(field.fieldName) || ''} onChange={(e) => setFormExtraValues({ ...formExtraValues, [field.fieldName]: e.target.value })} />
-                                        )}
-                                        {field.type === 'number' && (
-                                            <TextField type="number" placeholder={field.fieldName} fullWidth required={field.required} value={getExtraValue(field.fieldName) || ''} onChange={(e) => setFormExtraValues({ ...formExtraValues, [field.fieldName]: e.target.value })} />
-                                        )}
-                                        {field.type === 'date' && (
-                                            <TextField type="date" fullWidth required={field.required} InputLabelProps={{ shrink: true }} placeholder={field.fieldName} value={getExtraValue(field.fieldName) || ''} onChange={(e) => setFormExtraValues({ ...formExtraValues, [field.fieldName]: e.target.value })} />
-                                        )}
-                                        {field.type === 'select' && (
-                                            <FormControl fullWidth required={field.required}>
-                                                <InputLabel>{field.fieldName}</InputLabel>
-                                                <Select value={getExtraValue(field.fieldName) || ''} onChange={(e) => setFormExtraValues({ ...formExtraValues, [field.fieldName]: e.target.value })}>
-                                                    <MenuItem value="">-- Seleccione --</MenuItem>
-                                                    {(field.options || []).map((opt, i) => (<MenuItem key={i} value={opt}>{opt}</MenuItem>))}
-                                                </Select>
-                                            </FormControl>
-                                        )}
-                                    </Box>
-                                ))}
-                            </>
-                        )}
+                    <Divider sx={{ my: 2 }} />
 
-                        <Divider sx={{ my: 2 }} />
+                    <Typography variant="h6" sx={{ mb: 1 }}>Datos de la Cuenta</Typography>
+                    <TextField label="Nombre de usuario" fullWidth margin="normal" value={accountUsername} onChange={(e) => setAccountUsername(e.target.value)} required disabled />
+                    <TextField label="Correo electrónico (ingresa tu correo personal)" type="email" fullWidth margin="normal" value={accountEmail} onChange={(e) => setAccountEmail(e.target.value)} required />
 
-                        <Typography variant="h6" sx={{ mb: 1 }}>Datos de la Cuenta</Typography>
-                        <TextField label="Nombre de usuario" fullWidth margin="normal" value={accountUsername} onChange={(e) => setAccountUsername(e.target.value)} required disabled />
-                        <TextField label="Correo electrónico (ingresa tu correo personal)" type="email" fullWidth margin="normal" value={accountEmail} onChange={(e) => setAccountEmail(e.target.value)} required />
-
-                        <FormControlLabel control={<Checkbox checked={changePassword} onChange={(e) => setChangePassword(e.target.checked)} />} label="¿Cambiar contraseña?" />
-                        {changePassword && (
-                            <>
-                                <TextField label="Contraseña actual" type="password" autoComplete="current-password" fullWidth margin="normal" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
-                                <TextField label="Nueva contraseña" type="password" autoComplete="new-password" fullWidth margin="normal" value={accountPassword} onChange={(e) => setAccountPassword(e.target.value)} placeholder="Nueva contraseña opcional" helperText="Mínimo 8 caracteres y distinta de la actual." />
-                            </>
-                        )}
-                    </Box>
-                )}
-            </DialogContent>
-            <DialogActions sx={{ p: 2 }}>
-                <Button onClick={() => onClose?.()}>Cerrar</Button>
-                <Button variant="contained" onClick={handleSubmit} color="primary">Actualizar Datos</Button>
-            </DialogActions>
-
-        </Dialog>
+                    <FormControlLabel control={<Checkbox checked={changePassword} onChange={(e) => setChangePassword(e.target.checked)} />} label="¿Cambiar contraseña?" />
+                    {changePassword && (
+                        <>
+                            <TextField label="Contraseña actual" type="password" autoComplete="current-password" fullWidth margin="normal" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
+                            <TextField label="Nueva contraseña" type="password" autoComplete="new-password" fullWidth margin="normal" value={accountPassword} onChange={(e) => setAccountPassword(e.target.value)} placeholder="Nueva contraseña opcional" helperText="Mínimo 8 caracteres y distinta de la actual." />
+                        </>
+                    )}
+                </Box>
+            )}
+        </AppDialog>
     );
 };
 

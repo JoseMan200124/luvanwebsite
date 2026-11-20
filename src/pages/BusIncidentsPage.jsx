@@ -16,10 +16,6 @@ import {
     Chip,
     IconButton,
     Tooltip,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     Button,
     TextField,
 } from '@mui/material';
@@ -59,6 +55,7 @@ import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
 import { formatDateTime } from '../utils/dateFormat';
+import AppDialog from '../components/dialogs/AppDialog';
 
 const NO_FAILURES_FILTER_VALUE = 'sin_fallas';
 
@@ -652,259 +649,253 @@ const BusIncidentsPage = () => {
                 </Paper>
 
                 {/* Modal de Detalles */}
-                <Dialog
+                <AppDialog
                     open={detailsOpen}
                     onClose={handleCloseDetails}
-                    maxWidth="md"
-                    fullWidth
+                    title="Detalle del incidente"
+                    icon={<CrashIcon />}
+                    size="md"
+                    readOnly
                 >
-                    <DialogTitle>Detalles del Incidente</DialogTitle>
-                    <DialogContent dividers>
-                        {loadingDetails ? (
-                            <Box display="flex" justifyContent="center" p={3}>
-                                <CircularProgress />
-                            </Box>
-                        ) : selectedIncident ? (
-                            <Grid container spacing={2}>
-                                <Grid item xs={12} sm={6}>
-                                    <Box display="flex" alignItems="center" gap={1}>
-                                        <Typography variant="subtitle2" color="textSecondary">
-                                            Fecha y Hora
-                                        </Typography>
-                                        {!editingFecha && (
+                    {loadingDetails ? (
+                        <Box display="flex" justifyContent="center" p={3}>
+                            <CircularProgress />
+                        </Box>
+                    ) : selectedIncident ? (
+                        <Grid container spacing={2}>
+                            <Grid item xs={12} sm={6}>
+                                <Box display="flex" alignItems="center" gap={1}>
+                                    <Typography variant="subtitle2" color="textSecondary">
+                                        Fecha y Hora
+                                    </Typography>
+                                    {!editingFecha && (
+                                        <PermissionGuard permission="incidentes-buses-editar">
+                                            <Tooltip title="Editar fecha y hora">
+                                                <IconButton size="small" onClick={handleStartEditFecha}>
+                                                    <EditIcon fontSize="small" />
+                                                </IconButton>
+                                            </Tooltip>
+                                        </PermissionGuard>
+                                    )}
+                                </Box>
+                                {editingFecha ? (
+                                    <Box mt={1}>
+                                        <LocalizationProvider dateAdapter={AdapterMoment}>
+                                            <DateTimePicker
+                                                value={fechaValue}
+                                                onChange={(val) => setFechaValue(val)}
+                                                disabled={savingFecha}
+                                                slotProps={{ textField: { size: 'small', fullWidth: true } }}
+                                                ampm
+                                            />
+                                        </LocalizationProvider>
+                                        <Box display="flex" gap={1} mt={1}>
                                             <PermissionGuard permission="incidentes-buses-editar">
-                                                <Tooltip title="Editar fecha y hora">
-                                                    <IconButton size="small" onClick={handleStartEditFecha}>
-                                                        <EditIcon fontSize="small" />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            </PermissionGuard>
-                                        )}
-                                    </Box>
-                                    {editingFecha ? (
-                                        <Box mt={1}>
-                                            <LocalizationProvider dateAdapter={AdapterMoment}>
-                                                <DateTimePicker
-                                                    value={fechaValue}
-                                                    onChange={(val) => setFechaValue(val)}
-                                                    disabled={savingFecha}
-                                                    slotProps={{ textField: { size: 'small', fullWidth: true } }}
-                                                    ampm
-                                                />
-                                            </LocalizationProvider>
-                                            <Box display="flex" gap={1} mt={1}>
-                                                <PermissionGuard permission="incidentes-buses-editar">
-                                                    <Button
-                                                        variant="contained"
-                                                        size="small"
-                                                        startIcon={savingFecha ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
-                                                        onClick={handleSaveFecha}
-                                                        disabled={savingFecha || !fechaValue}
-                                                    >
-                                                        Guardar
-                                                    </Button>
-                                                </PermissionGuard>
                                                 <Button
-                                                    variant="outlined"
+                                                    variant="contained"
                                                     size="small"
-                                                    startIcon={<CancelIcon />}
-                                                    onClick={handleCancelEditFecha}
-                                                    disabled={savingFecha}
+                                                    startIcon={savingFecha ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
+                                                    onClick={handleSaveFecha}
+                                                    disabled={savingFecha || !fechaValue}
                                                 >
-                                                    Cancelar
+                                                    Guardar
                                                 </Button>
-                                            </Box>
-                                        </Box>
-                                    ) : (
-                                        <Typography variant="body1" gutterBottom>
-                                            {formatDateTime(selectedIncident.fecha)}
-                                        </Typography>
-                                    )}
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Tipo de Evento
-                                    </Typography>
-                                    <Chip 
-                                        label={INCIDENT_EVENT_TYPES[selectedIncident.tipo] || selectedIncident.tipo}
-                                        color={getTipoColor(selectedIncident.tipo)}
-                                        sx={{ mt: 1 }}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Tipo de Falla
-                                    </Typography>
-                                    {selectedIncident.noFallas ? (
-                                        <Chip 
-                                            label="Sin Fallas Reportadas"
-                                            color="success"
-                                            icon={<CheckCircleIcon />}
-                                            sx={{ mt: 1 }}
-                                        />
-                                    ) : (
-                                        <Chip 
-                                            label={selectedIncident.tipoFalla === 'otro' && selectedIncident.otroFallaDetalle 
-                                                ? `Otro: ${selectedIncident.otroFallaDetalle}`
-                                                : FAILURE_TYPES[selectedIncident.tipoFalla] || selectedIncident.tipoFalla}
-                                            color={getTipoFallaColor(selectedIncident.tipoFalla)}
-                                            icon={getTipoFallaIcon(selectedIncident.tipoFalla)}
-                                            sx={{ mt: 1 }}
-                                        />
-                                    )}
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Placa del Bus
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.placaBus || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Número de Ruta
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.numeroRuta || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Colegio
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.colegio || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                {selectedIncident.corporacion && (
-                                    <Grid item xs={12} sm={6}>
-                                        <Typography variant="subtitle2" color="textSecondary">
-                                            Corporación
-                                        </Typography>
-                                        <Typography variant="body1" gutterBottom>
-                                            {selectedIncident.corporacion}
-                                        </Typography>
-                                    </Grid>
-                                )}
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Piloto
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.piloto?.name || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        ¿Afectó el Recorrido?
-                                    </Typography>
-                                    {selectedIncident.routeAffected ? (
-                                        <Chip label="Sí" color="error" size="small" sx={{ mt: 1 }} />
-                                    ) : (
-                                        <Chip label="No" color="success" size="small" sx={{ mt: 1 }} />
-                                    )}
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        ¿Pudo Continuar la Ruta?
-                                    </Typography>
-                                    {selectedIncident.pudoContinuarRuta ? (
-                                        <Chip label="Sí" color="success" size="small" sx={{ mt: 1 }} />
-                                    ) : (
-                                        <Chip label="No" color="error" size="small" sx={{ mt: 1 }} />
-                                    )}
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        ¿Se Utilizó Bus Suplente?
-                                    </Typography>
-                                    {selectedIncident.seUtilizoBusSuplente ? (
-                                        <Chip label="Sí" color="warning" size="small" sx={{ mt: 1 }} />
-                                    ) : (
-                                        <Chip label="No" color="default" size="small" sx={{ mt: 1 }} />
-                                    )}
-                                </Grid>
-                                {selectedIncident.allBuses && (
-                                    <Grid item xs={12}>
-                                        <Chip 
-                                            label="Aplica para todos los buses" 
-                                            color="info" 
-                                            sx={{ mt: 1 }} 
-                                        />
-                                    </Grid>
-                                )}
-                                <Grid item xs={12}>
-                                    <Box display="flex" alignItems="center" gap={1}>
-                                        <Typography variant="subtitle2" color="textSecondary">
-                                            Descripción del Incidente
-                                        </Typography>
-                                        {!editingDescription && (
-                                            <PermissionGuard permission="incidentes-buses-editar">
-                                                <Tooltip title="Editar descripción">
-                                                    <IconButton size="small" onClick={handleStartEditDescription}>
-                                                        <EditIcon fontSize="small" />
-                                                    </IconButton>
-                                                </Tooltip>
                                             </PermissionGuard>
-                                        )}
-                                    </Box>
-                                    {editingDescription ? (
-                                        <Box mt={1}>
-                                            <TextField
-                                                fullWidth
-                                                multiline
-                                                minRows={3}
-                                                value={descriptionValue}
-                                                onChange={(e) => setDescriptionValue(e.target.value)}
+                                            <Button
                                                 variant="outlined"
                                                 size="small"
-                                                disabled={savingDescription}
-                                            />
-                                            <Box display="flex" gap={1} mt={1}>
-                                                <PermissionGuard permission="incidentes-buses-editar">
-                                                    <Button
-                                                        variant="contained"
-                                                        size="small"
-                                                        startIcon={savingDescription ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
-                                                        onClick={handleSaveDescription}
-                                                        disabled={savingDescription}
-                                                    >
-                                                        Guardar
-                                                    </Button>
-                                                </PermissionGuard>
+                                                startIcon={<CancelIcon />}
+                                                onClick={handleCancelEditFecha}
+                                                disabled={savingFecha}
+                                            >
+                                                Cancelar
+                                            </Button>
+                                        </Box>
+                                    </Box>
+                                ) : (
+                                    <Typography variant="body1" gutterBottom>
+                                        {formatDateTime(selectedIncident.fecha)}
+                                    </Typography>
+                                )}
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Tipo de Evento
+                                </Typography>
+                                <Chip 
+                                    label={INCIDENT_EVENT_TYPES[selectedIncident.tipo] || selectedIncident.tipo}
+                                    color={getTipoColor(selectedIncident.tipo)}
+                                    sx={{ mt: 1 }}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Tipo de Falla
+                                </Typography>
+                                {selectedIncident.noFallas ? (
+                                    <Chip 
+                                        label="Sin Fallas Reportadas"
+                                        color="success"
+                                        icon={<CheckCircleIcon />}
+                                        sx={{ mt: 1 }}
+                                    />
+                                ) : (
+                                    <Chip 
+                                        label={selectedIncident.tipoFalla === 'otro' && selectedIncident.otroFallaDetalle 
+                                            ? `Otro: ${selectedIncident.otroFallaDetalle}`
+                                            : FAILURE_TYPES[selectedIncident.tipoFalla] || selectedIncident.tipoFalla}
+                                        color={getTipoFallaColor(selectedIncident.tipoFalla)}
+                                        icon={getTipoFallaIcon(selectedIncident.tipoFalla)}
+                                        sx={{ mt: 1 }}
+                                    />
+                                )}
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Placa del Bus
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.placaBus || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Número de Ruta
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.numeroRuta || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Colegio
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.colegio || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            {selectedIncident.corporacion && (
+                                <Grid item xs={12} sm={6}>
+                                    <Typography variant="subtitle2" color="textSecondary">
+                                        Corporación
+                                    </Typography>
+                                    <Typography variant="body1" gutterBottom>
+                                        {selectedIncident.corporacion}
+                                    </Typography>
+                                </Grid>
+                            )}
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Piloto
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.piloto?.name || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    ¿Afectó el Recorrido?
+                                </Typography>
+                                {selectedIncident.routeAffected ? (
+                                    <Chip label="Sí" color="error" size="small" sx={{ mt: 1 }} />
+                                ) : (
+                                    <Chip label="No" color="success" size="small" sx={{ mt: 1 }} />
+                                )}
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    ¿Pudo Continuar la Ruta?
+                                </Typography>
+                                {selectedIncident.pudoContinuarRuta ? (
+                                    <Chip label="Sí" color="success" size="small" sx={{ mt: 1 }} />
+                                ) : (
+                                    <Chip label="No" color="error" size="small" sx={{ mt: 1 }} />
+                                )}
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    ¿Se Utilizó Bus Suplente?
+                                </Typography>
+                                {selectedIncident.seUtilizoBusSuplente ? (
+                                    <Chip label="Sí" color="warning" size="small" sx={{ mt: 1 }} />
+                                ) : (
+                                    <Chip label="No" color="default" size="small" sx={{ mt: 1 }} />
+                                )}
+                            </Grid>
+                            {selectedIncident.allBuses && (
+                                <Grid item xs={12}>
+                                    <Chip 
+                                        label="Aplica para todos los buses" 
+                                        color="info" 
+                                        sx={{ mt: 1 }} 
+                                    />
+                                </Grid>
+                            )}
+                            <Grid item xs={12}>
+                                <Box display="flex" alignItems="center" gap={1}>
+                                    <Typography variant="subtitle2" color="textSecondary">
+                                        Descripción del Incidente
+                                    </Typography>
+                                    {!editingDescription && (
+                                        <PermissionGuard permission="incidentes-buses-editar">
+                                            <Tooltip title="Editar descripción">
+                                                <IconButton size="small" onClick={handleStartEditDescription}>
+                                                    <EditIcon fontSize="small" />
+                                                </IconButton>
+                                            </Tooltip>
+                                        </PermissionGuard>
+                                    )}
+                                </Box>
+                                {editingDescription ? (
+                                    <Box mt={1}>
+                                        <TextField
+                                            fullWidth
+                                            multiline
+                                            minRows={3}
+                                            value={descriptionValue}
+                                            onChange={(e) => setDescriptionValue(e.target.value)}
+                                            variant="outlined"
+                                            size="small"
+                                            disabled={savingDescription}
+                                        />
+                                        <Box display="flex" gap={1} mt={1}>
+                                            <PermissionGuard permission="incidentes-buses-editar">
                                                 <Button
-                                                    variant="outlined"
+                                                    variant="contained"
                                                     size="small"
-                                                    startIcon={<CancelIcon />}
-                                                    onClick={handleCancelEditDescription}
+                                                    startIcon={savingDescription ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
+                                                    onClick={handleSaveDescription}
                                                     disabled={savingDescription}
                                                 >
-                                                    Cancelar
+                                                    Guardar
                                                 </Button>
-                                            </Box>
+                                            </PermissionGuard>
+                                            <Button
+                                                variant="outlined"
+                                                size="small"
+                                                startIcon={<CancelIcon />}
+                                                onClick={handleCancelEditDescription}
+                                                disabled={savingDescription}
+                                            >
+                                                Cancelar
+                                            </Button>
                                         </Box>
-                                    ) : (
-                                        <Paper sx={{ p: 2, mt: 1, backgroundColor: '#f5f5f5' }}>
-                                            <Typography variant="body1">
-                                                {selectedIncident.descripcion || 'Sin descripción'}
-                                            </Typography>
-                                        </Paper>
-                                    )}
-                                </Grid>
+                                    </Box>
+                                ) : (
+                                    <Paper sx={{ p: 2, mt: 1, backgroundColor: '#f5f5f5' }}>
+                                        <Typography variant="body1">
+                                            {selectedIncident.descripcion || 'Sin descripción'}
+                                        </Typography>
+                                    </Paper>
+                                )}
                             </Grid>
-                        ) : (
-                            <Typography align="center" color="textSecondary">
-                                No se pudieron cargar los detalles
-                            </Typography>
-                        )}
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCloseDetails} color="primary">
-                            Cerrar
-                        </Button>
-                    </DialogActions>
-                </Dialog>
+                        </Grid>
+                    ) : (
+                        <Typography align="center" color="textSecondary">
+                            No se pudieron cargar los detalles
+                        </Typography>
+                    )}
+                </AppDialog>
             </PageContainer>
         </LocalizationProvider>
     );

@@ -14,11 +14,6 @@ import {
     Card,
     CardContent,
     Chip,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Button,
 } from '@mui/material';
 import { Visibility as VisibilityIcon } from '@mui/icons-material';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
@@ -40,6 +35,7 @@ import SortableTableHead from '../components/table/SortableTableHead';
 import AppTableContainer from '../components/table/AppTableContainer';
 import RowActions from '../components/table/RowActions';
 import { formatDateTime } from '../utils/dateFormat';
+import AppDialog from '../components/dialogs/AppDialog';
 
 const SCHEDULE_OPTIONS = DEFAULT_SCHEDULE_CODES.map((code) => ({ value: code, label: SCHEDULE_LABELS[code] || code }));
 
@@ -383,104 +379,97 @@ const StudentIncidentsPage = () => {
                 </Paper>
 
                 {/* Modal de Detalles */}
-                <Dialog
+                <AppDialog
                     open={detailsOpen}
                     onClose={handleCloseDetails}
-                    maxWidth="md"
-                    fullWidth
+                    title="Detalles del incidente"
+                    size="md"
+                    readOnly
                 >
-                    <DialogTitle>Detalles del Incidente</DialogTitle>
-                    <DialogContent dividers>
-                        {selectedIncident && (
-                            <Grid container spacing={2}>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Fecha y Hora
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {formatDateTime(selectedIncident.fecha)}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Estudiante
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.student ? (selectedIncident.student.fullName || 'N/A') : 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Tipo de Incidente
-                                    </Typography>
-                                    <Chip 
-                                        label={selectedIncident.incidentType === 'otro' && selectedIncident.customIncidentType 
-                                            ? `Otro: ${selectedIncident.customIncidentType}`
-                                            : INCIDENT_TYPES[selectedIncident.incidentType]}
-                                        sx={{ mt: 1 }}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Horario
-                                    </Typography>
-                                    <Chip 
-                                        label={getScheduleLabel(selectedIncident.scheduleType)}
-                                        color={getScheduleColor(selectedIncident.scheduleType)}
-                                        sx={{ mt: 1 }}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Monitora
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.monitora?.name || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Placa
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.bus?.plate || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Ruta
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.routeNumber || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Colegio
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.school?.name || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Descripción del Incidente
-                                    </Typography>
-                                    <Paper sx={{ p: 2, mt: 1, backgroundColor: '#f5f5f5' }}>
-                                        <Typography variant="body1">
-                                            {selectedIncident.description}
-                                        </Typography>
-                                    </Paper>
-                                </Grid>
+                    {selectedIncident && (
+                        <Grid container spacing={2}>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Fecha y Hora
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {formatDateTime(selectedIncident.fecha)}
+                                </Typography>
                             </Grid>
-                        )}
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCloseDetails} color="primary">
-                            Cerrar
-                        </Button>
-                    </DialogActions>
-                </Dialog>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Estudiante
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.student ? (selectedIncident.student.fullName || 'N/A') : 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Tipo de Incidente
+                                </Typography>
+                                <Chip 
+                                    label={selectedIncident.incidentType === 'otro' && selectedIncident.customIncidentType 
+                                        ? `Otro: ${selectedIncident.customIncidentType}`
+                                        : INCIDENT_TYPES[selectedIncident.incidentType]}
+                                    sx={{ mt: 1 }}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Horario
+                                </Typography>
+                                <Chip 
+                                    label={getScheduleLabel(selectedIncident.scheduleType)}
+                                    color={getScheduleColor(selectedIncident.scheduleType)}
+                                    sx={{ mt: 1 }}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Monitora
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.monitora?.name || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Placa
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.bus?.plate || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Ruta
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.routeNumber || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Colegio
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.school?.name || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Descripción del Incidente
+                                </Typography>
+                                <Paper sx={{ p: 2, mt: 1, backgroundColor: '#f5f5f5' }}>
+                                    <Typography variant="body1">
+                                        {selectedIncident.description}
+                                    </Typography>
+                                </Paper>
+                            </Grid>
+                        </Grid>
+                    )}
+                </AppDialog>
             </PageContainer>
     );
 };

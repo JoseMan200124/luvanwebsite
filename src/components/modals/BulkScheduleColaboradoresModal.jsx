@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typography, Checkbox, CircularProgress, TextField } from '@mui/material';
+import { Button, Box, Typography, Checkbox, CircularProgress, TextField } from '@mui/material';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import ExcelJS from 'exceljs';
 import api from '../../utils/axiosConfig';
 import PermissionGuard from '../PermissionGuard';
 import useNotify from '../../hooks/useNotify';
+import AppDialog from '../dialogs/AppDialog';
 
 export default function BulkScheduleColaboradoresModal({ open, onClose, corporationId }) {
   const notify = useNotify();
@@ -229,9 +231,14 @@ export default function BulkScheduleColaboradoresModal({ open, onClose, corporat
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
-      <DialogTitle>Carga Masiva de Horarios (Colaboradores)</DialogTitle>
-      <DialogContent>
+    <AppDialog
+      open={open}
+      onClose={onClose}
+      title="Carga masiva de horarios (colaboradores)"
+      icon={<UploadFileIcon />}
+      size="lg"
+      readOnly
+    >
         <Typography variant="body2" sx={{ mb: 2 }}>Selecciona los colaboradores a incluir en la plantilla. Cada fila corresponde a un colaborador.</Typography>
         {loading ? <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box> : (
           <Box sx={{ maxHeight: 260, overflow: 'auto' }}>
@@ -301,10 +308,6 @@ export default function BulkScheduleColaboradoresModal({ open, onClose, corporat
           </Box>
         )}
 
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cerrar</Button>
-      </DialogActions>
-    </Dialog>
+    </AppDialog>
   );
 }

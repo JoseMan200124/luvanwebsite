@@ -5,10 +5,6 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import { esES } from '@mui/x-date-pickers/locales';
 import {
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     Button,
     Box,
     Typography,
@@ -27,7 +23,7 @@ import {
     Paper,
     Tooltip
 } from '@mui/material';
-import { Delete as DeleteIcon, Add as AddIcon, Pause as PauseIcon, PlayArrow as PlayArrowIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Add as AddIcon, Pause as PauseIcon, PlayArrow as PlayArrowIcon, CalendarMonth as CalendarMonthIcon } from '@mui/icons-material';
 import moment from 'moment';
 import 'moment/locale/es';
 import api from '../../utils/axiosConfig';
@@ -35,6 +31,7 @@ import usePermissions from '../../hooks/usePermissions';
 import { formatMonth, formatDate } from '../../utils/dateFormat';
 import { formatQ } from '../../utils/currency';
 import { useCurrentDate } from '../../hooks/useCurrentDate';
+import AppDialog from '../dialogs/AppDialog';
 
 const PERIOD_RE = /^\d{4}-\d{2}$/;
 
@@ -397,478 +394,470 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
     };
 
     return (
-        <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-            <DialogTitle><strong>Gestionar Períodos</strong></DialogTitle>
-            <DialogContent>
-                {!paymentId && (
-                    <Alert severity="warning">No se encontró el pago seleccionado.</Alert>
-                )}
+        <AppDialog
+            open={open}
+            onClose={onClose}
+            title="Gestionar períodos"
+            icon={<CalendarMonthIcon />}
+            size="sm"
+            readOnly
+        >
+            {!paymentId && (
+                <Alert severity="warning">No se encontró el pago seleccionado.</Alert>
+            )}
 
-                {error && (
-                    <Box sx={{ mb: 2 }}>
-                        <Alert severity="error" onClose={() => setError('')}>{error}</Alert>
-                    </Box>
-                )}
-
-                {success && (
-                    <Box sx={{ mb: 2 }}>
-                        <Alert severity="success" onClose={() => setSuccess('')}>{success}</Alert>
-                    </Box>
-                )}
-
+            {error && (
                 <Box sx={{ mb: 2 }}>
-                    <Box sx={{ mb: 1 }}>
-                        <Paper variant="outlined" sx={(theme) => ({
-                            p: 2,
-                            borderColor: theme.palette.success.main,
-                            backgroundColor: alpha(theme.palette.success.main, 0.06),
-                            borderRadius: 2
-                        })}>
-                            <Typography variant="body1" sx={(theme) => ({ fontWeight: 800, color: theme.palette.success.dark, textTransform: 'uppercase' })}>
-                                📅 Agregar período
-                            </Typography>
-                            <Typography variant="caption" display="block" sx={{ color: 'text.secondary', mt: 0.5 }}>
-                                Seleccione un período y haga clic en <strong>Agregar</strong>. Puedes definir <strong>ruta</strong>, <strong>descuento</strong> y/o <strong>estudiantes</strong> solo para el período que deseas agregar.
-                            </Typography>
-                            <Typography variant="caption" display="block" sx={{ color: 'text.secondary', mt: 0.5 }}>
-                                Al no definirse ruta, descuento o estudiantes, se usará la configuración actual
-                            </Typography>
-                            <Typography variant="caption" display="block" sx={{ color: 'text.secondary', mt: 0.5 }}>
-                                Configuración actual: Ruta: <strong>{futureRouteType || '-'}</strong> · Descuento: <strong>{formatQ(futureDiscount || 0)}</strong> · Estudiantes: <strong>{studentCountFromFamily}</strong>
-                            </Typography>
-                        </Paper>
-                    </Box>
-
-                    <Paper variant="outlined" sx={(theme) => ({
-                        p: 2,
-                        borderColor: alpha(theme.palette.text.primary, 0.15),
-                        backgroundColor: theme.palette.background.paper,
-                        borderRadius: 2
-                    })}>
-                        <Box
-                            sx={(theme) => ({
-                                display: 'grid',
-                                gridTemplateColumns: '1fr',
-                                gap: 1,
-                                alignItems: 'center',
-                                [theme.breakpoints.up('md')]: {
-                                    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))'
-                                }
-                            })}
-                        >
-                            <LocalizationProvider
-                                dateAdapter={AdapterMoment}
-                                adapterLocale="es"
-                                localeText={esES.components.MuiLocalizationProvider.defaultProps.localeText}
-                            >
-                                <DatePicker
-                                    label="Período"
-                                    views={['year', 'month']}
-                                    openTo="month"
-                                    format="YYYY-MM"
-                                    value={periodPickerValue}
-                                    onChange={(newValue) => {
-                                        if (!newValue) {
-                                            setPeriodToAdd('');
-                                            return;
-                                        }
-                                        const m = moment(newValue);
-                                        setPeriodToAdd(m.isValid() ? m.format('YYYY-MM') : '');
-                                    }}
-                                    minDate={moment('2000-01-01')}
-                                    maxDate={moment(currentPeriod + '-01')}
-                                    disabled={!paymentId || loading}
-                                    slotProps={{
-                                        textField: {
-                                            size: 'small',
-                                            sx: { width: '100%' },
-                                            InputLabelProps: { shrink: true }
-                                        },
-                                        popper: {
-                                            sx: pickerPopperSx
-                                        }
-                                    }}
-                                />
-                            </LocalizationProvider>
-
-                            <TextField
-                                select
-                                size="small"
-                                label="Tipo de Ruta"
-                                value={routeTypeToAdd}
-                                onChange={(e) => setRouteTypeToAdd(e.target.value)}
-                                disabled={!paymentId || loading}
-                                InputLabelProps={{ shrink: true }}
-                                fullWidth
-                                sx={{ minWidth: 0 }}
-                                SelectProps={{
-                                    displayEmpty: true,
-                                    renderValue: (val) => {
-                                        const v = String(val || '').trim();
-                                        return v ? v : 'Config. actual';
-                                    }
-                                }}
-                            >
-                                <MenuItem value=""><em>Usar configuración actual</em></MenuItem>
-                                <MenuItem value="Completa">Completa</MenuItem>
-                                <MenuItem value="Media AM">Media AM</MenuItem>
-                                <MenuItem value="Media PM">Media PM</MenuItem>
-                            </TextField>
-
-                            <TextField
-                                size="small"
-                                type="number"
-                                label="Descuento"
-                                inputProps={{ min: 0, step: 0.01 }}
-                                placeholder={discountToAddType === 'amount' ? `Actual: ${formatQ(futureDiscount || 0)}` : '%'}
-                                value={discountToAdd}
-                                onChange={(e) => setDiscountToAdd(e.target.value)}
-                                disabled={!paymentId || loading}
-                                InputLabelProps={{ shrink: true }}
-                                fullWidth
-                                sx={{ minWidth: 0 }}
-                                InputProps={{
-                                    startAdornment: (
-                                        <InputAdornment position="start" sx={{ mr: 0.5 }}>
-                                            <Select
-                                                value={discountToAddType}
-                                                onChange={(e) => setDiscountToAddType(e.target.value)}
-                                                variant="standard"
-                                                disableUnderline
-                                                sx={{
-                                                    fontSize: '0.875rem',
-                                                    '& .MuiSelect-select': { paddingRight: '20px !important' },
-                                                }}
-                                            >
-                                                <MenuItem value="amount">Q</MenuItem>
-                                                <MenuItem value="percentage">%</MenuItem>
-                                            </Select>
-                                        </InputAdornment>
-                                    ),
-                                }}
-                            />
-
-                            <TextField
-                                size="small"
-                                label="Estudiantes"
-                                type="number"
-                                inputProps={{ min: 1, step: 1 }}
-                                placeholder={`Actual: ${studentCountFromFamily}`}
-                                value={studentsCountToAdd}
-                                onChange={(e) => setStudentsCountToAdd(e.target.value)}
-                                disabled={!paymentId || loading}
-                                InputLabelProps={{ shrink: true }}
-                                fullWidth
-                                sx={{ minWidth: 0 }}
-                            />
-                        </Box>
-
-                        <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap', justifyContent: 'center' }}>
-                            {hasPermission('pagos-v2-agregar-periodo') && (
-                                <Button
-                                    variant="contained"
-                                    startIcon={<AddIcon />}
-                                    onClick={() => handleAdd(primaryAddAction.period)}
-                                    disabled={!paymentId || loading || !primaryAddValidation.ok}
-                                    sx={{ whiteSpace: 'nowrap' }}
-                                >
-                                    {primaryAddAction.label}
-                                </Button>
-                            )}
-                        </Box>
-
-                        {periodToAdd && !addValidation.ok && addValidation.message && (
-                            <Box sx={{ mt: 1 }}>
-                                <Alert severity="warning">{addValidation.message}</Alert>
-                            </Box>
-                        )}
-                    </Paper>
+                    <Alert severity="error" onClose={() => setError('')}>{error}</Alert>
                 </Box>
+            )}
 
-                <Divider sx={{ my: 2 }} />
+            {success && (
+                <Box sx={{ mb: 2 }}>
+                    <Alert severity="success" onClose={() => setSuccess('')}>{success}</Alert>
+                </Box>
+            )}
 
+            <Box sx={{ mb: 2 }}>
                 <Box sx={{ mb: 1 }}>
                     <Paper variant="outlined" sx={(theme) => ({
                         p: 2,
-                        borderColor: theme.palette.error.main,
-                        backgroundColor: alpha(theme.palette.error.main, 0.06),
+                        borderColor: theme.palette.success.main,
+                        backgroundColor: alpha(theme.palette.success.main, 0.06),
                         borderRadius: 2
                     })}>
-                        <Typography variant="body1" sx={(theme) => ({ fontWeight: 800, color: theme.palette.error.dark, textTransform: 'uppercase' })}>
-                            🗑️ Eliminar periodos
+                        <Typography variant="body1" sx={(theme) => ({ fontWeight: 800, color: theme.palette.success.dark, textTransform: 'uppercase' })}>
+                            📅 Agregar período
                         </Typography>
                         <Typography variant="caption" display="block" sx={{ color: 'text.secondary', mt: 0.5 }}>
-                            Haz clic en <DeleteIcon fontSize="inherit" sx={{ verticalAlign: 'middle', mx: 0.25 }} />para eliminar un periodo. Solo se pueden eliminar períodos sin pagos.
+                            Seleccione un período y haga clic en <strong>Agregar</strong>. Puedes definir <strong>ruta</strong>, <strong>descuento</strong> y/o <strong>estudiantes</strong> solo para el período que deseas agregar.
+                        </Typography>
+                        <Typography variant="caption" display="block" sx={{ color: 'text.secondary', mt: 0.5 }}>
+                            Al no definirse ruta, descuento o estudiantes, se usará la configuración actual
+                        </Typography>
+                        <Typography variant="caption" display="block" sx={{ color: 'text.secondary', mt: 0.5 }}>
+                            Configuración actual: Ruta: <strong>{futureRouteType || '-'}</strong> · Descuento: <strong>{formatQ(futureDiscount || 0)}</strong> · Estudiantes: <strong>{studentCountFromFamily}</strong>
                         </Typography>
                     </Paper>
                 </Box>
 
-                {loading && (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-                        <CircularProgress size={24} />
+                <Paper variant="outlined" sx={(theme) => ({
+                    p: 2,
+                    borderColor: alpha(theme.palette.text.primary, 0.15),
+                    backgroundColor: theme.palette.background.paper,
+                    borderRadius: 2
+                })}>
+                    <Box
+                        sx={(theme) => ({
+                            display: 'grid',
+                            gridTemplateColumns: '1fr',
+                            gap: 1,
+                            alignItems: 'center',
+                            [theme.breakpoints.up('md')]: {
+                                gridTemplateColumns: 'repeat(4, minmax(0, 1fr))'
+                            }
+                        })}
+                    >
+                        <LocalizationProvider
+                            dateAdapter={AdapterMoment}
+                            adapterLocale="es"
+                            localeText={esES.components.MuiLocalizationProvider.defaultProps.localeText}
+                        >
+                            <DatePicker
+                                label="Período"
+                                views={['year', 'month']}
+                                openTo="month"
+                                format="YYYY-MM"
+                                value={periodPickerValue}
+                                onChange={(newValue) => {
+                                    if (!newValue) {
+                                        setPeriodToAdd('');
+                                        return;
+                                    }
+                                    const m = moment(newValue);
+                                    setPeriodToAdd(m.isValid() ? m.format('YYYY-MM') : '');
+                                }}
+                                minDate={moment('2000-01-01')}
+                                maxDate={moment(currentPeriod + '-01')}
+                                disabled={!paymentId || loading}
+                                slotProps={{
+                                    textField: {
+                                        size: 'small',
+                                        sx: { width: '100%' },
+                                        InputLabelProps: { shrink: true }
+                                    },
+                                    popper: {
+                                        sx: pickerPopperSx
+                                    }
+                                }}
+                            />
+                        </LocalizationProvider>
+
+                        <TextField
+                            select
+                            size="small"
+                            label="Tipo de Ruta"
+                            value={routeTypeToAdd}
+                            onChange={(e) => setRouteTypeToAdd(e.target.value)}
+                            disabled={!paymentId || loading}
+                            InputLabelProps={{ shrink: true }}
+                            fullWidth
+                            sx={{ minWidth: 0 }}
+                            SelectProps={{
+                                displayEmpty: true,
+                                renderValue: (val) => {
+                                    const v = String(val || '').trim();
+                                    return v ? v : 'Config. actual';
+                                }
+                            }}
+                        >
+                            <MenuItem value=""><em>Usar configuración actual</em></MenuItem>
+                            <MenuItem value="Completa">Completa</MenuItem>
+                            <MenuItem value="Media AM">Media AM</MenuItem>
+                            <MenuItem value="Media PM">Media PM</MenuItem>
+                        </TextField>
+
+                        <TextField
+                            size="small"
+                            type="number"
+                            label="Descuento"
+                            inputProps={{ min: 0, step: 0.01 }}
+                            placeholder={discountToAddType === 'amount' ? `Actual: ${formatQ(futureDiscount || 0)}` : '%'}
+                            value={discountToAdd}
+                            onChange={(e) => setDiscountToAdd(e.target.value)}
+                            disabled={!paymentId || loading}
+                            InputLabelProps={{ shrink: true }}
+                            fullWidth
+                            sx={{ minWidth: 0 }}
+                            InputProps={{
+                                startAdornment: (
+                                    <InputAdornment position="start" sx={{ mr: 0.5 }}>
+                                        <Select
+                                            value={discountToAddType}
+                                            onChange={(e) => setDiscountToAddType(e.target.value)}
+                                            variant="standard"
+                                            disableUnderline
+                                            sx={{
+                                                fontSize: '0.875rem',
+                                                '& .MuiSelect-select': { paddingRight: '20px !important' },
+                                            }}
+                                        >
+                                            <MenuItem value="amount">Q</MenuItem>
+                                            <MenuItem value="percentage">%</MenuItem>
+                                        </Select>
+                                    </InputAdornment>
+                                ),
+                            }}
+                        />
+
+                        <TextField
+                            size="small"
+                            label="Estudiantes"
+                            type="number"
+                            inputProps={{ min: 1, step: 1 }}
+                            placeholder={`Actual: ${studentCountFromFamily}`}
+                            value={studentsCountToAdd}
+                            onChange={(e) => setStudentsCountToAdd(e.target.value)}
+                            disabled={!paymentId || loading}
+                            InputLabelProps={{ shrink: true }}
+                            fullWidth
+                            sx={{ minWidth: 0 }}
+                        />
                     </Box>
-                )}
 
-                {!loading && (
-                    <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
-                        <Box sx={{
-                            maxHeight: 320,
-                            overflow: 'auto',
-                            borderTop: '1px solid rgba(0,0,0,0.06)'
-                        }}>
-                        {sortedPeriods.length === 0 ? (
-                            <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
-                                No hay períodos registrados.
-                            </Typography>
-                        ) : (
-                            <List dense sx={{ p: 0 }}>
-                                {sortedPeriods.map((p) => {
-                            const per = String(p.period || '');
-                            const isCurrent = per === currentPeriod;
-                            const status = String(p.status || '').toUpperCase();
-                            const penaltyStatus = String(p.penaltyStatus || 'SIN_MORA').toUpperCase();
-                            const penaltyFrozen = !!p.penaltyFrozen;
-                            const amountPaid = Number(p.amountPaid || 0);
-                            const amountDue = Number(p.amountDue ?? p.netAmount ?? 0);
-                            const penaltyDue = Number(p.penaltyDue || 0);
+                    <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap', justifyContent: 'center' }}>
+                        {hasPermission('pagos-v2-agregar-periodo') && (
+                            <Button
+                                variant="contained"
+                                startIcon={<AddIcon />}
+                                onClick={() => handleAdd(primaryAddAction.period)}
+                                disabled={!paymentId || loading || !primaryAddValidation.ok}
+                                sx={{ whiteSpace: 'nowrap' }}
+                            >
+                                {primaryAddAction.label}
+                            </Button>
+                        )}
+                    </Box>
 
-                            const statusChipColor = (() => {
-                                if (status === 'PAGADO') {
-                                    return 'success';
+                    {periodToAdd && !addValidation.ok && addValidation.message && (
+                        <Box sx={{ mt: 1 }}>
+                            <Alert severity="warning">{addValidation.message}</Alert>
+                        </Box>
+                    )}
+                </Paper>
+            </Box>
+
+            <Divider sx={{ my: 2 }} />
+
+            <Box sx={{ mb: 1 }}>
+                <Paper variant="outlined" sx={(theme) => ({
+                    p: 2,
+                    borderColor: theme.palette.error.main,
+                    backgroundColor: alpha(theme.palette.error.main, 0.06),
+                    borderRadius: 2
+                })}>
+                    <Typography variant="body1" sx={(theme) => ({ fontWeight: 800, color: theme.palette.error.dark, textTransform: 'uppercase' })}>
+                        🗑️ Eliminar periodos
+                    </Typography>
+                    <Typography variant="caption" display="block" sx={{ color: 'text.secondary', mt: 0.5 }}>
+                        Haz clic en <DeleteIcon fontSize="inherit" sx={{ verticalAlign: 'middle', mx: 0.25 }} />para eliminar un periodo. Solo se pueden eliminar períodos sin pagos.
+                    </Typography>
+                </Paper>
+            </Box>
+
+            {loading && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                    <CircularProgress size={24} />
+                </Box>
+            )}
+
+            {!loading && (
+                <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
+                    <Box sx={{
+                        maxHeight: 320,
+                        overflow: 'auto',
+                        borderTop: '1px solid rgba(0,0,0,0.06)'
+                    }}>
+                    {sortedPeriods.length === 0 ? (
+                        <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
+                            No hay períodos registrados.
+                        </Typography>
+                    ) : (
+                        <List dense sx={{ p: 0 }}>
+                            {sortedPeriods.map((p) => {
+                        const per = String(p.period || '');
+                        const isCurrent = per === currentPeriod;
+                        const status = String(p.status || '').toUpperCase();
+                        const penaltyStatus = String(p.penaltyStatus || 'SIN_MORA').toUpperCase();
+                        const penaltyFrozen = !!p.penaltyFrozen;
+                        const amountPaid = Number(p.amountPaid || 0);
+                        const amountDue = Number(p.amountDue ?? p.netAmount ?? 0);
+                        const penaltyDue = Number(p.penaltyDue || 0);
+
+                        const statusChipColor = (() => {
+                            if (status === 'PAGADO') {
+                                return 'success';
+                            }
+                            if (status === 'PARCIAL') {
+                                return 'warning';
+                            }
+                            if (status === 'PENDIENTE') {
+                                return 'warning';
+                            }
+                            return 'default';
+                        })();
+
+                        const penaltyStatusChipColor = (() => {
+                            if (penaltyStatus === 'PENDIENTE') {
+                                return 'error';
+                            }
+                            if (penaltyStatus === 'PARCIAL') {
+                                return 'warning';
+                            }
+                            if (penaltyStatus === 'PAGADA') {
+                                return 'success';
+                            }
+                            if (penaltyStatus === 'EXONERADA') {
+                                return 'info';
+                            }
+                            return 'default';
+                        })();
+
+                        const monthRaw = per ? formatMonth(per + '-01') : per;
+                        const monthLabel = monthRaw ? (monthRaw.charAt(0).toUpperCase() + monthRaw.slice(1)) : monthRaw;
+
+                                const routeTypeForLabel = String(p.routeType || familyFromDetail?.routeType || '').trim();
+
+                                const original = Number(p.originalAmount ?? 0);
+                                const net = Number(p.netAmount ?? amountDue ?? 0);
+                                const periodStudentsCount = Math.max(1, Number(p.studentsCount || studentCountFromFamily || 1));
+                                const baseFee = (original && periodStudentsCount) ? (original / periodStudentsCount) : 0;
+                                const discount = Math.max(0, original - net) || Number(p.discountApplied ?? 0);
+                                const extraTariffDiscount = Number(p.extraordinaryTariffDiscount ?? 0);
+
+                                const studentsLabel = `${periodStudentsCount} estudiante${periodStudentsCount === 1 ? '' : 's'}`;
+                                const baseLabel = `Tarifa base${routeTypeForLabel ? ` (${routeTypeForLabel})` : ''}`;
+                                const monthlyLabel = `Tarifa mensual (${studentsLabel})`;
+
+                                const dueDate = p.dueDate || null;
+                                const isOverdue = (() => {
+                                    if (!dueDate) {
+                                        return false;
+                                    }
+                                    if (status === 'PAGADO') {
+                                        return false;
+                                    }
+                                    try {
+                                        return moment(currentDate).isAfter(moment.parseZone(dueDate), 'day');
+                                    } catch (e) {
+                                        return false;
+                                    }
+                                })();
+
+                        return (
+                            <ListItem
+                                key={per}
+                                sx={{ py: 1.25, px: 2, borderBottom: '1px dashed rgba(0,0,0,0.08)' }}
+                                secondaryAction={
+                                    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25 }}>
+                                        {hasPermission(penaltyFrozen ? 'mora-descongelar' : 'mora-congelar') && (
+                                        <Tooltip title={penaltyFrozen ? 'Descongelar mora del período' : 'Congelar mora del período'}>
+                                            <span>
+                                                <IconButton
+                                                    edge="end"
+                                                    onClick={() => handleTogglePeriodFreeze(p)}
+                                                    disabled={freezeBusyPeriod === per || deleteBusy}
+                                                    sx={(theme) => ({
+                                                        color: penaltyFrozen ? theme.palette.success.main : theme.palette.text.secondary,
+                                                        '&:hover': {
+                                                            color: penaltyFrozen ? theme.palette.success.dark : theme.palette.primary.main,
+                                                            backgroundColor: alpha(penaltyFrozen ? theme.palette.success.main : theme.palette.primary.main, 0.10)
+                                                        }
+                                                    })}
+                                                >
+                                                    {penaltyFrozen ? <PlayArrowIcon /> : <PauseIcon />}
+                                                </IconButton>
+                                            </span>
+                                        </Tooltip>
+                                        )}
+                                        {hasPermission('pagos-v2-eliminar-periodo') && (
+                                        <Tooltip title={deletable(p) ? 'Eliminar período' : 'No se puede eliminar (tiene pagos)'}>
+                                            <span>
+                                                <IconButton
+                                                    edge="end"
+                                                    onClick={() => { if (deletable(p)) { setDeleteTarget(p); setDeleteConfirmText(''); } }}
+                                                    disabled={!deletable(p) || deleteBusy || !!freezeBusyPeriod}
+                                                    sx={(theme) => ({
+                                                        color: deletable(p) ? theme.palette.text.secondary : theme.palette.action.disabled,
+                                                        '&:hover': deletable(p) ? {
+                                                            color: theme.palette.error.main,
+                                                            backgroundColor: alpha(theme.palette.error.main, 0.10)
+                                                        } : undefined
+                                                    })}
+                                                >
+                                                    <DeleteIcon />
+                                                </IconButton>
+                                            </span>
+                                        </Tooltip>
+                                        )}
+                                    </Box>
                                 }
-                                if (status === 'PARCIAL') {
-                                    return 'warning';
-                                }
-                                if (status === 'PENDIENTE') {
-                                    return 'warning';
-                                }
-                                return 'default';
-                            })();
-
-                            const penaltyStatusChipColor = (() => {
-                                if (penaltyStatus === 'PENDIENTE') {
-                                    return 'error';
-                                }
-                                if (penaltyStatus === 'PARCIAL') {
-                                    return 'warning';
-                                }
-                                if (penaltyStatus === 'PAGADA') {
-                                    return 'success';
-                                }
-                                if (penaltyStatus === 'EXONERADA') {
-                                    return 'info';
-                                }
-                                return 'default';
-                            })();
-
-                            const monthRaw = per ? formatMonth(per + '-01') : per;
-                            const monthLabel = monthRaw ? (monthRaw.charAt(0).toUpperCase() + monthRaw.slice(1)) : monthRaw;
-
-                                    const routeTypeForLabel = String(p.routeType || familyFromDetail?.routeType || '').trim();
-
-                                    const original = Number(p.originalAmount ?? 0);
-                                    const net = Number(p.netAmount ?? amountDue ?? 0);
-                                    const periodStudentsCount = Math.max(1, Number(p.studentsCount || studentCountFromFamily || 1));
-                                    const baseFee = (original && periodStudentsCount) ? (original / periodStudentsCount) : 0;
-                                    const discount = Math.max(0, original - net) || Number(p.discountApplied ?? 0);
-                                    const extraTariffDiscount = Number(p.extraordinaryTariffDiscount ?? 0);
-
-                                    const studentsLabel = `${periodStudentsCount} estudiante${periodStudentsCount === 1 ? '' : 's'}`;
-                                    const baseLabel = `Tarifa base${routeTypeForLabel ? ` (${routeTypeForLabel})` : ''}`;
-                                    const monthlyLabel = `Tarifa mensual (${studentsLabel})`;
-
-                                    const dueDate = p.dueDate || null;
-                                    const isOverdue = (() => {
-                                        if (!dueDate) {
-                                            return false;
-                                        }
-                                        if (status === 'PAGADO') {
-                                            return false;
-                                        }
-                                        try {
-                                            return moment(currentDate).isAfter(moment.parseZone(dueDate), 'day');
-                                        } catch (e) {
-                                            return false;
-                                        }
-                                    })();
-
-                            return (
-                                <ListItem
-                                    key={per}
-                                    sx={{ py: 1.25, px: 2, borderBottom: '1px dashed rgba(0,0,0,0.08)' }}
-                                    secondaryAction={
-                                        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25 }}>
-                                            {hasPermission(penaltyFrozen ? 'mora-descongelar' : 'mora-congelar') && (
-                                            <Tooltip title={penaltyFrozen ? 'Descongelar mora del período' : 'Congelar mora del período'}>
-                                                <span>
-                                                    <IconButton
-                                                        edge="end"
-                                                        onClick={() => handleTogglePeriodFreeze(p)}
-                                                        disabled={freezeBusyPeriod === per || deleteBusy}
-                                                        sx={(theme) => ({
-                                                            color: penaltyFrozen ? theme.palette.success.main : theme.palette.text.secondary,
-                                                            '&:hover': {
-                                                                color: penaltyFrozen ? theme.palette.success.dark : theme.palette.primary.main,
-                                                                backgroundColor: alpha(penaltyFrozen ? theme.palette.success.main : theme.palette.primary.main, 0.10)
-                                                            }
-                                                        })}
-                                                    >
-                                                        {penaltyFrozen ? <PlayArrowIcon /> : <PauseIcon />}
-                                                    </IconButton>
-                                                </span>
-                                            </Tooltip>
-                                            )}
-                                            {hasPermission('pagos-v2-eliminar-periodo') && (
-                                            <Tooltip title={deletable(p) ? 'Eliminar período' : 'No se puede eliminar (tiene pagos)'}>
-                                                <span>
-                                                    <IconButton
-                                                        edge="end"
-                                                        onClick={() => { if (deletable(p)) { setDeleteTarget(p); setDeleteConfirmText(''); } }}
-                                                        disabled={!deletable(p) || deleteBusy || !!freezeBusyPeriod}
-                                                        sx={(theme) => ({
-                                                            color: deletable(p) ? theme.palette.text.secondary : theme.palette.action.disabled,
-                                                            '&:hover': deletable(p) ? {
-                                                                color: theme.palette.error.main,
-                                                                backgroundColor: alpha(theme.palette.error.main, 0.10)
-                                                            } : undefined
-                                                        })}
-                                                    >
-                                                        <DeleteIcon />
-                                                    </IconButton>
-                                                </span>
-                                            </Tooltip>
+                            >
+                                <ListItemText
+                                    primary={
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', minWidth: 0 }}>
+                                                <Typography component="span" sx={{ fontWeight: isCurrent ? 700 : 600 }}>
+                                                    {monthLabel}
+                                                </Typography>
+                                                {isCurrent && (
+                                                    <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 700 }}>
+                                                        (Periodo actual)
+                                                    </Typography>
+                                                )}
+                                                {status && <Chip size="small" label={`Tarifa: ${status}`} color={statusChipColor} variant="filled" />}
+                                                {penaltyStatus && (
+                                                    <Chip
+                                                        size="small"
+                                                        label={`Mora: ${penaltyStatus.replace('_', ' ')}`}
+                                                        color={penaltyStatusChipColor}
+                                                        variant={penaltyStatus === 'SIN_MORA' ? 'outlined' : 'filled'}
+                                                    />
+                                                )}
+                                                {penaltyFrozen && <Chip size="small" label="Mora congelada" color="info" variant="outlined" />}
+                                            </Box>
+                                            {isOverdue && (
+                                                <Typography
+                                                    variant="caption"
+                                                    color="error"
+                                                    sx={{ fontWeight: 700, whiteSpace: 'nowrap', textAlign: 'right' }}
+                                                >
+                                                    Vencido
+                                                </Typography>
                                             )}
                                         </Box>
                                     }
-                                >
-                                    <ListItemText
-                                        primary={
-                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', minWidth: 0 }}>
-                                                    <Typography component="span" sx={{ fontWeight: isCurrent ? 700 : 600 }}>
-                                                        {monthLabel}
-                                                    </Typography>
-                                                    {isCurrent && (
-                                                        <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 700 }}>
-                                                            (Periodo actual)
-                                                        </Typography>
-                                                    )}
-                                                    {status && <Chip size="small" label={`Tarifa: ${status}`} color={statusChipColor} variant="filled" />}
-                                                    {penaltyStatus && (
-                                                        <Chip
-                                                            size="small"
-                                                            label={`Mora: ${penaltyStatus.replace('_', ' ')}`}
-                                                            color={penaltyStatusChipColor}
-                                                            variant={penaltyStatus === 'SIN_MORA' ? 'outlined' : 'filled'}
-                                                        />
-                                                    )}
-                                                    {penaltyFrozen && <Chip size="small" label="Mora congelada" color="info" variant="outlined" />}
+                                    secondary={
+                                        <Box sx={{ mt: 0.75, pr: 6 }}>
+                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>{baseLabel}</Typography>
+                                                    <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 700, minWidth: 120, textAlign: 'right' }}>{formatQ(baseFee || 0)}</Typography>
                                                 </Box>
-                                                {isOverdue && (
-                                                    <Typography
-                                                        variant="caption"
-                                                        color="error"
-                                                        sx={{ fontWeight: 700, whiteSpace: 'nowrap', textAlign: 'right' }}
-                                                    >
-                                                        Vencido
-                                                    </Typography>
+
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>{monthlyLabel}</Typography>
+                                                    <Typography variant="body2" sx={{ color: 'text.primary', minWidth: 120, textAlign: 'right' }}>{formatQ(original || 0)}</Typography>
+                                                </Box>
+
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>Descuento</Typography>
+                                                    <Typography variant="body2" sx={{ color: 'text.primary', minWidth: 120, textAlign: 'right' }}>{formatQ(discount || 0)}</Typography>
+                                                </Box>
+
+                                                {extraTariffDiscount > 0 && (
+                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <Typography variant="body2" sx={{ color: 'warning.dark' }}>Desc. extraordinario tarifa</Typography>
+                                                        <Typography variant="body2" sx={{ color: 'warning.dark', fontWeight: 600, minWidth: 120, textAlign: 'right' }}>{formatQ(extraTariffDiscount)}</Typography>
+                                                    </Box>
                                                 )}
-                                            </Box>
-                                        }
-                                        secondary={
-                                            <Box sx={{ mt: 0.75, pr: 6 }}>
-                                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <Typography variant="body2" sx={{ color: 'text.secondary' }}>{baseLabel}</Typography>
-                                                        <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 700, minWidth: 120, textAlign: 'right' }}>{formatQ(baseFee || 0)}</Typography>
-                                                    </Box>
 
-                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <Typography variant="body2" sx={{ color: 'text.secondary' }}>{monthlyLabel}</Typography>
-                                                        <Typography variant="body2" sx={{ color: 'text.primary', minWidth: 120, textAlign: 'right' }}>{formatQ(original || 0)}</Typography>
-                                                    </Box>
-
-                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <Typography variant="body2" sx={{ color: 'text.secondary' }}>Descuento</Typography>
-                                                        <Typography variant="body2" sx={{ color: 'text.primary', minWidth: 120, textAlign: 'right' }}>{formatQ(discount || 0)}</Typography>
-                                                    </Box>
-
-                                                    {extraTariffDiscount > 0 && (
-                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                            <Typography variant="body2" sx={{ color: 'warning.dark' }}>Desc. extraordinario tarifa</Typography>
-                                                            <Typography variant="body2" sx={{ color: 'warning.dark', fontWeight: 600, minWidth: 120, textAlign: 'right' }}>{formatQ(extraTariffDiscount)}</Typography>
-                                                        </Box>
-                                                    )}
-
-                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <Typography component="span" sx={{ fontWeight: 800 }}>Subtotal período:</Typography>
-                                                        <Typography component="span" sx={{ ml: 1, color: 'primary.main', fontWeight: 800, minWidth: 120, textAlign: 'right' }}>{formatQ(net || 0)}</Typography>
-                                                    </Box>
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <Typography component="span" sx={{ fontWeight: 800 }}>Subtotal período:</Typography>
+                                                    <Typography component="span" sx={{ ml: 1, color: 'primary.main', fontWeight: 800, minWidth: 120, textAlign: 'right' }}>{formatQ(net || 0)}</Typography>
                                                 </Box>
+                                            </Box>
 
-                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
-                                                    Pagado: {formatQ(amountPaid)} · Pendiente: {formatQ(amountDue)}
+                                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                                                Pagado: {formatQ(amountPaid)} · Pendiente: {formatQ(amountDue)}
+                                            </Typography>
+                                            {(penaltyDue > 0 || penaltyFrozen) && (
+                                                <Typography variant="caption" color={penaltyFrozen ? 'info.main' : 'text.secondary'} sx={{ display: 'block', mt: 0.25 }}>
+                                                    Mora: {formatQ(penaltyDue)}{penaltyFrozen && p.penaltyFrozenAt ? ` · Congelada: ${formatDate(p.penaltyFrozenAt, { keepZone: true })}` : ''}
                                                 </Typography>
-                                                {(penaltyDue > 0 || penaltyFrozen) && (
-                                                    <Typography variant="caption" color={penaltyFrozen ? 'info.main' : 'text.secondary'} sx={{ display: 'block', mt: 0.25 }}>
-                                                        Mora: {formatQ(penaltyDue)}{penaltyFrozen && p.penaltyFrozenAt ? ` · Congelada: ${formatDate(p.penaltyFrozenAt, { keepZone: true })}` : ''}
-                                                    </Typography>
-                                                )}
-                                            </Box>
-                                        }
-                                    />
-                                </ListItem>
-                            );
-                                })}
-                            </List>
-                        )}
-                        </Box>
-                    </Paper>
-                )}
+                                            )}
+                                        </Box>
+                                    }
+                                />
+                            </ListItem>
+                        );
+                            })}
+                        </List>
+                    )}
+                    </Box>
+                </Paper>
+            )}
 
-                {/* Delete confirmation inline dialog */}
-                <Dialog
-                    open={!!deleteTarget}
-                    onClose={() => { if (!deleteBusy) { setDeleteTarget(null); setDeleteConfirmText(''); } }}
-                    maxWidth="xs"
+            {/* Delete confirmation inline dialog */}
+            <AppDialog
+                open={!!deleteTarget}
+                onClose={() => { setDeleteTarget(null); setDeleteConfirmText(''); }}
+                title="Eliminar período"
+                icon={<DeleteIcon />}
+                tone="danger"
+                size="xs"
+                onSubmit={handleConfirmDelete}
+                submitLabel="Eliminar"
+                submitting={deleteBusy}
+                submitDisabled={!deleteConfirmed}
+                readOnly={!hasPermission('pagos-v2-eliminar-periodo')}
+            >
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                    Esta acción elimina el período por completo.
+                </Alert>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                    Para confirmar, escriba <strong>ELIMINAR</strong>.
+                </Typography>
+                <TextField
                     fullWidth
-                >
-                    <DialogTitle>Eliminar período</DialogTitle>
-                    <DialogContent>
-                        <Alert severity="warning" sx={{ mb: 2 }}>
-                            Esta acción elimina el período por completo.
-                        </Alert>
-                        <Typography variant="body2" sx={{ mb: 1 }}>
-                            Para confirmar, escriba <strong>ELIMINAR</strong>.
-                        </Typography>
-                        <TextField
-                            fullWidth
-                            size="small"
-                            value={deleteConfirmText}
-                            onChange={(e) => setDeleteConfirmText(e.target.value)}
-                            placeholder="ELIMINAR"
-                            disabled={deleteBusy}
-                        />
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={() => { if (!deleteBusy) { setDeleteTarget(null); setDeleteConfirmText(''); } }} disabled={deleteBusy}>Cancelar</Button>
-                        {hasPermission('pagos-v2-eliminar-periodo') && (
-                            <Button
-                                variant="contained"
-                                color="error"
-                                onClick={handleConfirmDelete}
-                                disabled={deleteBusy || !deleteConfirmed}
-                            >
-                                Eliminar
-                            </Button>
-                        )}
-                    </DialogActions>
-                </Dialog>
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={onClose} disabled={deleteBusy}>Cerrar</Button>
-            </DialogActions>
-        </Dialog>
+                    size="small"
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                    placeholder="ELIMINAR"
+                    disabled={deleteBusy}
+                />
+            </AppDialog>
+        </AppDialog>
     );
 };
 

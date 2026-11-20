@@ -3,10 +3,6 @@
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import {
     Paper,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     Button,
     Table,
     TableBody,
@@ -15,16 +11,16 @@ import {
     Typography,
     CircularProgress,
     Box,
-    IconButton,
     Grid,
     TextField
 } from '@mui/material';
-import { Close as CloseIcon, DirectionsBus } from '@mui/icons-material';
+import { DirectionsBus } from '@mui/icons-material';
 import { AuthContext } from '../../context/AuthProvider';
 import api from '../../utils/axiosConfig';
 import useTableState from '../../hooks/useTableState';
 import SortableTableHead from '../table/SortableTableHead';
 import AppTableContainer from '../table/AppTableContainer';
+import AppDialog from '../dialogs/AppDialog';
 
 // Columnas de la tabla
 const COLUMNS = [
@@ -182,146 +178,126 @@ const RouteColaboradoresModal = ({
     const stopTypeLabel = stopType === 'entrada' ? 'Entrada' : 'Salida';
 
     return (
-        <Dialog 
-            open={open} 
+        <AppDialog
+            open={open}
             onClose={onClose}
-            maxWidth="lg"
-            fullWidth
+            title={`Colaboradores - ruta ${routeNumber} - ${scheduleName} (${stopTypeLabel})`}
+            icon={<DirectionsBus />}
+            size="lg"
+            readOnly
         >
-            <DialogTitle>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <DirectionsBus color="primary" />
-                        <Typography variant="h6">
-                            Colaboradores - Ruta {routeNumber} - {scheduleName} ({stopTypeLabel})
+            {loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                    <CircularProgress />
+                </Box>
+            ) : error ? (
+                <Box sx={{ textAlign: 'center', py: 4 }}>
+                    <Typography color="error">{error}</Typography>
+                </Box>
+            ) : (
+                <>
+                    {/* Filter Controls */}
+                    <Grid container spacing={2} sx={{ mb: 2 }}>
+                        <Grid item xs={12} sm={3}>
+                            <TextField
+                                fullWidth
+                                size="small"
+                                label="Filtrar por nombre"
+                                value={filters.name}
+                                onChange={(e) => handleFilterChange('name', e.target.value)}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={3}>
+                            <TextField
+                                fullWidth
+                                size="small"
+                                label="Filtrar por email"
+                                value={filters.email}
+                                onChange={(e) => handleFilterChange('email', e.target.value)}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={2}>
+                            <TextField
+                                fullWidth
+                                size="small"
+                                label="Filtrar por hora"
+                                value={filters.stopTime}
+                                onChange={(e) => handleFilterChange('stopTime', e.target.value)}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={2}>
+                            <TextField
+                                fullWidth
+                                size="small"
+                                label="Filtrar por nota"
+                                value={filters.note}
+                                onChange={(e) => handleFilterChange('note', e.target.value)}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={2}>
+                            <Button
+                                fullWidth
+                                variant="outlined"
+                                onClick={handleClearFilters}
+                                sx={{ height: '40px' }}
+                            >
+                                Limpiar
+                            </Button>
+                        </Grid>
+                    </Grid>
+
+                    {/* Results Summary */}
+                    <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="body2" color="textSecondary">
+                            Mostrando {sortedColaboradores.length} de {colaboradores.length} colaboradores
                         </Typography>
                     </Box>
-                    <IconButton onClick={onClose} size="small">
-                        <CloseIcon />
-                    </IconButton>
-                </Box>
-            </DialogTitle>
-            
-            <DialogContent dividers>
-                {loading ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                        <CircularProgress />
-                    </Box>
-                ) : error ? (
-                    <Box sx={{ textAlign: 'center', py: 4 }}>
-                        <Typography color="error">{error}</Typography>
-                    </Box>
-                ) : (
-                    <>
-                        {/* Filter Controls */}
-                        <Grid container spacing={2} sx={{ mb: 2 }}>
-                            <Grid item xs={12} sm={3}>
-                                <TextField
-                                    fullWidth
-                                    size="small"
-                                    label="Filtrar por nombre"
-                                    value={filters.name}
-                                    onChange={(e) => handleFilterChange('name', e.target.value)}
-                                />
-                            </Grid>
-                            <Grid item xs={12} sm={3}>
-                                <TextField
-                                    fullWidth
-                                    size="small"
-                                    label="Filtrar por email"
-                                    value={filters.email}
-                                    onChange={(e) => handleFilterChange('email', e.target.value)}
-                                />
-                            </Grid>
-                            <Grid item xs={12} sm={2}>
-                                <TextField
-                                    fullWidth
-                                    size="small"
-                                    label="Filtrar por hora"
-                                    value={filters.stopTime}
-                                    onChange={(e) => handleFilterChange('stopTime', e.target.value)}
-                                />
-                            </Grid>
-                            <Grid item xs={12} sm={2}>
-                                <TextField
-                                    fullWidth
-                                    size="small"
-                                    label="Filtrar por nota"
-                                    value={filters.note}
-                                    onChange={(e) => handleFilterChange('note', e.target.value)}
-                                />
-                            </Grid>
-                            <Grid item xs={12} sm={2}>
-                                <Button
-                                    fullWidth
-                                    variant="outlined"
-                                    onClick={handleClearFilters}
-                                    sx={{ height: '40px' }}
-                                >
-                                    Limpiar
-                                </Button>
-                            </Grid>
-                        </Grid>
 
-                        {/* Results Summary */}
-                        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Typography variant="body2" color="textSecondary">
-                                Mostrando {sortedColaboradores.length} de {colaboradores.length} colaboradores
-                            </Typography>
-                        </Box>
-
-                        {/* Table */}
-                        <AppTableContainer component={Paper} maxHeight={500}>
-                            <Table stickyHeader size="small">
-                                <SortableTableHead columns={COLUMNS} {...table.sortProps} />
-                                <TableBody>
-                                    {sortedColaboradores.length === 0 ? (
-                                        <TableRow>
-                                            <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
+                    {/* Table */}
+                    <AppTableContainer component={Paper} maxHeight={500}>
+                        <Table stickyHeader size="small">
+                            <SortableTableHead columns={COLUMNS} {...table.sortProps} />
+                            <TableBody>
+                                {sortedColaboradores.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
+                                            <Typography variant="body2" color="textSecondary">
+                                                No hay colaboradores asignados a esta ruta y horario
+                                            </Typography>
+                                        </TableCell>
+                                    </TableRow>
+                                ) : (
+                                    sortedColaboradores.map((emp, index) => (
+                                        <TableRow key={index} hover>
+                                            <TableCell>
+                                                <Typography variant="body2" fontWeight="bold">
+                                                    {emp.name || '-'}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2">
+                                                    {emp.email || '-'}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2">
+                                                    {emp.stopTime || '-'}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
                                                 <Typography variant="body2" color="textSecondary">
-                                                    No hay colaboradores asignados a esta ruta y horario
+                                                    {emp.note || '-'}
                                                 </Typography>
                                             </TableCell>
                                         </TableRow>
-                                    ) : (
-                                        sortedColaboradores.map((emp, index) => (
-                                            <TableRow key={index} hover>
-                                                <TableCell>
-                                                    <Typography variant="body2" fontWeight="bold">
-                                                        {emp.name || '-'}
-                                                    </Typography>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Typography variant="body2">
-                                                        {emp.email || '-'}
-                                                    </Typography>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Typography variant="body2">
-                                                        {emp.stopTime || '-'}
-                                                    </Typography>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Typography variant="body2" color="textSecondary">
-                                                        {emp.note || '-'}
-                                                    </Typography>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </AppTableContainer>
-                    </>
-                )}
-            </DialogContent>
-            
-            <DialogActions>
-                <Button onClick={onClose} color="primary">
-                    Cerrar
-                </Button>
-            </DialogActions>
-        </Dialog>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </AppTableContainer>
+                </>
+            )}
+        </AppDialog>
     );
 };
 

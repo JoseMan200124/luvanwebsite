@@ -9,11 +9,6 @@ import {
     TableCell,
     TableRow,
     CircularProgress,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Button,
     IconButton,
     Tooltip,
     Box
@@ -38,6 +33,7 @@ import api from '../utils/axiosConfig';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { Visibility as VisibilityIcon } from '@mui/icons-material';
 import { formatDateTime } from '../utils/dateFormat';
+import AppDialog from '../components/dialogs/AppDialog';
 
 // Helper para agrupar por colegio
 const groupBySchool = (arr) => {
@@ -284,62 +280,58 @@ const PilotsManagementPage = () => {
             )}
 
             {/* Diálogo Incidentes */}
-            <Dialog open={openIncidentsDialog} onClose={handleCloseIncidentsDialog} maxWidth="sm">
-                <DialogTitle>Incidentes Reportados</DialogTitle>
-                <DialogContent dividers>
-                    {incidentsList.length === 0 ? (
-                        <Typography variant="body2">No hay incidentes.</Typography>
-                    ) : (
-                        incidentsList.map((inc, index) => {
-                            const formattedDate = formatDateTime(inc.date);
-                            return (
-                                <div key={index} style={{ marginBottom: '8px' }}>
-                                    <Typography variant="body2" color="textSecondary">
-                                        <strong>Fecha/Hora:</strong> {formattedDate}
-                                    </Typography>
-                                    <Typography variant="body2">
-                                        {inc.desc || 'Descripción no disponible'}
-                                    </Typography>
-                                </div>
-                            );
-                        })
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseIncidentsDialog} variant="outlined">
-                        Cerrar
-                    </Button>
-                </DialogActions>
-            </Dialog>
+            <AppDialog
+                open={openIncidentsDialog}
+                onClose={handleCloseIncidentsDialog}
+                title="Incidentes reportados"
+                size="sm"
+                readOnly
+            >
+                {incidentsList.length === 0 ? (
+                    <Typography variant="body2">No hay incidentes.</Typography>
+                ) : (
+                    incidentsList.map((inc, index) => {
+                        const formattedDate = formatDateTime(inc.date);
+                        return (
+                            <div key={index} style={{ marginBottom: '8px' }}>
+                                <Typography variant="body2" color="textSecondary">
+                                    <strong>Fecha/Hora:</strong> {formattedDate}
+                                </Typography>
+                                <Typography variant="body2">
+                                    {inc.desc || 'Descripción no disponible'}
+                                </Typography>
+                            </div>
+                        );
+                    })
+                )}
+            </AppDialog>
 
             {/* Diálogo Emergencias */}
-            <Dialog open={openEmergenciesDialog} onClose={handleCloseEmergenciesDialog} maxWidth="sm">
-                <DialogTitle>Emergencias Reportadas</DialogTitle>
-                <DialogContent dividers>
-                    {emergenciesList.length === 0 ? (
-                        <Typography variant="body2">No hay emergencias.</Typography>
-                    ) : (
-                        emergenciesList.map((eme, index) => {
-                            const formattedDate = formatDateTime(eme.date);
-                            return (
-                                <div key={index} style={{ marginBottom: '8px' }}>
-                                    <Typography variant="body2" color="textSecondary">
-                                        <strong>Fecha/Hora:</strong> {formattedDate}
-                                    </Typography>
-                                    <Typography variant="body2">
-                                        {eme.desc || 'Descripción no disponible'}
-                                    </Typography>
-                                </div>
-                            );
-                        })
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseEmergenciesDialog} variant="outlined">
-                        Cerrar
-                    </Button>
-                </DialogActions>
-            </Dialog>
+            <AppDialog
+                open={openEmergenciesDialog}
+                onClose={handleCloseEmergenciesDialog}
+                title="Emergencias reportadas"
+                size="sm"
+                readOnly
+            >
+                {emergenciesList.length === 0 ? (
+                    <Typography variant="body2">No hay emergencias.</Typography>
+                ) : (
+                    emergenciesList.map((eme, index) => {
+                        const formattedDate = formatDateTime(eme.date);
+                        return (
+                            <div key={index} style={{ marginBottom: '8px' }}>
+                                <Typography variant="body2" color="textSecondary">
+                                    <strong>Fecha/Hora:</strong> {formattedDate}
+                                </Typography>
+                                <Typography variant="body2">
+                                    {eme.desc || 'Descripción no disponible'}
+                                </Typography>
+                            </div>
+                        );
+                    })
+                )}
+            </AppDialog>
         </PageContainer>
     );
 };

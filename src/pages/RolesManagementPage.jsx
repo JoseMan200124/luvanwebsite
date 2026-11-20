@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import {
     Typography,
     Table,
@@ -35,13 +35,14 @@ import { matchSearchTokens } from '../utils/clientFilter';
 import { Autocomplete } from '@mui/material';
 import { ListItemText } from '@mui/material';
 import { Alert } from '@mui/material';
-import { Edit, Delete, Add, FileUpload, Lock } from '@mui/icons-material';
+import { Edit, Delete, Add, FileUpload, Lock, PersonAdd as PersonAddIcon, FileDownload as FileDownloadIcon } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import * as XLSX from 'xlsx';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
+import { validate, hasErrors, focusFirstError, clearError } from '../utils/validators';
 import PermissionGuard from '../components/PermissionGuard';
 import useTableState from '../hooks/useTableState';
 import useIsMobile from '../hooks/useIsMobile';
@@ -54,6 +55,7 @@ import { sortRows } from '../utils/tableSort';
 import usePermissions from '../hooks/usePermissions';
 import useManageableRoles from '../hooks/useManageableRoles';
 import { formatDateTime } from '../utils/dateFormat';
+import AppDialog from '../components/dialogs/AppDialog';
 
 // Fallback static role list (used as initial value, backend will provide authoritative list)
 const roleOptionsStatic = [
@@ -169,6 +171,22 @@ const RolesManagementPage = () => {
     const [allMonitoras, setAllMonitoras] = useState([]);
     const [selectedAuxiliarSchools, setSelectedAuxiliarSchools] = useState([]);
     const [selectedAuxiliarCorporations, setSelectedAuxiliarCorporations] = useState([]);
+    const [userErrors, setUserErrors] = useState({});
+    const [savingUser, setSavingUser] = useState(false);
+    const userInitialRef = useRef('');
+    const userFormSnapshot = JSON.stringify([
+        selectedUser,
+        selectedSupervisorSchools,
+        selectedSupervisorCorporations,
+        selectedAuxiliarSchools,
+        selectedAuxiliarCorporations,
+    ]);
+    useEffect(() => {
+        if (openDialog) {
+            userInitialRef.current = userFormSnapshot;
+            setUserErrors({});
+        }
+    }, [openDialog]);
 
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
     const [bulkFile, setBulkFile] = useState(null);
@@ -539,11 +557,14 @@ const RolesManagementPage = () => {
     };
 
     const handleUserChange = (e) => {
-        setSelectedUser(prev => ({ ...prev, [e.target.name]: e.target.value }));
+        const { name, value } = e.target;
+        setUserErrors((prev) => clearError(prev, name));
+        setSelectedUser(prev => ({ ...prev, [name]: value }));
     };
 
     const handleRoleIdChange = (e) => {
         const newRoleId = Number(e.target.value);
+        setUserErrors((prev) => clearError(prev, 'roleId'));
         // If the selected role should not have school/corporation, clear them when changing
         if (roleDisablesSchoolOrCorp(newRoleId)) {
             setSelectedUser(prev => ({ ...prev, roleId: newRoleId, school: '', corporationId: '' }));
@@ -556,6 +577,18 @@ const RolesManagementPage = () => {
     // Horarios de parada gestionados por el modal por alumno; helpers removidos
 
     const handleSaveUser = async () => {
+        const found = validate(selectedUser, {
+            name: ['required'],
+            email: ['required', 'email'],
+            ...(selectedUser?.id ? {} : { password: ['required'] }),
+            ...(isSelfEdit ? {} : { roleId: ['required'] }),
+        });
+        setUserErrors(found);
+        if (hasErrors(found)) {
+            focusFirstError(found);
+            return;
+        }
+        setSavingUser(true);
         try {
             if (selectedUser.id && isSelf(selectedUser)) {
                 const selfPayload = { name: selectedUser.name, email: selectedUser.email };
@@ -640,6 +673,8 @@ const RolesManagementPage = () => {
         } catch (err) {
             console.error('[handleSaveUser] Error:', err);
             notify.fromError(err, 'Error al guardar usuario');
+        } finally {
+            setSavingUser(false);
         }
     };
 
@@ -1166,362 +1201,367 @@ const RolesManagementPage = () => {
             )}
 
             {/* Diálogo para crear/editar usuario (En este diálogo NO se muestra el select de contrato) */}
-            <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="md" fullWidth>
-                <DialogTitle>{selectedUser?.id ? 'Editar Usuario' : 'Añadir Usuario'}</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        {selectedUser?.id
-                            ? 'Actualiza la información del usuario.'
-                            : 'Completa la información para crear un nuevo usuario.'}
-                    </DialogContentText>
-                    <Grid container spacing={2} sx={{ mt: 1 }}>
-                        <Grid item xs={12} md={6}>
-                            <TextField
-                                autoFocus
-                                name="name"
-                                label="Nombre Completo"
-                                type="text"
-                                fullWidth
-                                variant="outlined"
-                                value={selectedUser?.name || ''}
-                                onChange={handleUserChange}
-                                required
-                            />
-                        </Grid>
-                        <Grid item xs={12} md={6}>
-                            <TextField
-                                name="email"
-                                label="Correo Electrónico"
-                                type="email"
-                                fullWidth
-                                variant="outlined"
-                                value={selectedUser?.email || ''}
-                                onChange={handleUserChange}
-                                required
-                            />
-                        </Grid>
-                        {!selectedUser?.id && (
-                            <Grid item xs={12} md={6}>
-                                <TextField
-                                    name="password"
-                                    label="Contraseña"
-                                    type="password"
-                                    autoComplete="new-password"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={selectedUser?.password || ''}
-                                    onChange={handleUserChange}
-                                    required
-                                />
-                            </Grid>
-                        )}
-                        {selectedUser?.id && (
-                            <Grid item xs={12} md={6}>
-                                <TextField
-                                    name="password"
-                                    label="Nueva Contraseña (opcional)"
-                                    type="password"
-                                    autoComplete="new-password"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={selectedUser?.password || ''}
-                                    onChange={handleUserChange}
-                                />
-                            </Grid>
-                        )}
-                        <Grid item xs={12} md={6}>
-                            <FormControl variant="outlined" fullWidth required>
-                                <InputLabel>Rol</InputLabel>
-                                <Select
-                                    name="roleId"
-                                    value={selectedUser?.roleId || ''}
-                                    onChange={handleRoleIdChange}
-                                    label="Rol"
-                                    disabled={isSelfEdit}
-                                >
-                                    <MenuItem value="">
-                                        <em>Seleccione un rol</em>
-                                    </MenuItem>
-                                    {roleOptions
-                                        .filter(r => assignableRoles.has(String(r.name).toLowerCase()))
-                                        .filter(r => canManageRoleId(r.id) || (isSelfEdit && Number(r.id) === Number(selectedUser?.originalRoleId)))
-                                        .map((r) => (
-                                            <MenuItem key={r.id} value={r.id}>
-                                                {r.name}
-                                            </MenuItem>
-                                        ))}
-                                </Select>
-                                {isSelfEdit && (
-                                    <FormHelperText>No puedes cambiar tu propio rol.</FormHelperText>
-                                )}
-                                {selectedUser?.id && Number(selectedUser?.roleId) !== Number(selectedUser?.originalRoleId) && (
-                                    <FormHelperText>Al cambiar el rol, el usuario deberá iniciar sesión de nuevo.</FormHelperText>
-                                )}
-                            </FormControl>
-                        </Grid>
-                        {Number(selectedUser?.roleId) === 4 && (
-                            <>
-                                <Grid item xs={12} md={6}>
-                                    <TextField
-                                        name="monitoraFullName"
-                                        label="Nombre Completo (Monitora)"
-                                        type="text"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={selectedUser?.monitoraFullName || ''}
-                                        onChange={handleUserChange}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} md={6}>
-                                    <TextField
-                                        name="phoneNumber"
-                                        label="Número de Teléfono"
-                                        type="text"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={selectedUser?.phoneNumber || ''}
-                                        onChange={handleUserChange}
-                                    />
-                                </Grid>
-                            </>
-                        )}
-                        {!isSelfEdit && !roleDisablesSchoolOrCorp(selectedUser?.roleId) && (
-                            <>
-                                <Grid item xs={12} md={6}>
-                                    <FormControl variant="outlined" fullWidth>
-                                        <InputLabel>Colegio</InputLabel>
-                                        <Select
-                                            name="school"
-                                            value={selectedUser?.school || ''}
-                                            onChange={(e) => {
-                                                const newSchoolId = e.target.value;
-                                                setSelectedUser(prev => ({
-                                                    ...prev,
-                                                    school: newSchoolId,
-                                                    corporationId: newSchoolId ? '' : prev.corporationId
-                                                }));
-                                            }}
-                                            label="Colegio"
-                                        >
-                                            <MenuItem value="">
-                                                <em>Ninguno</em>
-                                            </MenuItem>
-                                            {schools.map((sch) => (
-                                                <MenuItem key={sch.id} value={sch.id}>
-                                                    {sch.name}
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-                                <Grid item xs={12} md={6}>
-                                    <FormControl variant="outlined" fullWidth>
-                                        <InputLabel>Corporación</InputLabel>
-                                        <Select
-                                            name="corporationId"
-                                            value={selectedUser?.corporationId || ''}
-                                            onChange={(e) => {
-                                                const newCorporationId = e.target.value;
-                                                setSelectedUser(prev => ({ 
-                                                    ...prev, 
-                                                    corporationId: newCorporationId,
-                                                    school: newCorporationId ? '' : prev.school
-                                                }));
-                                            }}
-                                            label="Corporación"
-                                        >
-                                            <MenuItem value="">
-                                                <em>Ninguna</em>
-                                            </MenuItem>
-                                            {corporations.map((corp) => (
-                                                <MenuItem key={corp.id} value={corp.id}>
-                                                    {corp.name}
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-                            </>
-                        )}
-                        {!isSelfEdit && Number(selectedUser?.roleId) === 6 && (
-                            <Box sx={{ mt: 3, clear: 'both', width: '100%' }}>
-                                <Typography variant="h6" sx={{ mb: 1 }}>
-                                    Clientes a cargo
-                                </Typography>
-                                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                    Selecciona uno o más clientes (colegios y corporaciones); todos los pilotos asignados serán enlazados automáticamente.
-                                </Typography>
-
-                                <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
-                                    Colegios
-                                </Typography>
-                                <FormControl fullWidth sx={{ mb: 2 }} size="small">
-                                    <InputLabel>Seleccionar Colegios</InputLabel>
-                                    <Select
-                                        multiple
-                                        value={selectedSupervisorSchools}
-                                        onChange={(e) => setSelectedSupervisorSchools(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
-                                        label="Seleccionar Colegios"
-                                        renderValue={(selected) => selected.map(id => (assignableSchools.find(s => s.id === id)?.name || id)).join(', ')}
-                                    >
-                                        {assignableSchools.map(s => (
-                                            <MenuItem key={s.id} value={s.id}>
-                                                <Checkbox checked={selectedSupervisorSchools.includes(s.id)} />
-                                                <ListItemText primary={s.name} />
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-
-                                <Typography variant="subtitle1" sx={{ mb: 1, mt: 2, fontWeight: 'bold' }}>
-                                    Corporaciones
-                                </Typography>
-                                <FormControl fullWidth sx={{ mb: 2 }} size="small">
-                                    <InputLabel>Seleccionar Corporaciones</InputLabel>
-                                    <Select
-                                        multiple
-                                        value={selectedSupervisorCorporations}
-                                        onChange={(e) => setSelectedSupervisorCorporations(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
-                                        label="Seleccionar Corporaciones"
-                                        renderValue={(selected) => selected.map(id => (corporations.find(c => c.id === id)?.name || id)).join(', ')}
-                                    >
-                                        {corporations.map(c => (
-                                            <MenuItem key={c.id} value={c.id}>
-                                                <Checkbox checked={selectedSupervisorCorporations.includes(c.id)} />
-                                                <ListItemText primary={c.name} />
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-
-                                <Typography variant="subtitle2" sx={{ mt: 2 }}>Pilotos enlazados automáticamente:</Typography>
-                                <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto', mb: 2 }}>
-                                    {(() => {
-                                        // Compute pilots that belong to selected schools or corporations
-                                        const schoolPilots = selectedSupervisorSchools.length > 0 
-                                            ? allPilots.filter(p => selectedSupervisorSchools.includes(Number(p.school)))
-                                            : [];
-                                        const corpPilots = selectedSupervisorCorporations.length > 0
-                                            ? allPilots.filter(p => selectedSupervisorCorporations.includes(Number(p.corporationId)))
-                                            : [];
-                                        const allLinkedPilots = [...schoolPilots, ...corpPilots];
-                                        
-                                        if (allLinkedPilots.length === 0) {return (
-                                            <Typography variant="body2" color="text.secondary">No se seleccionaron clientes o no hay pilotos asignados.</Typography>
-                                        );}
-                                        
-                                        // Remove duplicates by ID
-                                        const uniquePilots = allLinkedPilots.filter((p, idx, arr) => 
-                                            arr.findIndex(pilot => pilot.id === p.id) === idx
-                                        );
-                                        
-                                        return uniquePilots.map(p => (
-                                            <Typography key={p.id} variant="body2">{p.name} — {p.email} (ID: {p.id})</Typography>
-                                        ));
-                                    })()}
-                                </Paper>
-                            </Box>
-                        )}
-                        {!isSelfEdit && Number(selectedUser?.roleId) === 7 && (
-                            <Box sx={{ mt: 3, clear: 'both', width: '100%' }}>
-                                <Typography variant="h6" sx={{ mb: 1 }}>
-                                    Clientes a cargo
-                                </Typography>
-                                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                    Selecciona uno o más colegios; todas las monitoras asignadas serán enlazadas automáticamente.
-                                </Typography>
-
-                                <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
-                                    Colegios
-                                </Typography>
-                                <FormControl fullWidth sx={{ mb: 2 }} size="small">
-                                    <InputLabel>Seleccionar Colegios</InputLabel>
-                                    <Select
-                                        multiple
-                                        value={selectedAuxiliarSchools}
-                                        onChange={(e) => setSelectedAuxiliarSchools(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
-                                        label="Seleccionar Colegios"
-                                        renderValue={(selected) => selected.map(id => (assignableSchools.find(s => s.id === id)?.name || id)).join(', ')}
-                                    >
-                                        {assignableSchools.map(s => (
-                                            <MenuItem key={s.id} value={s.id}>
-                                                <Checkbox checked={selectedAuxiliarSchools.includes(s.id)} />
-                                                <ListItemText primary={s.name} />
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-
-                                <Typography variant="subtitle1" sx={{ mb: 1, mt: 2, fontWeight: 'bold' }}>
-                                    Corporaciones
-                                </Typography>
-                                <FormControl fullWidth sx={{ mb: 2 }} size="small">
-                                    <InputLabel>Seleccionar Corporaciones</InputLabel>
-                                    <Select
-                                        multiple
-                                        value={selectedAuxiliarCorporations}
-                                        onChange={(e) => setSelectedAuxiliarCorporations(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
-                                        label="Seleccionar Corporaciones"
-                                        renderValue={(selected) => selected.map(id => (corporations.find(c => c.id === id)?.name || id)).join(', ')}
-                                    >
-                                        {corporations.map(c => (
-                                            <MenuItem key={c.id} value={c.id}>
-                                                <Checkbox checked={selectedAuxiliarCorporations.includes(c.id)} />
-                                                <ListItemText primary={c.name} />
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-
-                                <Typography variant="subtitle2" sx={{ mt: 2 }}>Monitoras enlazadas automáticamente:</Typography>
-                                <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto', mb: 2 }}>
-                                    {(() => {
-                                        // Compute monitoras that belong to selected schools or corporations.
-                                        // A monitora's school may be a sibling-cycle record of the selected
-                                        // one, so compare canonical ids.
-                                        const schoolMonitoras = selectedAuxiliarSchools.length > 0
-                                            ? allMonitoras.filter(m => {
-                                                const schoolId = Number(m.school);
-                                                if (!schoolId) {
-                                                    return false;
-                                                }
-                                                return selectedAuxiliarSchools.includes(canonicalSchoolIdById.get(schoolId) ?? schoolId);
-                                            })
-                                            : [];
-                                        const corpMonitoras = selectedAuxiliarCorporations.length > 0
-                                            ? allMonitoras.filter(m => selectedAuxiliarCorporations.includes(Number(m.corporationId)))
-                                            : [];
-                                        const allLinkedMonitoras = [...schoolMonitoras, ...corpMonitoras];
-                                        
-                                        if (allLinkedMonitoras.length === 0) {return (
-                                            <Typography variant="body2" color="text.secondary">No se seleccionaron clientes o no hay monitoras asignadas.</Typography>
-                                        );}
-                                        
-                                        // Remove duplicates by ID
-                                        const uniqueMonitoras = allLinkedMonitoras.filter((m, idx, arr) => 
-                                            arr.findIndex(monitora => monitora.id === m.id) === idx
-                                        );
-                                        
-                                        return uniqueMonitoras.map(m => (
-                                            <Typography key={m.id} variant="body2">{m.name} — {m.email} (ID: {m.id})</Typography>
-                                        ));
-                                    })()}
-                                </Paper>
-                            </Box>
-                        )}
+            <AppDialog
+                open={openDialog}
+                onClose={handleDialogClose}
+                title={selectedUser?.id ? 'Editar usuario' : 'Nuevo usuario'}
+                subtitle={selectedUser?.id
+                    ? 'Actualiza la información del usuario.'
+                    : 'Completa la información para crear un nuevo usuario.'}
+                icon={selectedUser?.id ? <Edit /> : <PersonAddIcon />}
+                size="md"
+                onSubmit={handleSaveUser}
+                submitLabel={selectedUser?.id ? 'Guardar cambios' : 'Crear usuario'}
+                submitting={savingUser}
+                readOnly={!hasPermission(selectedUser?.id ? 'usuarios-editar' : 'usuarios-crear')}
+                dirty={userFormSnapshot !== userInitialRef.current}
+            >
+                <Grid container spacing={2}>
+                    <Grid item xs={12} md={6}>
+                        <TextField
+                            autoFocus
+                            name="name"
+                            label="Nombre completo"
+                            type="text"
+                            fullWidth
+                            variant="outlined"
+                            value={selectedUser?.name || ''}
+                            onChange={handleUserChange}
+                            required
+                            error={Boolean(userErrors.name)}
+                            helperText={userErrors.name}
+                        />
                     </Grid>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleDialogClose} color="primary">
-                        Cancelar
-                    </Button>
-                    {hasPermission(selectedUser?.id ? 'usuarios-editar' : 'usuarios-crear') && (
-                        <Button onClick={handleSaveUser} color="primary" variant="contained">
-                            {selectedUser?.id ? 'Guardar Cambios' : 'Crear Usuario'}
-                        </Button>
+                    <Grid item xs={12} md={6}>
+                        <TextField
+                            name="email"
+                            label="Correo electrónico"
+                            type="email"
+                            fullWidth
+                            variant="outlined"
+                            value={selectedUser?.email || ''}
+                            onChange={handleUserChange}
+                            required
+                            error={Boolean(userErrors.email)}
+                            helperText={userErrors.email}
+                        />
+                    </Grid>
+                    {!selectedUser?.id && (
+                        <Grid item xs={12} md={6}>
+                            <TextField
+                                name="password"
+                                label="Contraseña"
+                                type="password"
+                                autoComplete="new-password"
+                                fullWidth
+                                variant="outlined"
+                                value={selectedUser?.password || ''}
+                                onChange={handleUserChange}
+                                required
+                                error={Boolean(userErrors.password)}
+                                helperText={userErrors.password}
+                            />
+                        </Grid>
                     )}
-                </DialogActions>
-            </Dialog>
+                    {selectedUser?.id && (
+                        <Grid item xs={12} md={6}>
+                            <TextField
+                                name="password"
+                                label="Nueva contraseña (opcional)"
+                                type="password"
+                                autoComplete="new-password"
+                                fullWidth
+                                variant="outlined"
+                                value={selectedUser?.password || ''}
+                                onChange={handleUserChange}
+                            />
+                        </Grid>
+                    )}
+                    <Grid item xs={12} md={6}>
+                        <FormControl variant="outlined" fullWidth required error={Boolean(userErrors.roleId)}>
+                            <InputLabel>Rol</InputLabel>
+                            <Select
+                                name="roleId"
+                                value={selectedUser?.roleId || ''}
+                                onChange={handleRoleIdChange}
+                                label="Rol"
+                                disabled={isSelfEdit}
+                            >
+                                <MenuItem value="">
+                                    <em>Seleccione un rol</em>
+                                </MenuItem>
+                                {roleOptions
+                                    .filter(r => assignableRoles.has(String(r.name).toLowerCase()))
+                                    .filter(r => canManageRoleId(r.id) || (isSelfEdit && Number(r.id) === Number(selectedUser?.originalRoleId)))
+                                    .map((r) => (
+                                        <MenuItem key={r.id} value={r.id}>
+                                            {r.name}
+                                        </MenuItem>
+                                    ))}
+                            </Select>
+                            {userErrors.roleId && (
+                                <FormHelperText>{userErrors.roleId}</FormHelperText>
+                            )}
+                            {isSelfEdit && (
+                                <FormHelperText>No puedes cambiar tu propio rol.</FormHelperText>
+                            )}
+                            {selectedUser?.id && Number(selectedUser?.roleId) !== Number(selectedUser?.originalRoleId) && (
+                                <FormHelperText>Al cambiar el rol, el usuario deberá iniciar sesión de nuevo.</FormHelperText>
+                            )}
+                        </FormControl>
+                    </Grid>
+                    {Number(selectedUser?.roleId) === 4 && (
+                        <>
+                            <Grid item xs={12} md={6}>
+                                <TextField
+                                    name="monitoraFullName"
+                                    label="Nombre completo (monitora)"
+                                    type="text"
+                                    fullWidth
+                                    variant="outlined"
+                                    value={selectedUser?.monitoraFullName || ''}
+                                    onChange={handleUserChange}
+                                />
+                            </Grid>
+                            <Grid item xs={12} md={6}>
+                                <TextField
+                                    name="phoneNumber"
+                                    label="Número de teléfono"
+                                    type="text"
+                                    fullWidth
+                                    variant="outlined"
+                                    value={selectedUser?.phoneNumber || ''}
+                                    onChange={handleUserChange}
+                                />
+                            </Grid>
+                        </>
+                    )}
+                    {!isSelfEdit && !roleDisablesSchoolOrCorp(selectedUser?.roleId) && (
+                        <>
+                            <Grid item xs={12} md={6}>
+                                <FormControl variant="outlined" fullWidth>
+                                    <InputLabel>Colegio</InputLabel>
+                                    <Select
+                                        name="school"
+                                        value={selectedUser?.school || ''}
+                                        onChange={(e) => {
+                                            const newSchoolId = e.target.value;
+                                            setSelectedUser(prev => ({
+                                                ...prev,
+                                                school: newSchoolId,
+                                                corporationId: newSchoolId ? '' : prev.corporationId
+                                            }));
+                                        }}
+                                        label="Colegio"
+                                    >
+                                        <MenuItem value="">
+                                            <em>Ninguno</em>
+                                        </MenuItem>
+                                        {schools.map((sch) => (
+                                            <MenuItem key={sch.id} value={sch.id}>
+                                                {sch.name}
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+                            <Grid item xs={12} md={6}>
+                                <FormControl variant="outlined" fullWidth>
+                                    <InputLabel>Corporación</InputLabel>
+                                    <Select
+                                        name="corporationId"
+                                        value={selectedUser?.corporationId || ''}
+                                        onChange={(e) => {
+                                            const newCorporationId = e.target.value;
+                                            setSelectedUser(prev => ({ 
+                                                ...prev, 
+                                                corporationId: newCorporationId,
+                                                school: newCorporationId ? '' : prev.school
+                                            }));
+                                        }}
+                                        label="Corporación"
+                                    >
+                                        <MenuItem value="">
+                                            <em>Ninguna</em>
+                                        </MenuItem>
+                                        {corporations.map((corp) => (
+                                            <MenuItem key={corp.id} value={corp.id}>
+                                                {corp.name}
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+                        </>
+                    )}
+                    {!isSelfEdit && Number(selectedUser?.roleId) === 6 && (
+                        <Box sx={{ mt: 3, clear: 'both', width: '100%' }}>
+                            <Typography variant="h6" sx={{ mb: 1 }}>
+                                Clientes a cargo
+                            </Typography>
+                            <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                Selecciona uno o más clientes (colegios y corporaciones); todos los pilotos asignados serán enlazados automáticamente.
+                            </Typography>
+
+                            <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
+                                Colegios
+                            </Typography>
+                            <FormControl fullWidth sx={{ mb: 2 }} size="small">
+                                <InputLabel>Seleccionar Colegios</InputLabel>
+                                <Select
+                                    multiple
+                                    value={selectedSupervisorSchools}
+                                    onChange={(e) => setSelectedSupervisorSchools(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
+                                    label="Seleccionar Colegios"
+                                    renderValue={(selected) => selected.map(id => (assignableSchools.find(s => s.id === id)?.name || id)).join(', ')}
+                                >
+                                    {assignableSchools.map(s => (
+                                        <MenuItem key={s.id} value={s.id}>
+                                            <Checkbox checked={selectedSupervisorSchools.includes(s.id)} />
+                                            <ListItemText primary={s.name} />
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+
+                            <Typography variant="subtitle1" sx={{ mb: 1, mt: 2, fontWeight: 'bold' }}>
+                                Corporaciones
+                            </Typography>
+                            <FormControl fullWidth sx={{ mb: 2 }} size="small">
+                                <InputLabel>Seleccionar Corporaciones</InputLabel>
+                                <Select
+                                    multiple
+                                    value={selectedSupervisorCorporations}
+                                    onChange={(e) => setSelectedSupervisorCorporations(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
+                                    label="Seleccionar Corporaciones"
+                                    renderValue={(selected) => selected.map(id => (corporations.find(c => c.id === id)?.name || id)).join(', ')}
+                                >
+                                    {corporations.map(c => (
+                                        <MenuItem key={c.id} value={c.id}>
+                                            <Checkbox checked={selectedSupervisorCorporations.includes(c.id)} />
+                                            <ListItemText primary={c.name} />
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+
+                            <Typography variant="subtitle2" sx={{ mt: 2 }}>Pilotos enlazados automáticamente:</Typography>
+                            <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto', mb: 2 }}>
+                                {(() => {
+                                    // Compute pilots that belong to selected schools or corporations
+                                    const schoolPilots = selectedSupervisorSchools.length > 0 
+                                        ? allPilots.filter(p => selectedSupervisorSchools.includes(Number(p.school)))
+                                        : [];
+                                    const corpPilots = selectedSupervisorCorporations.length > 0
+                                        ? allPilots.filter(p => selectedSupervisorCorporations.includes(Number(p.corporationId)))
+                                        : [];
+                                    const allLinkedPilots = [...schoolPilots, ...corpPilots];
+                                    
+                                    if (allLinkedPilots.length === 0) {return (
+                                        <Typography variant="body2" color="text.secondary">No se seleccionaron clientes o no hay pilotos asignados.</Typography>
+                                    );}
+                                    
+                                    // Remove duplicates by ID
+                                    const uniquePilots = allLinkedPilots.filter((p, idx, arr) => 
+                                        arr.findIndex(pilot => pilot.id === p.id) === idx
+                                    );
+                                    
+                                    return uniquePilots.map(p => (
+                                        <Typography key={p.id} variant="body2">{p.name} — {p.email} (ID: {p.id})</Typography>
+                                    ));
+                                })()}
+                            </Paper>
+                        </Box>
+                    )}
+                    {!isSelfEdit && Number(selectedUser?.roleId) === 7 && (
+                        <Box sx={{ mt: 3, clear: 'both', width: '100%' }}>
+                            <Typography variant="h6" sx={{ mb: 1 }}>
+                                Clientes a cargo
+                            </Typography>
+                            <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                Selecciona uno o más colegios; todas las monitoras asignadas serán enlazadas automáticamente.
+                            </Typography>
+
+                            <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
+                                Colegios
+                            </Typography>
+                            <FormControl fullWidth sx={{ mb: 2 }} size="small">
+                                <InputLabel>Seleccionar Colegios</InputLabel>
+                                <Select
+                                    multiple
+                                    value={selectedAuxiliarSchools}
+                                    onChange={(e) => setSelectedAuxiliarSchools(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
+                                    label="Seleccionar Colegios"
+                                    renderValue={(selected) => selected.map(id => (assignableSchools.find(s => s.id === id)?.name || id)).join(', ')}
+                                >
+                                    {assignableSchools.map(s => (
+                                        <MenuItem key={s.id} value={s.id}>
+                                            <Checkbox checked={selectedAuxiliarSchools.includes(s.id)} />
+                                            <ListItemText primary={s.name} />
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+
+                            <Typography variant="subtitle1" sx={{ mb: 1, mt: 2, fontWeight: 'bold' }}>
+                                Corporaciones
+                            </Typography>
+                            <FormControl fullWidth sx={{ mb: 2 }} size="small">
+                                <InputLabel>Seleccionar Corporaciones</InputLabel>
+                                <Select
+                                    multiple
+                                    value={selectedAuxiliarCorporations}
+                                    onChange={(e) => setSelectedAuxiliarCorporations(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
+                                    label="Seleccionar Corporaciones"
+                                    renderValue={(selected) => selected.map(id => (corporations.find(c => c.id === id)?.name || id)).join(', ')}
+                                >
+                                    {corporations.map(c => (
+                                        <MenuItem key={c.id} value={c.id}>
+                                            <Checkbox checked={selectedAuxiliarCorporations.includes(c.id)} />
+                                            <ListItemText primary={c.name} />
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+
+                            <Typography variant="subtitle2" sx={{ mt: 2 }}>Monitoras enlazadas automáticamente:</Typography>
+                            <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto', mb: 2 }}>
+                                {(() => {
+                                    // Compute monitoras that belong to selected schools or corporations.
+                                    // A monitora's school may be a sibling-cycle record of the selected
+                                    // one, so compare canonical ids.
+                                    const schoolMonitoras = selectedAuxiliarSchools.length > 0
+                                        ? allMonitoras.filter(m => {
+                                            const schoolId = Number(m.school);
+                                            if (!schoolId) {
+                                                return false;
+                                            }
+                                            return selectedAuxiliarSchools.includes(canonicalSchoolIdById.get(schoolId) ?? schoolId);
+                                        })
+                                        : [];
+                                    const corpMonitoras = selectedAuxiliarCorporations.length > 0
+                                        ? allMonitoras.filter(m => selectedAuxiliarCorporations.includes(Number(m.corporationId)))
+                                        : [];
+                                    const allLinkedMonitoras = [...schoolMonitoras, ...corpMonitoras];
+                                    
+                                    if (allLinkedMonitoras.length === 0) {return (
+                                        <Typography variant="body2" color="text.secondary">No se seleccionaron clientes o no hay monitoras asignadas.</Typography>
+                                    );}
+                                    
+                                    // Remove duplicates by ID
+                                    const uniqueMonitoras = allLinkedMonitoras.filter((m, idx, arr) => 
+                                        arr.findIndex(monitora => monitora.id === m.id) === idx
+                                    );
+                                    
+                                    return uniqueMonitoras.map(m => (
+                                        <Typography key={m.id} variant="body2">{m.name} — {m.email} (ID: {m.id})</Typography>
+                                    ));
+                                })()}
+                            </Paper>
+                        </Box>
+                    )}
+                </Grid>
+            </AppDialog>
 
             {/* Diálogo Carga Masiva */}
             <Dialog open={openBulkDialog} onClose={handleCloseBulkDialog} maxWidth="sm" fullWidth>
@@ -1598,70 +1638,66 @@ const RolesManagementPage = () => {
             
 
             {/* Diálogo para descargar todos los usuarios */}
-            <Dialog open={downloadAllDialogOpen} onClose={() => setDownloadAllDialogOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Descargar Todos los Usuarios</DialogTitle>
-                <DialogContent>
-                    <FormControl fullWidth sx={{ mt: 1 }}>
-                        <InputLabel>Filtrar por</InputLabel>
-                        <Select
-                            value={downloadCategory}
-                            label="Filtrar por"
-                            onChange={(e) => { setDownloadCategory(e.target.value); setSelectedClientForDownload(null); }}
-                        >
-                            <MenuItem value=""> 
-                                <em>Selecciona...</em>
-                            </MenuItem>
-                            <MenuItem value="Colegios">Colegios</MenuItem>
-                            <MenuItem value="Corporaciones">Corporaciones</MenuItem>
-                            <MenuItem value="Sin afiliación">Sin afiliación</MenuItem>
-                        </Select>
-                    </FormControl>
-
-                    {downloadCategory === 'Colegios' && (
-                        <Box sx={{ mt: 2 }}>
-                            <Autocomplete
-                                options={schools}
-                                getOptionLabel={(opt) => opt?.name || ''}
-                                value={selectedClientForDownload}
-                                onChange={(e, v) => setSelectedClientForDownload(v)}
-                                renderInput={(params) => <TextField {...params} label="Selecciona Colegio" />}
-                                fullWidth
-                            />
-                        </Box>
-                    )}
-
-                    {downloadCategory === 'Corporaciones' && (
-                        <Box sx={{ mt: 2 }}>
-                            <Autocomplete
-                                options={corporations}
-                                getOptionLabel={(opt) => opt?.name || ''}
-                                value={selectedClientForDownload}
-                                onChange={(e, v) => setSelectedClientForDownload(v)}
-                                renderInput={(params) => <TextField {...params} label="Selecciona Corporación" />}
-                                fullWidth
-                            />
-                        </Box>
-                    )}
-
-                    {downloadCategory === 'Sin afiliación' && (
-                        <Box sx={{ mt: 2 }}>
-                            <DialogContentText>Se descargarán usuarios que no pertenecen a ningún colegio ni corporación.</DialogContentText>
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setDownloadAllDialogOpen(false)}>Cancelar</Button>
-                    <Button
-                        onClick={() => {
-                            handleDownloadAllUsers(downloadCategory, selectedClientForDownload);
-                            setDownloadAllDialogOpen(false);
-                        }}
-                        variant="contained"
+            <AppDialog
+                open={downloadAllDialogOpen}
+                onClose={() => setDownloadAllDialogOpen(false)}
+                title="Descargar todos los usuarios"
+                icon={<FileDownloadIcon />}
+                size="sm"
+                onSubmit={() => {
+                    handleDownloadAllUsers(downloadCategory, selectedClientForDownload);
+                    setDownloadAllDialogOpen(false);
+                }}
+                submitLabel="Descargar"
+            >
+                <FormControl fullWidth>
+                    <InputLabel>Filtrar por</InputLabel>
+                    <Select
+                        value={downloadCategory}
+                        label="Filtrar por"
+                        onChange={(e) => { setDownloadCategory(e.target.value); setSelectedClientForDownload(null); }}
                     >
-                        Descargar
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                        <MenuItem value=""> 
+                            <em>Selecciona...</em>
+                        </MenuItem>
+                        <MenuItem value="Colegios">Colegios</MenuItem>
+                        <MenuItem value="Corporaciones">Corporaciones</MenuItem>
+                        <MenuItem value="Sin afiliación">Sin afiliación</MenuItem>
+                    </Select>
+                </FormControl>
+
+                {downloadCategory === 'Colegios' && (
+                    <Box sx={{ mt: 2 }}>
+                        <Autocomplete
+                            options={schools}
+                            getOptionLabel={(opt) => opt?.name || ''}
+                            value={selectedClientForDownload}
+                            onChange={(e, v) => setSelectedClientForDownload(v)}
+                            renderInput={(params) => <TextField {...params} label="Selecciona colegio" />}
+                            fullWidth
+                        />
+                    </Box>
+                )}
+
+                {downloadCategory === 'Corporaciones' && (
+                    <Box sx={{ mt: 2 }}>
+                        <Autocomplete
+                            options={corporations}
+                            getOptionLabel={(opt) => opt?.name || ''}
+                            value={selectedClientForDownload}
+                            onChange={(e, v) => setSelectedClientForDownload(v)}
+                            renderInput={(params) => <TextField {...params} label="Selecciona corporación" />}
+                            fullWidth
+                        />
+                    </Box>
+                )}
+
+                {downloadCategory === 'Sin afiliación' && (
+                    <Box sx={{ mt: 2 }}>
+                        <DialogContentText>Se descargarán usuarios que no pertenecen a ningún colegio ni corporación.</DialogContentText>
+                    </Box>
+                )}
+            </AppDialog>
         </PageContainer>
     );
 };

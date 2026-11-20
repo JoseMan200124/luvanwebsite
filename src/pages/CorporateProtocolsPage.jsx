@@ -5,9 +5,6 @@ import {
     List,
     ListItem,
     ListItemText,
-    Dialog,
-    DialogTitle,
-    DialogContent,
     Typography,
     IconButton,
     TextField,
@@ -15,7 +12,6 @@ import {
     Pagination,
     CircularProgress,
     Box,
-    DialogActions,
     FormControl,
     InputLabel,
     Select,
@@ -51,6 +47,8 @@ import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import useClientScope from '../hooks/useClientScope';
 import { formatDate } from '../utils/dateFormat';
+import AppDialog from '../components/dialogs/AppDialog';
+import { MESSAGES, focusFirstError } from '../utils/validators';
 
 const PROTOCOL_TYPE_OPTIONS = [
     { value: 'protocolo', label: 'Protocolos' },
@@ -94,6 +92,7 @@ const CorporateProtocolsPage = () => {
         isActive: true
     });
     const [selectedFile, setSelectedFile] = useState(null);
+    const [titleError, setTitleError] = useState('');
     const [fileError, setFileError] = useState('');
 
     // Estados para confirmación de eliminación
@@ -216,6 +215,7 @@ const CorporateProtocolsPage = () => {
     // ---------------------------
     const handleCreate = () => {
         resetForm();
+        setTitleError('');
         setOpenDialog(true);
     };
 
@@ -229,12 +229,14 @@ const CorporateProtocolsPage = () => {
         });
         setSelectedFile(null);
         setFileError('');
+        setTitleError('');
         setOpenDialog(true);
     };
 
     const handleSave = async () => {
         if (!formData.title.trim()) {
-            showSnackbar('El título es obligatorio.', 'warning');
+            setTitleError(MESSAGES.required);
+            focusFirstError({ title: MESSAGES.required });
             return;
         }
 
@@ -498,98 +500,96 @@ const CorporateProtocolsPage = () => {
                 )}
 
                 {/* Diálogo para crear/editar protocolo */}
-                <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="md" fullWidth>
-                    <DialogTitle>
-                        {currentProtocol ? 'Editar Protocolo/Reglamento' : 'Crear Nuevo Protocolo/Reglamento'}
-                    </DialogTitle>
-                    <DialogContent>
-                        <Grid container spacing={2} style={{ marginTop: '8px' }}>
-                            <Grid item xs={12} sm={6}>
-                                <TextField
-                                    label="Título *"
-                                    value={formData.title}
-                                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                                    fullWidth
-                                />
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <FormControl fullWidth>
-                                    <InputLabel>Tipo *</InputLabel>
-                                    <Select
-                                        value={formData.type}
-                                        onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                                        label="Tipo *"
-                                    >
-                                        <MenuItem value="protocolo">Protocolo</MenuItem>
-                                        <MenuItem value="reglamento">Reglamento</MenuItem>
-                                    </Select>
-                                </FormControl>
-                            </Grid>
-                            <Grid item xs={12}>
-                                <TextField
-                                    label="Descripción"
-                                    value={formData.description}
-                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                    fullWidth
-                                    multiline
-                                    rows={3}
-                                />
-                            </Grid>
-                            <Grid item xs={12}>
-                                <FormControlLabel
-                                    control={
-                                        <Switch
-                                            checked={formData.isActive}
-                                            onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                                        />
-                                    }
-                                    label="Protocolo/Reglamento Activo"
-                                />
-                            </Grid>
-                            <Grid item xs={12}>
-                                <Box>
-                                    <input
-                                        accept="application/pdf"
-                                        style={{ display: 'none' }}
-                                        id="pdf-upload"
-                                        type="file"
-                                        onChange={handleFileChange}
-                                    />
-                                    <label htmlFor="pdf-upload">
-                                        <Button
-                                            variant="outlined"
-                                            component="span"
-                                            startIcon={<CloudUploadIcon />}
-                                            fullWidth
-                                        >
-                                            {currentProtocol ? 'Cambiar archivo PDF' : 'Seleccionar archivo PDF *'}
-                                        </Button>
-                                    </label>
-                                    {selectedFile && (
-                                        <Typography variant="body2" color="primary" mt={1}>
-                                            Archivo seleccionado: {selectedFile.name}
-                                        </Typography>
-                                    )}
-                                    {fileError && (
-                                        <Typography variant="body2" color="error" mt={1}>
-                                            {fileError}
-                                        </Typography>
-                                    )}
-                                </Box>
-                            </Grid>
+                <AppDialog
+                    open={openDialog}
+                    onClose={() => setOpenDialog(false)}
+                    title={currentProtocol ? 'Editar protocolo/reglamento' : 'Nuevo protocolo/reglamento'}
+                    icon={<DocumentIcon />}
+                    size="md"
+                    onSubmit={handleSave}
+                    submitLabel={currentProtocol ? 'Actualizar' : 'Crear'}
+                    readOnly={!hasPermission(currentProtocol ? 'protocolos-editar' : 'protocolos-crear')}
+                >
+                    <Grid container spacing={2} style={{ marginTop: '8px' }}>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                label="Título"
+                                name="title"
+                                required
+                                error={Boolean(titleError)}
+                                helperText={titleError}
+                                value={formData.title}
+                                onChange={(e) => { setFormData({ ...formData, title: e.target.value }); setTitleError(''); }}
+                                fullWidth
+                            />
                         </Grid>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={() => setOpenDialog(false)}>
-                            Cancelar
-                        </Button>
-                        {hasPermission(currentProtocol ? 'protocolos-editar' : 'protocolos-crear') && (
-                            <Button onClick={handleSave} variant="contained">
-                                {currentProtocol ? 'Actualizar' : 'Crear'}
-                            </Button>
-                        )}
-                    </DialogActions>
-                </Dialog>
+                        <Grid item xs={12} sm={6}>
+                            <FormControl fullWidth>
+                                <InputLabel>Tipo *</InputLabel>
+                                <Select
+                                    value={formData.type}
+                                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                                    label="Tipo *"
+                                >
+                                    <MenuItem value="protocolo">Protocolo</MenuItem>
+                                    <MenuItem value="reglamento">Reglamento</MenuItem>
+                                </Select>
+                            </FormControl>
+                        </Grid>
+                        <Grid item xs={12}>
+                            <TextField
+                                label="Descripción"
+                                value={formData.description}
+                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                fullWidth
+                                multiline
+                                rows={3}
+                            />
+                        </Grid>
+                        <Grid item xs={12}>
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        checked={formData.isActive}
+                                        onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                                    />
+                                }
+                                label="Protocolo/Reglamento Activo"
+                            />
+                        </Grid>
+                        <Grid item xs={12}>
+                            <Box>
+                                <input
+                                    accept="application/pdf"
+                                    style={{ display: 'none' }}
+                                    id="pdf-upload"
+                                    type="file"
+                                    onChange={handleFileChange}
+                                />
+                                <label htmlFor="pdf-upload">
+                                    <Button
+                                        variant="outlined"
+                                        component="span"
+                                        startIcon={<CloudUploadIcon />}
+                                        fullWidth
+                                    >
+                                        {currentProtocol ? 'Cambiar archivo PDF' : 'Seleccionar archivo PDF *'}
+                                    </Button>
+                                </label>
+                                {selectedFile && (
+                                    <Typography variant="body2" color="primary" mt={1}>
+                                        Archivo seleccionado: {selectedFile.name}
+                                    </Typography>
+                                )}
+                                {fileError && (
+                                    <Typography variant="body2" color="error" mt={1}>
+                                        {fileError}
+                                    </Typography>
+                                )}
+                            </Box>
+                        </Grid>
+                    </Grid>
+                </AppDialog>
 
 
             </>

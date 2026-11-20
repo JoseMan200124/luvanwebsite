@@ -8,12 +8,7 @@ import {
   CardContent,
   CircularProgress,
   Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Grid,
-  IconButton,
   Table,
   TableBody,
   TableCell,
@@ -24,11 +19,11 @@ import {
   Stack,
 } from '@mui/material';
 import {
-  Close as CloseIcon,
   GetApp as DownloadIcon,
   ExpandMore as ExpandMoreIcon,
   Replay as ReplayIcon,
   Visibility as VisibilityIcon,
+  MailOutline as MailOutlineIcon,
 } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import parse from 'html-react-parser';
@@ -54,6 +49,7 @@ import AppTableContainer from '../components/table/AppTableContainer';
 import RowActions from '../components/table/RowActions';
 import { formatDateTime } from '../utils/dateFormat';
 import { EMAIL_STATUS } from '../constants/statuses';
+import AppDialog from '../components/dialogs/AppDialog';
 
 const safeStr = (v) => (v == null ? '' : String(v)).trim();
 
@@ -542,231 +538,221 @@ const CircularHistoryPage = () => {
         <AppTablePagination count={total} {...table.paginationProps} />
       </Paper>
 
-      <Dialog open={detailOpen} onClose={closeDetail} fullWidth maxWidth="md">
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box sx={{ pr: 2, minWidth: 0 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-              <Typography variant="h6" sx={{ fontWeight: 800 }} noWrap>
-                {safeStr(detail?.subject) || 'Circular'}
-              </Typography>
-              {detail?.isScheduled && <ScheduledOriginChip />}
-            </Box>
-            <Typography variant="body2" color="text.secondary">
-              Enviada: {formatDateTime(detail?.sentAt) || '—'}
-            </Typography>
+      <AppDialog
+        open={detailOpen}
+        onClose={closeDetail}
+        title={safeStr(detail?.subject) || 'Circular'}
+        subtitle={`Enviada: ${formatDateTime(detail?.sentAt)}`}
+        icon={<MailOutlineIcon />}
+        size="md"
+        readOnly
+      >
+        {detail?.isScheduled && (
+          <Box sx={{ mb: 2 }}>
+            <ScheduledOriginChip />
           </Box>
-          <IconButton onClick={closeDetail} aria-label="Cerrar">
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
+        )}
+        {detailLoading ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : detailError ? (
+          <Alert severity="error">{detailError}</Alert>
+        ) : (
+          <>
+            {EMAIL_STATUS[detail?.emailStatus] && detail.emailStatus !== 'sent' && (
+              <Alert
+                severity={detail.emailStatus === 'sending' ? 'info' : 'warning'}
+                sx={{ mb: 2 }}
+                action={detail.canResend ? (
+                  <PermissionGuard permission="mail-enviar-circular">
+                    <Button color="inherit" size="small" startIcon={<ReplayIcon />} onClick={() => handleResend(detail)}>
+                      Reenviar a fallidos
+                    </Button>
+                  </PermissionGuard>
+                ) : undefined}
+              >
+                {detail.emailStatus === 'sending'
+                  ? 'Reenviando el correo a los destinatarios que no lo recibieron…'
+                  : `${emailDeliveryText(detail) || 'El correo no se pudo entregar a algunos destinatarios'}. La circular sí está publicada en el sistema.`}
+              </Alert>
+            )}
+            <Box sx={{ mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 1 }}>
+                <Typography variant="subtitle2" sx={{ color: '#1976d2', fontWeight: 800 }}>
+                  Destinatarios
+                </Typography>
 
-        <DialogContent dividers>
-          {detailLoading ? (
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4 }}>
-              <CircularProgress />
-            </Box>
-          ) : detailError ? (
-            <Alert severity="error">{detailError}</Alert>
-          ) : (
-            <>
-              {EMAIL_STATUS[detail?.emailStatus] && detail.emailStatus !== 'sent' && (
-                <Alert
-                  severity={detail.emailStatus === 'sending' ? 'info' : 'warning'}
-                  sx={{ mb: 2 }}
-                  action={detail.canResend ? (
-                    <PermissionGuard permission="mail-enviar-circular">
-                      <Button color="inherit" size="small" startIcon={<ReplayIcon />} onClick={() => handleResend(detail)}>
-                        Reenviar a fallidos
-                      </Button>
-                    </PermissionGuard>
-                  ) : undefined}
-                >
-                  {detail.emailStatus === 'sending'
-                    ? 'Reenviando el correo a los destinatarios que no lo recibieron…'
-                    : `${emailDeliveryText(detail) || 'El correo no se pudo entregar a algunos destinatarios'}. La circular sí está publicada en el sistema.`}
-                </Alert>
-              )}
-              <Box sx={{ mb: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 1 }}>
-                  <Typography variant="subtitle2" sx={{ color: '#1976d2', fontWeight: 800 }}>
-                    Destinatarios
-                  </Typography>
-
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="primary"
-                    onClick={() => setRecipientsOpen((value) => !value)}
-                    endIcon={
-                      <ExpandMoreIcon
-                        sx={{
-                          transform: recipientsOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                          transition: 'transform 200ms',
-                        }}
-                      />
-                    }
-                    sx={{
-                      textTransform: 'none',
-                      fontWeight: 700,
-                      backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                      borderColor: 'rgba(25, 118, 210, 0.24)',
-                      '&:hover': {
-                        backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                        borderColor: 'primary.main',
-                      },
-                      whiteSpace: 'nowrap',
-                    }}
-                    aria-label={recipientsOpen ? 'Ocultar destinatarios' : 'Mostrar destinatarios'}
-                  >
-                    {recipientsOpen ? 'Ocultar' : 'Mostrar'}
-                  </Button>
-                </Box>
-
-                {recipientsOpen && (
-                  <>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      label="Buscar destinatario"
-                      value={recipientSearch}
-                      onChange={(e) => setRecipientSearch(e.target.value)}
-                      placeholder="Nombre, correo, rol o colegio"
-                      sx={{ mb: 1.5 }}
-                    />
-
-                    <Box
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="primary"
+                  onClick={() => setRecipientsOpen((value) => !value)}
+                  endIcon={
+                    <ExpandMoreIcon
                       sx={{
-                        maxHeight: 360,
-                        overflowY: 'auto',
-                        pr: 1,
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        borderRadius: 2,
-                        p: 1.5,
-                        backgroundColor: 'background.paper',
+                        transform: recipientsOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 200ms',
                       }}
-                    >
-                      {filteredRecipientGroups.length > 0 ? (
-                        <Stack spacing={2}>
-                          {filteredRecipientGroups.map((group) => (
-                            <Box key={String(group.schoolId || group.schoolName)}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, mb: 1 }}>
-                                <Chip
-                                  label={group.schoolName || 'Sin colegio'}
-                                  size="small"
-                                  color="primary"
-                                  variant="outlined"
-                                  sx={{ fontWeight: 700 }}
-                                />
-                                <Typography variant="caption" color="text.secondary">
-                                  {group.users.length} usuario{group.users.length === 1 ? '' : 's'}
-                                </Typography>
-                              </Box>
+                    />
+                  }
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 700,
+                    backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                    borderColor: 'rgba(25, 118, 210, 0.24)',
+                    '&:hover': {
+                      backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                      borderColor: 'primary.main',
+                    },
+                    whiteSpace: 'nowrap',
+                  }}
+                  aria-label={recipientsOpen ? 'Ocultar destinatarios' : 'Mostrar destinatarios'}
+                >
+                  {recipientsOpen ? 'Ocultar' : 'Mostrar'}
+                </Button>
+              </Box>
 
-                              <Stack spacing={1}>
-                                {group.users.map((recipient) => (
-                                  <Box
-                                    key={recipient.id}
-                                    sx={{
-                                      display: 'flex',
-                                      alignItems: 'flex-start',
-                                      justifyContent: 'space-between',
-                                      gap: 2,
-                                      p: 1.25,
-                                      border: '1px solid',
-                                      borderColor: 'divider',
-                                      borderRadius: 2,
-                                      flexWrap: 'wrap',
-                                    }}
-                                  >
-                                    <Box sx={{ minWidth: 0, flex: 1 }}>
-                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                                          {getRecipientLabel(recipient)}
-                                        </Typography>
-                                        <Chip
-                                          size="small"
-                                          label={getRecipientRoleLabel(recipient.role)}
-                                          variant="filled"
-                                          color="default"
-                                          sx={{ fontWeight: 700 }}
-                                        />
-                                      </Box>
+              {recipientsOpen && (
+                <>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Buscar destinatario"
+                    value={recipientSearch}
+                    onChange={(e) => setRecipientSearch(e.target.value)}
+                    placeholder="Nombre, correo, rol o colegio"
+                    sx={{ mb: 1.5 }}
+                  />
+
+                  <Box
+                    sx={{
+                      maxHeight: 360,
+                      overflowY: 'auto',
+                      pr: 1,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: 2,
+                      p: 1.5,
+                      backgroundColor: 'background.paper',
+                    }}
+                  >
+                    {filteredRecipientGroups.length > 0 ? (
+                      <Stack spacing={2}>
+                        {filteredRecipientGroups.map((group) => (
+                          <Box key={String(group.schoolId || group.schoolName)}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, mb: 1 }}>
+                              <Chip
+                                label={group.schoolName || 'Sin colegio'}
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                                sx={{ fontWeight: 700 }}
+                              />
+                              <Typography variant="caption" color="text.secondary">
+                                {group.users.length} usuario{group.users.length === 1 ? '' : 's'}
+                              </Typography>
+                            </Box>
+
+                            <Stack spacing={1}>
+                              {group.users.map((recipient) => (
+                                <Box
+                                  key={recipient.id}
+                                  sx={{
+                                    display: 'flex',
+                                    alignItems: 'flex-start',
+                                    justifyContent: 'space-between',
+                                    gap: 2,
+                                    p: 1.25,
+                                    border: '1px solid',
+                                    borderColor: 'divider',
+                                    borderRadius: 2,
+                                    flexWrap: 'wrap',
+                                  }}
+                                >
+                                  <Box sx={{ minWidth: 0, flex: 1 }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                        {getRecipientLabel(recipient)}
+                                      </Typography>
+                                      <Chip
+                                        size="small"
+                                        label={getRecipientRoleLabel(recipient.role)}
+                                        variant="filled"
+                                        color="default"
+                                        sx={{ fontWeight: 700 }}
+                                      />
                                     </Box>
                                   </Box>
-                                ))}
-                              </Stack>
-                            </Box>
-                          ))}
-                        </Stack>
-                      ) : (
-                        <Typography variant="body2" color="text.secondary">
-                          No hay destinatarios que coincidan con la búsqueda.
-                        </Typography>
-                      )}
-                    </Box>
-                  </>
-                )}
+                                </Box>
+                              ))}
+                            </Stack>
+                          </Box>
+                        ))}
+                      </Stack>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        No hay destinatarios que coincidan con la búsqueda.
+                      </Typography>
+                    )}
+                  </Box>
+                </>
+              )}
+            </Box>
+
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1, color: '#1976d2', fontWeight: 800 }}>
+                Mensaje
+              </Typography>
+              <Box sx={{ '& p': { marginTop: 0 } }}>
+                {safeStr(detail?.body) ? parse(String(detail.body)) : <Typography variant="body2">—</Typography>}
               </Box>
+            </Box>
 
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ mb: 1, color: '#1976d2', fontWeight: 800 }}>
-                  Mensaje
-                </Typography>
-                <Box sx={{ '& p': { marginTop: 0 } }}>
-                  {safeStr(detail?.body) ? parse(String(detail.body)) : <Typography variant="body2">—</Typography>}
-                </Box>
-              </Box>
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1, color: '#1976d2', fontWeight: 800 }}>
+                Archivo adjunto
+              </Typography>
 
-              <Box>
-                <Typography variant="subtitle2" sx={{ mb: 1, color: '#1976d2', fontWeight: 800 }}>
-                  Archivo adjunto
-                </Typography>
-
-                {Array.isArray(detail?.attachments) && detail.attachments.length > 0 ? (
-                  <Grid container spacing={1}>
-                    {detail.attachments.map((a) => (
-                      <Grid item xs={12} key={a.uuid}>
-                        <Card variant="outlined" sx={{ borderRadius: 2 }}>
-                          <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-                              <Box sx={{ minWidth: 0 }}>
-                                <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
-                                  {safeStr(a.originalName) || 'Adjunto'}
-                                </Typography>
-                                {safeStr(a.mimeType) && (
-                                  <Typography variant="caption" color="text.secondary">{a.mimeType}</Typography>
-                                )}
-                              </Box>
-
-                              <Button
-                                variant="contained"
-                                startIcon={<DownloadIcon />}
-                                onClick={() => downloadAttachment(a.uuid)}
-                                sx={{ whiteSpace: 'nowrap' }}
-                              >
-                                Descargar
-                              </Button>
+              {Array.isArray(detail?.attachments) && detail.attachments.length > 0 ? (
+                <Grid container spacing={1}>
+                  {detail.attachments.map((a) => (
+                    <Grid item xs={12} key={a.uuid}>
+                      <Card variant="outlined" sx={{ borderRadius: 2 }}>
+                        <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
+                                {safeStr(a.originalName) || 'Adjunto'}
+                              </Typography>
+                              {safeStr(a.mimeType) && (
+                                <Typography variant="caption" color="text.secondary">{a.mimeType}</Typography>
+                              )}
                             </Box>
 
-                            {renderAttachmentPreview(a)}
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    ))}
-                  </Grid>
-                ) : (
-                  <Typography variant="body2">No hay adjuntos.</Typography>
-                )}
-              </Box>
-            </>
-          )}
-        </DialogContent>
+                            <Button
+                              variant="contained"
+                              startIcon={<DownloadIcon />}
+                              onClick={() => downloadAttachment(a.uuid)}
+                              sx={{ whiteSpace: 'nowrap' }}
+                            >
+                              Descargar
+                            </Button>
+                          </Box>
 
-        <DialogActions>
-          <Button onClick={closeDetail}>Cerrar</Button>
-        </DialogActions>
-      </Dialog>
+                          {renderAttachmentPreview(a)}
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  ))}
+                </Grid>
+              ) : (
+                <Typography variant="body2">No hay adjuntos.</Typography>
+              )}
+            </Box>
+          </>
+        )}
+      </AppDialog>
 
 
     </PageContainer>

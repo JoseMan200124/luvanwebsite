@@ -3,10 +3,6 @@
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import {
     Paper,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     Button,
     Table,
     TableBody,
@@ -15,18 +11,17 @@ import {
     Typography,
     CircularProgress,
     Box,
-    IconButton,
     Grid,
     TextField
 } from '@mui/material';
-import { Close as CloseIcon, DirectionsBus } from '@mui/icons-material';
+import { DirectionsBus } from '@mui/icons-material';
 import { AuthContext } from '../../context/AuthProvider';
 import api from '../../utils/axiosConfig';
 import { getScheduleLabel } from '../../utils/scheduleConfig';
 import useTableState from '../../hooks/useTableState';
-import useIsMobile from '../../hooks/useIsMobile';
 import SortableTableHead from '../table/SortableTableHead';
 import AppTableContainer from '../table/AppTableContainer';
+import AppDialog from '../dialogs/AppDialog';
 
 // Columnas de la tabla
 const COLUMNS = [
@@ -38,7 +33,6 @@ const COLUMNS = [
 ];
 
 const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId, cicloEscolarId, selectedDay }) => {
-    const isMobile = useIsMobile();
     const { auth } = useContext(AuthContext);
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -199,217 +193,178 @@ const RouteStudentsModal = ({ open, onClose, routeNumber, scheduleCode, schoolId
     }
 
     return (
-        <Dialog 
-            open={open} 
-            onClose={handleClose} 
-            maxWidth="lg" 
-            fullWidth
-            fullScreen={isMobile}
-            PaperProps={{
-                sx: { borderRadius: { xs: 0, sm: 2 } }
-            }}
+        <AppDialog
+            open={open}
+            onClose={handleClose}
+            title={`Ruta ${routeNumber} - horario ${getScheduleCodeLabel(scheduleCode)}`}
+            subtitle={selectedDay && selectedDay !== 'all' ? `Filtrado por: ${getDayLabel(selectedDay)}` : undefined}
+            icon={<DirectionsBus />}
+            size="lg"
+            readOnly
+            contentSx={{ p: 0 }}
+            extraActions={(
+                <Typography variant="body2" color="textSecondary" sx={{ mr: 'auto' }}>
+                    {visibleStudents.length} estudiante{visibleStudents.length !== 1 ? 's' : ''} encontrado{visibleStudents.length !== 1 ? 's' : ''}
+                </Typography>
+            )}
         >
-            <DialogTitle sx={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: { xs: 'flex-start', sm: 'center' },
-                gap: 1,
-                backgroundColor: 'primary.main',
-                color: 'white',
-                py: 2
-            }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-                    <DirectionsBus />
-                    <Box>
-                        <Typography variant="h6" component="div" sx={{ overflowWrap: 'anywhere' }}>
-                            Ruta {routeNumber} - Horario {getScheduleCodeLabel(scheduleCode)}
-                        </Typography>
-                        {selectedDay && selectedDay !== 'all' && (
-                            <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                                Filtrado por: {getDayLabel(selectedDay)}
-                            </Typography>
-                        )}
-                    </Box>
+            {loading ? (
+                <Box sx={{ 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    alignItems: 'center', 
+                    minHeight: 200,
+                    flexDirection: 'column',
+                    gap: 2
+                }}>
+                    <CircularProgress size={40} />
+                    <Typography variant="body2" color="textSecondary">
+                        Cargando estudiantes...
+                    </Typography>
                 </Box>
-                <IconButton 
-                    onClick={handleClose} 
-                    sx={{ color: 'white' }}
-                    size="small"
-                >
-                    <CloseIcon />
-                </IconButton>
-            </DialogTitle>
-            
-            <DialogContent sx={{ p: 0 }}>
-                {loading ? (
-                    <Box sx={{ 
-                        display: 'flex', 
-                        justifyContent: 'center', 
-                        alignItems: 'center', 
-                        minHeight: 200,
-                        flexDirection: 'column',
-                        gap: 2
-                    }}>
-                        <CircularProgress size={40} />
-                        <Typography variant="body2" color="textSecondary">
-                            Cargando estudiantes...
-                        </Typography>
-                    </Box>
-                ) : error ? (
-                    <Box sx={{ 
-                        display: 'flex', 
-                        justifyContent: 'center', 
-                        alignItems: 'center', 
-                        minHeight: 200,
-                        flexDirection: 'column',
-                        gap: 2
-                    }}>
-                        <Typography variant="body1" color="error">
-                            {error}
-                        </Typography>
-                        <Button variant="outlined" onClick={fetchStudents}>
-                            Reintentar
-                        </Button>
-                    </Box>
-                ) : students.length === 0 ? (
-                    <Box sx={{ 
-                        display: 'flex', 
-                        justifyContent: 'center', 
-                        alignItems: 'center', 
-                        minHeight: 200,
-                        flexDirection: 'column',
-                        gap: 2
-                    }}>
-                        <DirectionsBus sx={{ fontSize: 48, color: 'grey.400' }} />
-                        <Typography variant="body1" color="textSecondary">
-                            No hay estudiantes asignados a esta ruta y horario
-                        </Typography>
-                    </Box>
-                ) : (
-                    <> 
-                        {/* Filters above the table */}
-                        <Box sx={{ p: 2 }}>
-                            <Grid container spacing={2}>
-                                <Grid item xs={12} sm={6} md={3} lg={2}>
-                                    <TextField
-                                        variant="outlined"
-                                        size="small"
-                                        fullWidth
-                                        placeholder="Filtrar Apellidos..."
-                                        value={filters.lastName}
-                                        onChange={(e) => setFilters(f => ({ ...f, lastName: e.target.value }))}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6} md={3} lg={2}>
-                                    <TextField
-                                        variant="outlined"
-                                        size="small"
-                                        fullWidth
-                                        placeholder="Filtrar Nombres..."
-                                        value={filters.studentName}
-                                        onChange={(e) => setFilters(f => ({ ...f, studentName: e.target.value }))}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6} md={2} lg={2}>
-                                    <TextField
-                                        variant="outlined"
-                                        size="small"
-                                        fullWidth
-                                        placeholder="Filtrar Grado..."
-                                        value={filters.grade}
-                                        onChange={(e) => setFilters(f => ({ ...f, grade: e.target.value }))}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6} md={2} lg={2}>
-                                    <TextField
-                                        variant="outlined"
-                                        size="small"
-                                        fullWidth
-                                        placeholder="Filtrar Hora..."
-                                        value={filters.stopTime}
-                                        onChange={(e) => setFilters(f => ({ ...f, stopTime: e.target.value }))}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6} md={2} lg={2}>
-                                    <TextField
-                                        variant="outlined"
-                                        size="small"
-                                        fullWidth
-                                        placeholder="Filtrar Nota..."
-                                        value={filters.note}
-                                        onChange={(e) => setFilters(f => ({ ...f, note: e.target.value }))}
-                                    />
-                                </Grid>
+            ) : error ? (
+                <Box sx={{ 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    alignItems: 'center', 
+                    minHeight: 200,
+                    flexDirection: 'column',
+                    gap: 2
+                }}>
+                    <Typography variant="body1" color="error">
+                        {error}
+                    </Typography>
+                    <Button variant="outlined" onClick={fetchStudents}>
+                        Reintentar
+                    </Button>
+                </Box>
+            ) : students.length === 0 ? (
+                <Box sx={{ 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    alignItems: 'center', 
+                    minHeight: 200,
+                    flexDirection: 'column',
+                    gap: 2
+                }}>
+                    <DirectionsBus sx={{ fontSize: 48, color: 'grey.400' }} />
+                    <Typography variant="body1" color="textSecondary">
+                        No hay estudiantes asignados a esta ruta y horario
+                    </Typography>
+                </Box>
+            ) : (
+                <> 
+                    {/* Filters above the table */}
+                    <Box sx={{ p: 2 }}>
+                        <Grid container spacing={2}>
+                            <Grid item xs={12} sm={6} md={3} lg={2}>
+                                <TextField
+                                    variant="outlined"
+                                    size="small"
+                                    fullWidth
+                                    placeholder="Filtrar Apellidos..."
+                                    value={filters.lastName}
+                                    onChange={(e) => setFilters(f => ({ ...f, lastName: e.target.value }))}
+                                />
                             </Grid>
-                        </Box>
+                            <Grid item xs={12} sm={6} md={3} lg={2}>
+                                <TextField
+                                    variant="outlined"
+                                    size="small"
+                                    fullWidth
+                                    placeholder="Filtrar Nombres..."
+                                    value={filters.studentName}
+                                    onChange={(e) => setFilters(f => ({ ...f, studentName: e.target.value }))}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6} md={2} lg={2}>
+                                <TextField
+                                    variant="outlined"
+                                    size="small"
+                                    fullWidth
+                                    placeholder="Filtrar Grado..."
+                                    value={filters.grade}
+                                    onChange={(e) => setFilters(f => ({ ...f, grade: e.target.value }))}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6} md={2} lg={2}>
+                                <TextField
+                                    variant="outlined"
+                                    size="small"
+                                    fullWidth
+                                    placeholder="Filtrar Hora..."
+                                    value={filters.stopTime}
+                                    onChange={(e) => setFilters(f => ({ ...f, stopTime: e.target.value }))}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6} md={2} lg={2}>
+                                <TextField
+                                    variant="outlined"
+                                    size="small"
+                                    fullWidth
+                                    placeholder="Filtrar Nota..."
+                                    value={filters.note}
+                                    onChange={(e) => setFilters(f => ({ ...f, note: e.target.value }))}
+                                />
+                            </Grid>
+                        </Grid>
+                    </Box>
 
-                        <AppTableContainer component={Paper} maxHeight={{ xs: 'calc(100dvh - 260px)', sm: 500 }}>
-                            <Table stickyHeader sx={{ minWidth: 720 }}>
-                                <SortableTableHead columns={COLUMNS} cellSx={{ fontWeight: 'bold', backgroundColor: 'grey.50' }} {...table.sortProps} />
-                                <TableBody>
-                                    {visibleStudents.length === 0 ? (
-                                        <TableRow>
-                                            <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
-                                                <Typography variant="body2" color="textSecondary">
-                                                    No se encontraron estudiantes con los filtros aplicados
+                    <AppTableContainer component={Paper} maxHeight={{ xs: 'calc(100dvh - 260px)', sm: 500 }}>
+                        <Table stickyHeader sx={{ minWidth: 720 }}>
+                            <SortableTableHead columns={COLUMNS} cellSx={{ fontWeight: 'bold', backgroundColor: 'grey.50' }} {...table.sortProps} />
+                            <TableBody>
+                                {visibleStudents.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                                            <Typography variant="body2" color="textSecondary">
+                                                No se encontraron estudiantes con los filtros aplicados
+                                            </Typography>
+                                        </TableCell>
+                                    </TableRow>
+                                ) : (
+                                    visibleStudents.map((student, index) => (
+                                        <TableRow key={student.id || index} hover>
+                                            <TableCell>
+                                                <Typography variant="body2" fontWeight="medium">
+                                                    {student.apellidosFamilia}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2">
+                                                    {student.nombresEstudiante}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2">
+                                                    {student.grado}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2" fontWeight="medium">
+                                                    {student.horarioParada}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography 
+                                                    variant="body2" 
+                                                    sx={{ 
+                                                        fontStyle: student.notaParada === 'Sin nota' ? 'italic' : 'normal',
+                                                        color: student.notaParada === 'Sin nota' ? 'grey.500' : 'text.primary'
+                                                    }}
+                                                >
+                                                    {student.notaParada}
                                                 </Typography>
                                             </TableCell>
                                         </TableRow>
-                                    ) : (
-                                        visibleStudents.map((student, index) => (
-                                            <TableRow key={student.id || index} hover>
-                                                <TableCell>
-                                                    <Typography variant="body2" fontWeight="medium">
-                                                        {student.apellidosFamilia}
-                                                    </Typography>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Typography variant="body2">
-                                                        {student.nombresEstudiante}
-                                                    </Typography>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Typography variant="body2">
-                                                        {student.grado}
-                                                    </Typography>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Typography variant="body2" fontWeight="medium">
-                                                        {student.horarioParada}
-                                                    </Typography>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Typography 
-                                                        variant="body2" 
-                                                        sx={{ 
-                                                            fontStyle: student.notaParada === 'Sin nota' ? 'italic' : 'normal',
-                                                            color: student.notaParada === 'Sin nota' ? 'grey.500' : 'text.primary'
-                                                        }}
-                                                    >
-                                                        {student.notaParada}
-                                                    </Typography>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </AppTableContainer>
-                    </>
-                )}
-            </DialogContent>
-            
-            <DialogActions sx={{ p: 2, backgroundColor: 'grey.50' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                    <Typography variant="body2" color="textSecondary">
-                        {visibleStudents.length} estudiante{visibleStudents.length !== 1 ? 's' : ''} encontrado{visibleStudents.length !== 1 ? 's' : ''}
-                    </Typography>
-                    <Button onClick={handleClose} variant="contained">
-                        Cerrar
-                    </Button>
-                </Box>
-            </DialogActions>
-        </Dialog>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </AppTableContainer>
+                </>
+            )}
+        </AppDialog>
     );
 };
 

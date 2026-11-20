@@ -16,10 +16,6 @@ import {
     TableRow,
     Paper,
     Alert,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     TextField,
     Autocomplete,
     Chip,
@@ -40,6 +36,7 @@ import PageHeader from '../components/layout/PageHeader';
 import useClientScope from '../hooks/useClientScope';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
+import AppDialog from '../components/dialogs/AppDialog';
 
 const SchoolBusesPage = () => {
     const { hasPermission } = usePermissions();
@@ -944,65 +941,52 @@ const SchoolBusesPage = () => {
                 saving={savingSchedule}
             />
 
-            <Dialog
+            <AppDialog
                 open={transferPreviewOpen}
                 onClose={() => setTransferPreviewOpen(false)}
-                maxWidth="lg"
-                fullWidth
+                title="Transferir asignaciones del ciclo anterior"
+                size="lg"
+                onSubmit={handleTransferPreviousCycleAssignments}
+                submitLabel="Transferir"
+                submitDisabled={previousCycleTransferCount === 0}
+                submitting={previousCycleTransfer.transferring}
+                readOnly={!(hasPermission('buses-editar'))}
             >
-                <DialogTitle>Confirmar transferencia del ciclo anterior</DialogTitle>
-                <DialogContent>
-                    <Alert severity="info" sx={{ mb: 2 }}>
-                        Se aplicarán {previousCycleTransferCount} cambios desde el ciclo {previousCycleLabel}. {previousCycleSkippedCount > 0 ? `${previousCycleSkippedCount} rutas se omitirán porque ya tienen una placa asignada.` : ''}
-                    </Alert>
+                <Alert severity="info" sx={{ mb: 2 }}>
+                    Se aplicarán {previousCycleTransferCount} cambios desde el ciclo {previousCycleLabel}. {previousCycleSkippedCount > 0 ? `${previousCycleSkippedCount} rutas se omitirán porque ya tienen una placa asignada.` : ''}
+                </Alert>
 
-                    <TableContainer component={Paper} variant="outlined">
-                        <Table size="small">
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell><strong>Ruta</strong></TableCell>
-                                    <TableCell><strong>Placa que quedará</strong></TableCell>
-                                    <TableCell><strong>Piloto que quedará</strong></TableCell>
-                                    <TableCell><strong>Monitora que quedará</strong></TableCell>
-                                    <TableCell><strong>Resultado</strong></TableCell>
+                <TableContainer component={Paper} variant="outlined">
+                    <Table size="small">
+                        <TableHead>
+                            <TableRow>
+                                <TableCell><strong>Ruta</strong></TableCell>
+                                <TableCell><strong>Placa que quedará</strong></TableCell>
+                                <TableCell><strong>Piloto que quedará</strong></TableCell>
+                                <TableCell><strong>Monitora que quedará</strong></TableCell>
+                                <TableCell><strong>Resultado</strong></TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {previousCycleTransfer.assignments.map((assignment) => (
+                                <TableRow key={`${assignment.routeNumber}-${assignment.busId}`}>
+                                    <TableCell>Ruta {assignment.routeNumber}</TableCell>
+                                    <TableCell>{assignment.currentAssignment ? assignment.currentAssignment.plate : assignment.plate}</TableCell>
+                                    <TableCell>{formatTransferUserOutcome(assignment, 'pilot')}</TableCell>
+                                    <TableCell>{formatTransferUserOutcome(assignment, 'monitora')}</TableCell>
+                                    <TableCell>
+                                        <Chip
+                                            size="small"
+                                            label={getTransferStatusLabel(assignment)}
+                                            color={assignment.currentAssignment ? 'warning' : 'success'}
+                                        />
+                                    </TableCell>
                                 </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {previousCycleTransfer.assignments.map((assignment) => (
-                                    <TableRow key={`${assignment.routeNumber}-${assignment.busId}`}>
-                                        <TableCell>Ruta {assignment.routeNumber}</TableCell>
-                                        <TableCell>{assignment.currentAssignment ? assignment.currentAssignment.plate : assignment.plate}</TableCell>
-                                        <TableCell>{formatTransferUserOutcome(assignment, 'pilot')}</TableCell>
-                                        <TableCell>{formatTransferUserOutcome(assignment, 'monitora')}</TableCell>
-                                        <TableCell>
-                                            <Chip
-                                                size="small"
-                                                label={getTransferStatusLabel(assignment)}
-                                                color={assignment.currentAssignment ? 'warning' : 'success'}
-                                            />
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setTransferPreviewOpen(false)} disabled={previousCycleTransfer.transferring}>
-                        Cancelar
-                    </Button>
-                    <PermissionGuard permission="buses-editar">
-                        <Button
-                            variant="contained"
-                            startIcon={previousCycleTransfer.transferring ? <CircularProgress size={16} color="inherit" /> : <ContentCopy />}
-                            onClick={handleTransferPreviousCycleAssignments}
-                            disabled={previousCycleTransfer.transferring || previousCycleTransferCount === 0}
-                        >
-                            {previousCycleTransfer.transferring ? 'Transfiriendo...' : 'Aceptar y transferir'}
-                        </Button>
-                    </PermissionGuard>
-                </DialogActions>
-            </Dialog>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            </AppDialog>
         </PageContainer>
     );
 };

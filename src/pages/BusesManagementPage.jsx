@@ -33,7 +33,8 @@ import {
     Add,
     InsertDriveFile,
     Image as ImageIcon,
-    FileUpload
+    FileUpload,
+    DirectionsBus as DirectionsBusIcon
 } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
@@ -50,6 +51,7 @@ import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { matchSearchTokens } from '../utils/clientFilter';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
+import { validate, hasErrors, focusFirstError, clearError } from '../utils/validators';
 import useTableState from '../hooks/useTableState';
 import useIsMobile from '../hooks/useIsMobile';
 import AppTablePagination from '../components/table/AppTablePagination';
@@ -58,6 +60,10 @@ import AppTableContainer from '../components/table/AppTableContainer';
 import { MobileCard, MobileField } from '../components/table/MobileCard';
 import RowActions from '../components/table/RowActions';
 import { sortRows } from '../utils/tableSort';
+import AppDialog from '../components/dialogs/AppDialog';
+
+// Campos obligatorios del formulario de bus.
+const BUS_RULES = { plate: ['required'] };
 
 const AVAILABILITY_OPTIONS = [
     { value: 'assigned', label: 'Asignados' },
@@ -141,6 +147,8 @@ const BusesManagementPage = () => {
     const [buses, setBuses] = useState([]);
     const [selectedBus, setSelectedBus] = useState(null);
     const [openDialog, setOpenDialog] = useState(false);
+    const [busErrors, setBusErrors] = useState({});
+    const [savingBus, setSavingBus] = useState(false);
 
     // Paginación y ordenamiento
     const table = useTableState();
@@ -197,6 +205,7 @@ const BusesManagementPage = () => {
             inWorkshop: false,
             decommissioned: false
         });
+        setBusErrors({});
         setOpenDialog(true);
     };
 
@@ -213,6 +222,7 @@ const BusesManagementPage = () => {
             corporation: bus.corporation || null,
             routeNumber: bus.routeNumber || bus.route || bus.route_num || ''
         });
+        setBusErrors({});
         setOpenDialog(true);
     };
 
@@ -242,6 +252,7 @@ const BusesManagementPage = () => {
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
+        setBusErrors((prev) => clearError(prev, name));
         setSelectedBus((prev) => ({
             ...prev,
             [name]: value
@@ -337,6 +348,13 @@ const BusesManagementPage = () => {
     };
 
     const handleSave = async () => {
+        const found = validate(selectedBus, BUS_RULES);
+        setBusErrors(found);
+        if (hasErrors(found)) {
+            focusFirstError(found);
+            return;
+        }
+        setSavingBus(true);
         try {
             const formData = new FormData();
             formData.append('plate', selectedBus.plate);
@@ -376,6 +394,8 @@ const BusesManagementPage = () => {
         } catch (err) {
             console.error('Error saving bus:', err);
             notify.fromError(err, 'Error al guardar el bus');
+        } finally {
+            setSavingBus(false);
         }
     };
 
@@ -761,154 +781,151 @@ const BusesManagementPage = () => {
             )}
 
             {/* Diálogo para crear/editar un bus */}
-            <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="sm" fullWidth>
-                <DialogTitle>
-                    {selectedBus?.id ? 'Editar Bus' : 'Añadir Bus'}
-                </DialogTitle>
-                <DialogContent>
-                    <TextField
-                        autoFocus
-                        margin="dense"
-                        name="plate"
-                        label="Placa"
-                        type="text"
-                        fullWidth
-                        variant="outlined"
-                        value={selectedBus ? selectedBus.plate : ''}
-                        onChange={handleInputChange}
-                        required
-                    />
-                    <TextField
-                        margin="dense"
-                        name="capacity"
-                        label="Capacidad"
-                        type="number"
-                        fullWidth
-                        variant="outlined"
-                        value={selectedBus ? selectedBus.capacity : ''}
-                        onChange={handleInputChange}
-                    />
-                    <TextField
-                        margin="dense"
-                        name="description"
-                        label="Descripción"
-                        type="text"
-                        fullWidth
-                        variant="outlined"
-                        value={selectedBus ? selectedBus.description : ''}
-                        onChange={handleInputChange}
-                    />
+            <AppDialog
+                open={openDialog}
+                onClose={handleDialogClose}
+                title={selectedBus?.id ? 'Editar bus' : 'Nuevo bus'}
+                icon={<DirectionsBusIcon />}
+                size="sm"
+                onSubmit={handleSave}
+                submitLabel={selectedBus?.id ? 'Guardar cambios' : 'Crear bus'}
+                submitting={savingBus}
+                readOnly={!hasPermission(selectedBus?.id ? 'buses-editar' : 'buses-crear')}
+            >
+                <TextField
+                    autoFocus
+                    margin="dense"
+                    name="plate"
+                    label="Placa"
+                    type="text"
+                    fullWidth
+                    variant="outlined"
+                    value={selectedBus ? selectedBus.plate : ''}
+                    onChange={handleInputChange}
+                    required
+                    error={Boolean(busErrors.plate)}
+                    helperText={busErrors.plate}
+                />
+                <TextField
+                    margin="dense"
+                    name="capacity"
+                    label="Capacidad"
+                    type="number"
+                    fullWidth
+                    variant="outlined"
+                    value={selectedBus ? selectedBus.capacity : ''}
+                    onChange={handleInputChange}
+                />
+                <TextField
+                    margin="dense"
+                    name="description"
+                    label="Descripción"
+                    type="text"
+                    fullWidth
+                    variant="outlined"
+                    value={selectedBus ? selectedBus.description : ''}
+                    onChange={handleInputChange}
+                />
 
-                    {/* Switch para inWorkshop */}
-                    <FormControlLabel
-                        control={
-                            <Switch
-                                checked={selectedBus ? selectedBus.inWorkshop : false}
-                                onChange={(e) =>
-                                    setSelectedBus((prev) => ({
-                                        ...prev,
-                                        inWorkshop: e.target.checked,
-                                        decommissioned: e.target.checked ? false : prev.decommissioned
-                                    }))
-                                }
-                                color="primary"
-                            />
-                        }
-                        label="¿En taller?"
-                        sx={{ mt: 1 }}
-                    />
+                {/* Switch para inWorkshop */}
+                <FormControlLabel
+                    control={
+                        <Switch
+                            checked={selectedBus ? selectedBus.inWorkshop : false}
+                            onChange={(e) =>
+                                setSelectedBus((prev) => ({
+                                    ...prev,
+                                    inWorkshop: e.target.checked,
+                                    decommissioned: e.target.checked ? false : prev.decommissioned
+                                }))
+                            }
+                            color="primary"
+                        />
+                    }
+                    label="¿En taller?"
+                    sx={{ mt: 1 }}
+                />
 
-                    {/* Switch para dar de baja */}
-                    <FormControlLabel
-                        control={
-                            <Switch
-                                checked={selectedBus ? selectedBus.decommissioned : false}
-                                disabled={selectedBusHasAssignment}
-                                onChange={(e) =>
-                                    setSelectedBus((prev) => ({
-                                        ...prev,
-                                        decommissioned: e.target.checked,
-                                        inWorkshop: e.target.checked ? false : prev.inWorkshop
-                                    }))
-                                }
-                                color="error"
-                            />
-                        }
-                        label="Dar de baja"
-                        sx={{ mt: 1 }}
-                    />
-                    {selectedBusHasAssignment && (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                            Este bus tiene una asignación activa. Para darlo de baja no debe tener una asignación.
-                        </Typography>
-                    )}
+                {/* Switch para dar de baja */}
+                <FormControlLabel
+                    control={
+                        <Switch
+                            checked={selectedBus ? selectedBus.decommissioned : false}
+                            disabled={selectedBusHasAssignment}
+                            onChange={(e) =>
+                                setSelectedBus((prev) => ({
+                                    ...prev,
+                                    decommissioned: e.target.checked,
+                                    inWorkshop: e.target.checked ? false : prev.inWorkshop
+                                }))
+                            }
+                            color="error"
+                        />
+                    }
+                    label="Dar de baja"
+                    sx={{ mt: 1 }}
+                />
+                {selectedBusHasAssignment && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                        Este bus tiene una asignación activa. Para darlo de baja no debe tener una asignación.
+                    </Typography>
+                )}
 
-                    <input
-                        accept="application/pdf,image/jpeg,image/png"
-                        style={{ display: 'none' }}
-                        id="file-input"
-                        multiple
-                        type="file"
-                        onChange={handleFileChange}
-                    />
-                    <label htmlFor="file-input">
-                        <Button variant="outlined" color="primary" component="span" sx={{ mt: 2 }}>
-                            Subir Archivos
-                        </Button>
-                    </label>
-
-                    {selectedBus?.files && selectedBus.files.length > 0 && (
-                        <List sx={{ mt: 2 }}>
-                            {[...selectedBus.files].map((file, index) => {
-                                const isServerFile = !!file.id;
-                                const label = isServerFile ? file.fileName.split('/').pop() : file.name;
-                                return (
-                                    <ListItem key={isServerFile ? `sf-${file.id}` : `nf-${index}`} disableGutters sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                            {isServerFile && file.fileType === 'application/pdf' ? (
-                                                <InsertDriveFile />
-                                            ) : !isServerFile && file.type === 'application/pdf' ? (
-                                                <InsertDriveFile />
-                                            ) : (
-                                                <ImageIcon />
-                                            )}
-                                            {isServerFile ? (
-                                                <ListItemText>
-                                                    <Link href={file.fileUrl} target="_blank" rel="noopener noreferrer">
-                                                        {label}
-                                                    </Link>
-                                                </ListItemText>
-                                            ) : (
-                                                <ListItemText primary={label} />
-                                            )}
-                                        </Box>
-                                        <Box>
-                                            {/* Un archivo sin id todavía no está en el servidor: quitarlo es
-                                                local y no exige permiso. Borrar uno guardado hace
-                                                DELETE /buses/:id/files/:id. */}
-                                            {(!file?.id || hasPermission('buses-eliminar-archivo')) && (
-                                                <IconButton size="small" onClick={() => handleRemoveFile(file, index)} aria-label="Eliminar archivo">
-                                                    <Delete fontSize="small" />
-                                                </IconButton>
-                                            )}
-                                        </Box>
-                                    </ListItem>
-                                );
-                            })}
-                        </List>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleDialogClose} color="primary">
-                        Cancelar
+                <input
+                    accept="application/pdf,image/jpeg,image/png"
+                    style={{ display: 'none' }}
+                    id="file-input"
+                    multiple
+                    type="file"
+                    onChange={handleFileChange}
+                />
+                <label htmlFor="file-input">
+                    <Button variant="outlined" color="primary" component="span" sx={{ mt: 2 }}>
+                        Subir archivos
                     </Button>
-                    {hasPermission(selectedBus?.id ? 'buses-editar' : 'buses-crear') && (
-                        <Button onClick={handleSave} color="primary" variant="contained">
-                            {selectedBus?.id ? 'Guardar Cambios' : 'Crear Bus'}
-                        </Button>
-                    )}
-                </DialogActions>
-            </Dialog>
+                </label>
+
+                {selectedBus?.files && selectedBus.files.length > 0 && (
+                    <List sx={{ mt: 2 }}>
+                        {[...selectedBus.files].map((file, index) => {
+                            const isServerFile = !!file.id;
+                            const label = isServerFile ? file.fileName.split('/').pop() : file.name;
+                            return (
+                                <ListItem key={isServerFile ? `sf-${file.id}` : `nf-${index}`} disableGutters sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        {isServerFile && file.fileType === 'application/pdf' ? (
+                                            <InsertDriveFile />
+                                        ) : !isServerFile && file.type === 'application/pdf' ? (
+                                            <InsertDriveFile />
+                                        ) : (
+                                            <ImageIcon />
+                                        )}
+                                        {isServerFile ? (
+                                            <ListItemText>
+                                                <Link href={file.fileUrl} target="_blank" rel="noopener noreferrer">
+                                                    {label}
+                                                </Link>
+                                            </ListItemText>
+                                        ) : (
+                                            <ListItemText primary={label} />
+                                        )}
+                                    </Box>
+                                    <Box>
+                                        {/* Un archivo sin id todavía no está en el servidor: quitarlo es
+                                            local y no exige permiso. Borrar uno guardado hace
+                                            DELETE /buses/:id/files/:id. */}
+                                        {(!file?.id || hasPermission('buses-eliminar-archivo')) && (
+                                            <IconButton size="small" onClick={() => handleRemoveFile(file, index)} aria-label="Eliminar archivo">
+                                                <Delete fontSize="small" />
+                                            </IconButton>
+                                        )}
+                                    </Box>
+                                </ListItem>
+                            );
+                        })}
+                    </List>
+                )}
+            </AppDialog>
 
             {/* Diálogo para carga masiva */}
             <Dialog open={openBulkDialog} onClose={handleCloseBulkDialog} maxWidth="sm" fullWidth>

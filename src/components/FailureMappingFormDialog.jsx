@@ -1,10 +1,11 @@
 // src/components/FailureMappingFormDialog.jsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, MenuItem,
-    FormControl, InputLabel, Select, Alert, Box, Typography,
-    CircularProgress, Autocomplete, Chip, ListSubheader,
+    Button, TextField, MenuItem, FormControl, FormHelperText, InputLabel, Select, Alert, Box, Typography,
+    Autocomplete, Chip, ListSubheader,
 } from '@mui/material';
+import EditIcon from '@mui/icons-material/Edit';
+import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 import { createFilterOptions } from '@mui/material/Autocomplete';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
@@ -19,6 +20,8 @@ import {
     MODOS_MAPEO, emptyForm, recordToForm, validateForm, buildCreatePayload, buildUpdatePayload,
 } from '../utils/failureMappingForm';
 import { formatMonth, formatDate } from '../utils/dateFormat';
+import { hasErrors, focusFirstError } from '../utils/validators';
+import AppDialog from './dialogs/AppDialog';
 
 const TZ = 'America/Guatemala';
 // El valor guardado sigue siendo incidente/accidente; aquí se muestra con el texto de la app del supervisor.
@@ -60,6 +63,8 @@ const FailureMappingFormDialog = ({ open, onClose, onSaved, record = null }) => 
     const [routeNumbers, setRouteNumbers] = useState([]);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
+    const [fieldErrors, setFieldErrors] = useState({});
+    const initialRef = useRef('');
     // Conflicto 409 con otros registros o con la placa: { message, code }
     const [conflict, setConflict] = useState(null);
     // Evita el doble guardado: `saving` (estado) se actualiza tras el render, un segundo clic llega antes
@@ -71,8 +76,11 @@ const FailureMappingFormDialog = ({ open, onClose, onSaved, record = null }) => 
         if (!open) {
             return;
         }
-        setForm(record ? recordToForm(record) : emptyForm());
+        const initial = record ? recordToForm(record) : emptyForm();
+        initialRef.current = JSON.stringify(initial);
+        setForm(initial);
         setError('');
+        setFieldErrors({});
         setConflict(null);
         setCicloPendiente(null);
     }, [open, record]);
@@ -144,6 +152,15 @@ const FailureMappingFormDialog = ({ open, onClose, onSaved, record = null }) => 
     const set = (patch) => {
         setConflict(null);
         setCicloPendiente(null);
+        setFieldErrors((prev) => {
+            const keys = Object.keys(patch).filter((key) => prev[key]);
+            if (keys.length === 0) {
+                return prev;
+            }
+            const next = { ...prev };
+            keys.forEach((key) => { delete next[key]; });
+            return next;
+        });
         setForm((prev) => ({ ...prev, ...patch }));
     };
 
@@ -216,21 +233,21 @@ const FailureMappingFormDialog = ({ open, onClose, onSaved, record = null }) => 
         if (guardandoRef.current) {
             return;
         }
-        const validation = validateForm(form);
-        if (validation) {
-            setError(validation);
-            return;
+        const found = validateForm(form);
+        if (!hasErrors(found) && form.modo === 'falla') {
+            // Un registro existente puede traer una placa que ya no existe; solo se exige al cambiarla.
+            const placaConservada = isEdit && record?.placaBus === form.placa;
+            // Placa de otro cliente: no hay una ruta del bus que usar, la ruta es obligatoria
+            const placaDelCliente = plateOptions.some((o) => o.plate === form.placa && o.ofClient);
+            if (!placaConservada && !plateOptions.some((o) => o.plate === form.placa)) {
+                found.placa = 'La placa no existe en el sistema: elija una de la lista';
+            } else if (!placaDelCliente && !form.numeroRuta) {
+                found.numeroRuta = 'La placa no es de este cliente: seleccione la ruta';
+            }
         }
-        // Un registro existente puede traer una placa que ya no existe; solo se exige al cambiarla.
-        const placaConservada = isEdit && record?.placaBus === form.placa;
-        if (form.modo === 'falla' && !placaConservada && !plateOptions.some((o) => o.plate === form.placa)) {
-            setError('La placa no existe en el sistema. Elige una de la lista.');
-            return;
-        }
-        // Placa de otro cliente: no hay una ruta del bus que usar, la ruta es obligatoria
-        const placaDelCliente = plateOptions.some((o) => o.plate === form.placa && o.ofClient);
-        if (form.modo === 'falla' && !placaDelCliente && !form.numeroRuta) {
-            setError('La placa no es de este cliente: selecciona la ruta.');
+        setFieldErrors(found);
+        if (hasErrors(found)) {
+            focusFirstError(found);
             return;
         }
         guardandoRef.current = true;
@@ -278,208 +295,229 @@ const FailureMappingFormDialog = ({ open, onClose, onSaved, record = null }) => 
 
     return (
         <LocalizationProvider dateAdapter={AdapterMoment}>
-            <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="md" fullWidth>
-                <DialogTitle>{isEdit ? 'Editar mapeo de fallas' : 'Nuevo registro de mapeo de fallas'}</DialogTitle>
-                <DialogContent dividers>
-                    <Alert severity="info" sx={{ mb: 2 }}>
-                        {isEdit
-                            ? 'Estás editando un registro existente. Los cambios reemplazan los datos actuales.'
-                            : 'Este registro se guardará como ingreso manual a tu nombre.'}
+            <AppDialog
+                open={open}
+                onClose={onClose}
+                title={isEdit ? 'Editar mapeo de fallas' : 'Nuevo registro de mapeo de fallas'}
+                icon={isEdit ? <EditIcon /> : <ReportProblemIcon />}
+                size="md"
+                onSubmit={() => handleSave(false)}
+                submitLabel={isEdit ? 'Guardar cambios' : 'Guardar registro'}
+                submitting={saving}
+                dirty={JSON.stringify(form) !== initialRef.current}
+            >
+                <Alert severity="info" sx={{ mb: 2 }}>
+                    {isEdit
+                        ? 'Estás editando un registro existente. Los cambios reemplazan los datos actuales.'
+                        : 'Este registro se guardará como ingreso manual a tu nombre.'}
+                </Alert>
+                {esDiaAnterior && (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                        {`Registro de un día anterior (${moment(form.dia).format('dddd D [de] MMMM [de] YYYY')}). Afectará los totales del reporte PDF de ${formatMonth(form.dia)}.`}
                     </Alert>
-                    {esDiaAnterior && (
-                        <Alert severity="warning" sx={{ mb: 2 }}>
-                            {`Registro de un día anterior (${moment(form.dia).format('dddd D [de] MMMM [de] YYYY')}). Afectará los totales del reporte PDF de ${formatMonth(form.dia)}.`}
-                        </Alert>
-                    )}
-                    {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-                    {cicloPendiente && (
-                        <Alert severity="warning" sx={{ mb: 2 }}>
-                            <Typography variant="body2" sx={{ mb: 1 }}>{cicloPendiente.message}</Typography>
-                            <Box display="flex" flexWrap="wrap" gap={1}>
-                                {(cicloPendiente.opciones || []).map((o) => (
-                                    <Button
-                                        key={o.colegioId}
-                                        size="small"
-                                        variant="outlined"
-                                        color="inherit"
-                                        disabled={saving}
-                                        onClick={() => handleSave(false, o.colegioId)}
-                                    >
-                                        {[o.nombre, o.cicloEscolarAnio].filter(Boolean).join(' ')}
-                                        {o.desde && o.hasta
-                                            ? ` (${formatDate(o.desde)} – ${formatDate(o.hasta)})`
-                                            : ''}
-                                    </Button>
-                                ))}
-                            </Box>
-                        </Alert>
-                    )}
-                    {conflict && (
-                        <Alert
-                            severity="error"
-                            variant="filled"
-                            sx={{ mb: 2, fontWeight: 600 }}
-                            action={conflict.code === FORCEABLE_CODE ? (
-                                <Button color="inherit" size="small" disabled={saving} onClick={() => handleSave(true)}>
-                                    Guardar de todos modos
+                )}
+                {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+                {cicloPendiente && (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                        <Typography variant="body2" sx={{ mb: 1 }}>{cicloPendiente.message}</Typography>
+                        <Box display="flex" flexWrap="wrap" gap={1}>
+                            {(cicloPendiente.opciones || []).map((o) => (
+                                <Button
+                                    key={o.colegioId}
+                                    size="small"
+                                    variant="outlined"
+                                    color="inherit"
+                                    disabled={saving}
+                                    onClick={() => handleSave(false, o.colegioId)}
+                                >
+                                    {[o.nombre, o.cicloEscolarAnio].filter(Boolean).join(' ')}
+                                    {o.desde && o.hasta
+                                        ? ` (${formatDate(o.desde)} – ${formatDate(o.hasta)})`
+                                        : ''}
                                 </Button>
-                            ) : undefined}
-                        >
-                            {conflict.message}
-                        </Alert>
+                            ))}
+                        </Box>
+                    </Alert>
+                )}
+                {conflict && (
+                    <Alert
+                        severity="error"
+                        variant="filled"
+                        sx={{ mb: 2, fontWeight: 600 }}
+                        action={conflict.code === FORCEABLE_CODE ? (
+                            <Button color="inherit" size="small" disabled={saving} onClick={() => handleSave(true)}>
+                                Guardar de todos modos
+                            </Button>
+                        ) : undefined}
+                    >
+                        {conflict.message}
+                    </Alert>
+                )}
+
+                <Box display="flex" flexDirection="column" gap={2}>
+                    <FormControl fullWidth>
+                        <InputLabel>Tipo de registro</InputLabel>
+                        <Select value={form.modo} label="Tipo de registro" onChange={(e) => set({ modo: e.target.value })}>
+                            {Object.entries(MODOS_MAPEO).map(([key, label]) => (
+                                <MenuItem key={key} value={key}>{label}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+
+                    <ClientSelector
+                        schools={schools}
+                        corporations={corporations}
+                        value={clientValue}
+                        onChange={handleClientChange}
+                        size="medium"
+                        name="clientId"
+                        required
+                        error={Boolean(fieldErrors.clientId)}
+                        helperText={fieldErrors.clientId}
+                    />
+
+                    <DatePicker
+                        label="Día del registro"
+                        value={form.dia}
+                        onChange={(val) => set({ dia: val })}
+                        disableFuture
+                        format="DD/MM/YYYY"
+                        slotProps={{
+                            textField: {
+                                fullWidth: true,
+                                name: 'dia',
+                                required: true,
+                                error: Boolean(fieldErrors.dia),
+                                helperText: fieldErrors.dia,
+                            },
+                        }}
+                    />
+
+                    {showFalla && (
+                        <>
+                            <Box display="flex" gap={2}>
+                                <Autocomplete
+                                    fullWidth
+                                    disabled={!form.clientId}
+                                    options={plateOptions}
+                                    groupBy={(o) => o.group}
+                                    getOptionLabel={(o) => o.plate}
+                                    filterOptions={filterPlates}
+                                    isOptionEqualToValue={(o, v) => o.id === v.id}
+                                    value={placaValue}
+                                    onChange={(_, value) => handlePlacaSelect(value)}
+                                    renderGroup={(params) => (
+                                        <li key={params.key}>
+                                            <ListSubheader disableSticky sx={{ lineHeight: 1.6, color: '#1976d2', fontWeight: 800, bgcolor: 'background.paper' }}>
+                                                {params.group}
+                                            </ListSubheader>
+                                            <ul style={{ padding: 0 }}>{params.children}</ul>
+                                        </li>
+                                    )}
+                                    renderOption={(props, o) => (
+                                        <li {...props} key={o.id}>
+                                            <Box display="flex" flexDirection="column" width="100%">
+                                                <Box display="flex" alignItems="center" gap={1}>
+                                                    <Typography variant="body2" fontWeight={700}>{o.plate}</Typography>
+                                                    {o.decommissioned && <Chip size="small" label="De baja" variant="outlined" />}
+                                                </Box>
+                                                <Typography variant="caption" color="textSecondary">
+                                                    {[o.clientName || 'Sin cliente', o.route ? `Ruta ${o.route}` : null].filter(Boolean).join(' · ')}
+                                                </Typography>
+                                            </Box>
+                                        </li>
+                                    )}
+                                    noOptionsText="No existe una placa con ese texto en el sistema"
+                                    renderInput={(params) => (
+                                        <TextField
+                                            {...params}
+                                            label="Placa"
+                                            name="placa"
+                                            required
+                                            error={Boolean(fieldErrors.placa)}
+                                            helperText={fieldErrors.placa}
+                                        />
+                                    )}
+                                />
+                                <FormControl fullWidth disabled={!form.clientId} error={Boolean(fieldErrors.numeroRuta)}>
+                                    <InputLabel>Ruta</InputLabel>
+                                    <Select
+                                        name="numeroRuta"
+                                        value={form.numeroRuta}
+                                        label="Ruta"
+                                        onChange={(e) => set({ numeroRuta: e.target.value })}
+                                        MenuProps={{ PaperProps: { style: { maxHeight: 48 * 6 } } }}
+                                    >
+                                        <MenuItem value=""><em>Sin ruta</em></MenuItem>
+                                        {routeOptions.map((r) => (
+                                            <MenuItem key={r} value={r}>{`Ruta ${r}`}</MenuItem>
+                                        ))}
+                                    </Select>
+                                    {fieldErrors.numeroRuta ? <FormHelperText>{fieldErrors.numeroRuta}</FormHelperText> : null}
+                                </FormControl>
+                            </Box>
+                            <Box display="flex" gap={2}>
+                                <FormControl fullWidth>
+                                    <InputLabel>¿Qué tan grave fue?</InputLabel>
+                                    <Select value={form.tipo} label="¿Qué tan grave fue?" onChange={(e) => set({ tipo: e.target.value })}>
+                                        {Object.entries(GRAVEDAD_OPTIONS).map(([key, label]) => (
+                                            <MenuItem key={key} value={key}>{label}</MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                                <FormControl fullWidth>
+                                    <InputLabel>Tipo de falla</InputLabel>
+                                    <Select value={form.tipoFalla} label="Tipo de falla" onChange={(e) => set({ tipoFalla: e.target.value })}>
+                                        {Object.entries(FAILURE_TYPES).map(([key, label]) => (
+                                            <MenuItem key={key} value={key}>{label}</MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Box>
+                            {form.tipoFalla === 'otro' && (
+                                <TextField
+                                    label="Detalle de la falla"
+                                    value={form.otroFallaDetalle}
+                                    onChange={(e) => set({ otroFallaDetalle: e.target.value })}
+                                    fullWidth
+                                    name="otroFallaDetalle"
+                                    required
+                                    error={Boolean(fieldErrors.otroFallaDetalle)}
+                                    helperText={fieldErrors.otroFallaDetalle}
+                                />
+                            )}
+                            <Box display="flex" flexWrap="wrap" gap={2}>
+                                <Box flex={1} minWidth={200}>
+                                    <SiNoSelect label="¿Afectó el recorrido?" value={form.routeAffected} onChange={(v) => set({ routeAffected: v })} />
+                                </Box>
+                                <Box flex={1} minWidth={200}>
+                                    <SiNoSelect label="¿Pudo continuar la ruta?" value={form.pudoContinuarRuta} onChange={(v) => set({ pudoContinuarRuta: v })} />
+                                </Box>
+                                <Box flex={1} minWidth={200}>
+                                    <SiNoSelect label="¿Se utilizó bus suplente?" value={form.seUtilizoBusSuplente} onChange={(v) => set({ seUtilizoBusSuplente: v })} />
+                                </Box>
+                            </Box>
+                        </>
                     )}
 
-                    <Box display="flex" flexDirection="column" gap={2}>
-                        <FormControl fullWidth>
-                            <InputLabel>Tipo de registro</InputLabel>
-                            <Select value={form.modo} label="Tipo de registro" onChange={(e) => set({ modo: e.target.value })}>
-                                {Object.entries(MODOS_MAPEO).map(([key, label]) => (
-                                    <MenuItem key={key} value={key}>{label}</MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
+                    {!showFalla && (
+                        <Typography variant="body2" color="textSecondary">
+                            {form.modo === 'sin_fallas'
+                                ? 'Se registrará que el cliente no tuvo fallas ese día (aplica a todos los buses).'
+                                : 'Se registrará que el cliente no tuvo operación ese día (por ejemplo, sin clases).'}
+                        </Typography>
+                    )}
 
-                        <ClientSelector
-                            schools={schools}
-                            corporations={corporations}
-                            value={clientValue}
-                            onChange={handleClientChange}
-                            size="medium"
-                        />
-
-                        <DatePicker
-                            label="Día del registro"
-                            value={form.dia}
-                            onChange={(val) => set({ dia: val })}
-                            disableFuture
-                            format="DD/MM/YYYY"
-                            slotProps={{ textField: { fullWidth: true } }}
-                        />
-
-                        {showFalla && (
-                            <>
-                                <Box display="flex" gap={2}>
-                                    <Autocomplete
-                                        fullWidth
-                                        disabled={!form.clientId}
-                                        options={plateOptions}
-                                        groupBy={(o) => o.group}
-                                        getOptionLabel={(o) => o.plate}
-                                        filterOptions={filterPlates}
-                                        isOptionEqualToValue={(o, v) => o.id === v.id}
-                                        value={placaValue}
-                                        onChange={(_, value) => handlePlacaSelect(value)}
-                                        renderGroup={(params) => (
-                                            <li key={params.key}>
-                                                <ListSubheader disableSticky sx={{ lineHeight: 1.6, color: '#1976d2', fontWeight: 800, bgcolor: 'background.paper' }}>
-                                                    {params.group}
-                                                </ListSubheader>
-                                                <ul style={{ padding: 0 }}>{params.children}</ul>
-                                            </li>
-                                        )}
-                                        renderOption={(props, o) => (
-                                            <li {...props} key={o.id}>
-                                                <Box display="flex" flexDirection="column" width="100%">
-                                                    <Box display="flex" alignItems="center" gap={1}>
-                                                        <Typography variant="body2" fontWeight={700}>{o.plate}</Typography>
-                                                        {o.decommissioned && <Chip size="small" label="De baja" variant="outlined" />}
-                                                    </Box>
-                                                    <Typography variant="caption" color="textSecondary">
-                                                        {[o.clientName || 'Sin cliente', o.route ? `Ruta ${o.route}` : null].filter(Boolean).join(' · ')}
-                                                    </Typography>
-                                                </Box>
-                                            </li>
-                                        )}
-                                        noOptionsText="No existe una placa con ese texto en el sistema"
-                                        renderInput={(params) => (
-                                            <TextField {...params} label="Placa" />
-                                        )}
-                                    />
-                                    <FormControl fullWidth disabled={!form.clientId}>
-                                        <InputLabel>Ruta</InputLabel>
-                                        <Select
-                                            value={form.numeroRuta}
-                                            label="Ruta"
-                                            onChange={(e) => set({ numeroRuta: e.target.value })}
-                                            MenuProps={{ PaperProps: { style: { maxHeight: 48 * 6 } } }}
-                                        >
-                                            <MenuItem value=""><em>Sin ruta</em></MenuItem>
-                                            {routeOptions.map((r) => (
-                                                <MenuItem key={r} value={r}>{`Ruta ${r}`}</MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Box>
-                                <Box display="flex" gap={2}>
-                                    <FormControl fullWidth>
-                                        <InputLabel>¿Qué tan grave fue?</InputLabel>
-                                        <Select value={form.tipo} label="¿Qué tan grave fue?" onChange={(e) => set({ tipo: e.target.value })}>
-                                            {Object.entries(GRAVEDAD_OPTIONS).map(([key, label]) => (
-                                                <MenuItem key={key} value={key}>{label}</MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                    <FormControl fullWidth>
-                                        <InputLabel>Tipo de falla</InputLabel>
-                                        <Select value={form.tipoFalla} label="Tipo de falla" onChange={(e) => set({ tipoFalla: e.target.value })}>
-                                            {Object.entries(FAILURE_TYPES).map(([key, label]) => (
-                                                <MenuItem key={key} value={key}>{label}</MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Box>
-                                {form.tipoFalla === 'otro' && (
-                                    <TextField
-                                        label="Detalle de la falla"
-                                        value={form.otroFallaDetalle}
-                                        onChange={(e) => set({ otroFallaDetalle: e.target.value })}
-                                        fullWidth
-                                    />
-                                )}
-                                <Box display="flex" flexWrap="wrap" gap={2}>
-                                    <Box flex={1} minWidth={200}>
-                                        <SiNoSelect label="¿Afectó el recorrido?" value={form.routeAffected} onChange={(v) => set({ routeAffected: v })} />
-                                    </Box>
-                                    <Box flex={1} minWidth={200}>
-                                        <SiNoSelect label="¿Pudo continuar la ruta?" value={form.pudoContinuarRuta} onChange={(v) => set({ pudoContinuarRuta: v })} />
-                                    </Box>
-                                    <Box flex={1} minWidth={200}>
-                                        <SiNoSelect label="¿Se utilizó bus suplente?" value={form.seUtilizoBusSuplente} onChange={(v) => set({ seUtilizoBusSuplente: v })} />
-                                    </Box>
-                                </Box>
-                            </>
-                        )}
-
-                        {!showFalla && (
-                            <Typography variant="body2" color="textSecondary">
-                                {form.modo === 'sin_fallas'
-                                    ? 'Se registrará que el cliente no tuvo fallas ese día (aplica a todos los buses).'
-                                    : 'Se registrará que el cliente no tuvo operación ese día (por ejemplo, sin clases).'}
-                            </Typography>
-                        )}
-
-                        <TextField
-                            label="Descripción"
-                            value={form.descripcion}
-                            onChange={(e) => set({ descripcion: e.target.value })}
-                            multiline
-                            minRows={3}
-                            fullWidth
-                        />
-                    </Box>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={onClose} color="inherit" disabled={saving}>Cancelar</Button>
-                    <Button
-                        onClick={() => handleSave(false)}
-                        variant="contained"
-                        disabled={saving}
-                        startIcon={saving ? <CircularProgress size={16} color="inherit" /> : null}
-                    >
-                        {isEdit ? 'Guardar cambios' : 'Guardar registro'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                    <TextField
+                        label="Descripción"
+                        value={form.descripcion}
+                        onChange={(e) => set({ descripcion: e.target.value })}
+                        multiline
+                        minRows={3}
+                        fullWidth
+                    />
+                </Box>
+            </AppDialog>
         </LocalizationProvider>
     );
 };

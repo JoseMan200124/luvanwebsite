@@ -14,10 +14,6 @@ import {
     Grid,
     Chip,
     Alert,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     TextField,
     FormControl,
     InputLabel,
@@ -49,7 +45,7 @@ import {
     Legend
 } from 'recharts';
 import { useParams, useLocation } from 'react-router-dom';
-import { InfoOutlined, People, ChevronLeft, ChevronRight } from '@mui/icons-material';
+import { InfoOutlined, People, ChevronLeft, ChevronRight, FileDownload as FileDownloadIcon, Payments as PaymentsIcon } from '@mui/icons-material';
 import { getCurrentDate, getCurrentDateSync, useCurrentDate } from '../hooks/useCurrentDate';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import styled from 'styled-components';
@@ -80,6 +76,8 @@ import { formatDate, formatDateShort, formatMonth, formatDateTime } from '../uti
 import { formatQ } from '../utils/currency';
 import { PAYMENT_STATUS, ENROLLMENT_PAYMENT_STATUS, toStatusOptions } from '../constants/statuses';
 import StatusChip from '../components/StatusChip';
+import AppDialog from '../components/dialogs/AppDialog';
+import MoneyField from '../components/form/MoneyField';
 
 const SectionCard = styled(Card)`
     ${tw`mb-4`}
@@ -4184,1557 +4182,973 @@ const SchoolPaymentsPage = () => {
                         />
 
                         {/* Dialog: Exportar pagos por periodo */}
-                        <Dialog
+                        <AppDialog
                             open={openExportStatusDialog}
                             onClose={() => setOpenExportStatusDialog(false)}
-                            maxWidth="xs"
-                            PaperProps={{
-                                sx: {
-                                    borderRadius: 2,
-                                    overflow: 'visible',
-                                    width: 380,
-                                    maxWidth: 'calc(100% - 32px)'
-                                }
-                            }}
+                            title="Exportar historial de pagos"
+                            subtitle="Selecciona período y filtros para el reporte en excel."
+                            icon={<FileDownloadIcon />}
+                            size="xs"
+                            onSubmit={() => handleDownloadPaymentsByStatus(exportMonth, exportYear)}
+                            submitLabel="Descargar"
+                            contentSx={{ overflow: 'visible' }}
                         >
-                            <DialogTitle sx={{ pb: 2 }}>
-                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                    <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                                        Exportar historial de pagos
-                                    </Typography>
-                                    <Typography variant="body2" color="text.secondary">
-                                        Selecciona período y filtros para el reporte en excel.
-                                    </Typography>
+                            <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+                                <Box sx={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 2, mt: 0.5 }}>
+                                <FormControl fullWidth size="small">
+                                    <InputLabel id="export-finalstatus-label">Estado de Pago</InputLabel>
+                                    <Select
+                                        labelId="export-finalstatus-label"
+                                        label="Estado de Pago"
+                                        value={exportFinalStatus}
+                                        onChange={(e) => setExportFinalStatus(e.target.value)}
+                                    >
+                                        <MenuItem value="TODOS">Todos los estados</MenuItem>
+                                        <MenuItem value="PAGADO">PAGADO</MenuItem>
+                                        <MenuItem value="PENDIENTE">PENDIENTE</MenuItem>
+                                        <MenuItem value="MORA">MORA</MenuItem>
+                                        <MenuItem value="ELIMINADO">ELIMINADO</MenuItem>
+                                    </Select>
+                                </FormControl>
+                                <FormControl fullWidth size="small">
+                                    <InputLabel id="export-servicestatus-label">Estado del Servicio</InputLabel>
+                                    <Select
+                                        labelId="export-servicestatus-label"
+                                        label="Estado del Servicio"
+                                        value={exportServiceStatus}
+                                        onChange={(e) => setExportServiceStatus(e.target.value)}
+                                    >
+                                        <MenuItem value="TODOS">Todos los estados</MenuItem>
+                                        <MenuItem value="ACTIVE">ACTIVO</MenuItem>
+                                        <MenuItem value="PAUSED">PAUSADO</MenuItem>
+                                        <MenuItem value="SUSPENDED">SUSPENDIDO</MenuItem>
+                                        {!schoolInOperation && <MenuItem value="PENDING_START">PENDIENTE DE INICIO</MenuItem>}
+                                        <MenuItem value="INACTIVE">INACTIVO</MenuItem>
+                                    </Select>
+                                </FormControl>
+                                <FormControl fullWidth size="small">
+                                    <InputLabel id="export-month-label">Mes</InputLabel>
+                                    <Select
+                                        labelId="export-month-label"
+                                        label="Mes"
+                                        value={exportMonth}
+                                        onChange={(e) => setExportMonth(e.target.value)}
+                                        MenuProps={{
+                                            PaperProps: {
+                                                sx: {
+                                                    maxHeight: 220
+                                                }
+                                            }
+                                        }}
+                                    >
+                                        <MenuItem value="TODOS">Todos los meses</MenuItem>
+                                        <MenuItem value="01">Enero</MenuItem>
+                                        <MenuItem value="02">Febrero</MenuItem>
+                                        <MenuItem value="03">Marzo</MenuItem>
+                                        <MenuItem value="04">Abril</MenuItem>
+                                        <MenuItem value="05">Mayo</MenuItem>
+                                        <MenuItem value="06">Junio</MenuItem>
+                                        <MenuItem value="07">Julio</MenuItem>
+                                        <MenuItem value="08">Agosto</MenuItem>
+                                        <MenuItem value="09">Septiembre</MenuItem>
+                                        <MenuItem value="10">Octubre</MenuItem>
+                                        <MenuItem value="11">Noviembre</MenuItem>
+                                        <MenuItem value="12">Diciembre</MenuItem>
+                                    </Select>
+                                </FormControl>
+                                <FormControl fullWidth size="small">
+                                    <InputLabel id="export-year-label">Año</InputLabel>
+                                    <Select
+                                        labelId="export-year-label"
+                                        label="Año"
+                                        value={exportYear}
+                                        onChange={(e) => setExportYear(e.target.value)}
+                                        MenuProps={{
+                                            PaperProps: {
+                                                sx: {
+                                                    maxHeight: 220
+                                                }
+                                            }
+                                        }}
+                                    >
+                                        {exportYearOptions.map((y) => (
+                                            <MenuItem key={y} value={y}>{y}</MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
                                 </Box>
-                            </DialogTitle>
-                            <DialogContent sx={{ pt: 2.5, overflow: 'visible' }}>
-                                <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
-                                    <Box sx={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 2, mt: 0.5 }}>
+                            </Box>
+                        </AppDialog>
+
+                        {/* Dialog: Exportar por Estado (nuevo) */}
+                        <AppDialog
+                            open={openExportByStateDialog}
+                            onClose={() => setOpenExportByStateDialog(false)}
+                            title="Exportar pagos"
+                            subtitle={exportEnrollmentMode
+                                ? 'Selecciona el estado del pago de inscripción y el estado del servicio.'
+                                : 'Selecciona el estado de pago y el estado del servicio.'}
+                            icon={<FileDownloadIcon />}
+                            size="xs"
+                            onSubmit={() => (exportEnrollmentMode
+                                ? handleDownloadEnrollment(exportByStateEnrollment)
+                                : handleDownloadByState(exportByStateValue))}
+                            submitLabel="Descargar"
+                            contentSx={{ overflow: 'visible' }}
+                        >
+                            <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+                                <Box sx={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 2, mt: 0.5 }}>
+                                {hasEnrollmentCharges && (
                                     <FormControl fullWidth size="small">
-                                        <InputLabel id="export-finalstatus-label">Estado de Pago</InputLabel>
+                                        <InputLabel id="export-by-state-type-label">Tipo de exportación</InputLabel>
                                         <Select
-                                            labelId="export-finalstatus-label"
-                                            label="Estado de Pago"
-                                            value={exportFinalStatus}
-                                            onChange={(e) => setExportFinalStatus(e.target.value)}
+                                            labelId="export-by-state-type-label"
+                                            label="Tipo de exportación"
+                                            value={exportByStateType}
+                                            onChange={(e) => setExportByStateType(e.target.value)}
+                                        >
+                                            <MenuItem value="PAGOS">Pagos</MenuItem>
+                                            <MenuItem value="INSCRIPCION">Cargos de inscripción</MenuItem>
+                                        </Select>
+                                    </FormControl>
+                                )}
+                                {exportEnrollmentMode ? (
+                                    <FormControl fullWidth size="small">
+                                        <InputLabel id="export-by-state-enrollment-label">Pago de Inscripción</InputLabel>
+                                        <Select
+                                            labelId="export-by-state-enrollment-label"
+                                            label="Pago de Inscripción"
+                                            value={exportByStateEnrollment}
+                                            onChange={(e) => setExportByStateEnrollment(e.target.value)}
                                         >
                                             <MenuItem value="TODOS">Todos los estados</MenuItem>
-                                            <MenuItem value="PAGADO">PAGADO</MenuItem>
-                                            <MenuItem value="PENDIENTE">PENDIENTE</MenuItem>
-                                            <MenuItem value="MORA">MORA</MenuItem>
-                                            <MenuItem value="ELIMINADO">ELIMINADO</MenuItem>
-                                        </Select>
-                                    </FormControl>
-                                    <FormControl fullWidth size="small">
-                                        <InputLabel id="export-servicestatus-label">Estado del Servicio</InputLabel>
-                                        <Select
-                                            labelId="export-servicestatus-label"
-                                            label="Estado del Servicio"
-                                            value={exportServiceStatus}
-                                            onChange={(e) => setExportServiceStatus(e.target.value)}
-                                        >
-                                            <MenuItem value="TODOS">Todos los estados</MenuItem>
-                                            <MenuItem value="ACTIVE">ACTIVO</MenuItem>
-                                            <MenuItem value="PAUSED">PAUSADO</MenuItem>
-                                            <MenuItem value="SUSPENDED">SUSPENDIDO</MenuItem>
-                                            {!schoolInOperation && <MenuItem value="PENDING_START">PENDIENTE DE INICIO</MenuItem>}
-                                            <MenuItem value="INACTIVE">INACTIVO</MenuItem>
-                                        </Select>
-                                    </FormControl>
-                                    <FormControl fullWidth size="small">
-                                        <InputLabel id="export-month-label">Mes</InputLabel>
-                                        <Select
-                                            labelId="export-month-label"
-                                            label="Mes"
-                                            value={exportMonth}
-                                            onChange={(e) => setExportMonth(e.target.value)}
-                                            MenuProps={{
-                                                PaperProps: {
-                                                    sx: {
-                                                        maxHeight: 220
-                                                    }
-                                                }
-                                            }}
-                                        >
-                                            <MenuItem value="TODOS">Todos los meses</MenuItem>
-                                            <MenuItem value="01">Enero</MenuItem>
-                                            <MenuItem value="02">Febrero</MenuItem>
-                                            <MenuItem value="03">Marzo</MenuItem>
-                                            <MenuItem value="04">Abril</MenuItem>
-                                            <MenuItem value="05">Mayo</MenuItem>
-                                            <MenuItem value="06">Junio</MenuItem>
-                                            <MenuItem value="07">Julio</MenuItem>
-                                            <MenuItem value="08">Agosto</MenuItem>
-                                            <MenuItem value="09">Septiembre</MenuItem>
-                                            <MenuItem value="10">Octubre</MenuItem>
-                                            <MenuItem value="11">Noviembre</MenuItem>
-                                            <MenuItem value="12">Diciembre</MenuItem>
-                                        </Select>
-                                    </FormControl>
-                                    <FormControl fullWidth size="small">
-                                        <InputLabel id="export-year-label">Año</InputLabel>
-                                        <Select
-                                            labelId="export-year-label"
-                                            label="Año"
-                                            value={exportYear}
-                                            onChange={(e) => setExportYear(e.target.value)}
-                                            MenuProps={{
-                                                PaperProps: {
-                                                    sx: {
-                                                        maxHeight: 220
-                                                    }
-                                                }
-                                            }}
-                                        >
-                                            {exportYearOptions.map((y) => (
-                                                <MenuItem key={y} value={y}>{y}</MenuItem>
+                                            {ENROLLMENT_FILTER_OPTIONS.map((opt) => (
+                                                <MenuItem key={opt.value} value={opt.value}>{opt.label.toUpperCase()}</MenuItem>
                                             ))}
                                         </Select>
                                     </FormControl>
-                                    </Box>
-                                </Box>
-                            </DialogContent>
-                            <DialogActions sx={{ px: 3, py: 2, borderTop: 1, borderColor: 'divider' }}>
-                                <Button onClick={() => setOpenExportStatusDialog(false)}>
-                                    Cancelar
-                                </Button>
-                                <Button variant="contained" onClick={() => handleDownloadPaymentsByStatus(exportMonth, exportYear)}>
-                                    Descargar
-                                </Button>
-                            </DialogActions>
-                        </Dialog>
+                                ) : (
+                                <FormControl fullWidth size="small">
+                                    <InputLabel id="export-by-state-label">Estado de Pago</InputLabel>
+                                    <Select
+                                        labelId="export-by-state-label"
+                                        label="Estado de Pago"
+                                        value={exportByStateValue}
+                                        onChange={(e) => setExportByStateValue(e.target.value)}
+                                    >
+                                        <MenuItem value="TODOS">Todos los estados</MenuItem>
+                                        <MenuItem value="PAGADO">PAGADO</MenuItem>
+                                        <MenuItem value="PENDIENTE">PENDIENTE</MenuItem>
+                                        <MenuItem value="MORA">MORA</MenuItem>
+                                        <MenuItem value="ELIMINADO">ELIMINADO</MenuItem>
+                                    </Select>
+                                </FormControl>
+                                )}
 
-                        {/* Dialog: Exportar por Estado (nuevo) */}
-                        <Dialog
-                            open={openExportByStateDialog}
-                            onClose={() => setOpenExportByStateDialog(false)}
-                            maxWidth="xs"
-                            PaperProps={{
-                                sx: {
-                                    borderRadius: 2,
-                                    overflow: 'visible',
-                                    width: 380,
-                                    maxWidth: 'calc(100% - 32px)'
-                                }
-                            }}
-                        >
-                            <DialogTitle sx={{ pb: 2 }}>
-                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                    <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                                        Exportar pagos
-                                    </Typography>
-                                    <Typography variant="body2" color="text.secondary">
-                                        {exportEnrollmentMode
-                                            ? 'Selecciona el estado del pago de inscripción y el estado del servicio.'
-                                            : 'Selecciona el estado de pago y el estado del servicio.'}
-                                    </Typography>
+                                <FormControl fullWidth size="small">
+                                    <InputLabel id="export-by-state-servicestatus-label">Estado del Servicio</InputLabel>
+                                    <Select
+                                        labelId="export-by-state-servicestatus-label"
+                                        label="Estado del Servicio"
+                                        value={exportByStateServiceStatus}
+                                        onChange={(e) => setExportByStateServiceStatus(e.target.value)}
+                                    >
+                                        <MenuItem value="TODOS">Todos los estados</MenuItem>
+                                        <MenuItem value="ACTIVE">ACTIVO</MenuItem>
+                                        <MenuItem value="PAUSED">PAUSADO</MenuItem>
+                                        <MenuItem value="SUSPENDED">SUSPENDIDO</MenuItem>
+                                        <MenuItem value="INACTIVE">INACTIVO</MenuItem>
+                                        {!schoolInOperation && <MenuItem value="PENDING_START">PENDIENTE DE INICIO</MenuItem>}
+                                    </Select>
+                                </FormControl>
                                 </Box>
-                            </DialogTitle>
-                            <DialogContent sx={{ pt: 2.5, overflow: 'visible' }}>
-                                <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
-                                    <Box sx={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 2, mt: 0.5 }}>
-                                    {hasEnrollmentCharges && (
-                                        <FormControl fullWidth size="small">
-                                            <InputLabel id="export-by-state-type-label">Tipo de exportación</InputLabel>
-                                            <Select
-                                                labelId="export-by-state-type-label"
-                                                label="Tipo de exportación"
-                                                value={exportByStateType}
-                                                onChange={(e) => setExportByStateType(e.target.value)}
-                                            >
-                                                <MenuItem value="PAGOS">Pagos</MenuItem>
-                                                <MenuItem value="INSCRIPCION">Cargos de inscripción</MenuItem>
-                                            </Select>
-                                        </FormControl>
-                                    )}
-                                    {exportEnrollmentMode ? (
-                                        <FormControl fullWidth size="small">
-                                            <InputLabel id="export-by-state-enrollment-label">Pago de Inscripción</InputLabel>
-                                            <Select
-                                                labelId="export-by-state-enrollment-label"
-                                                label="Pago de Inscripción"
-                                                value={exportByStateEnrollment}
-                                                onChange={(e) => setExportByStateEnrollment(e.target.value)}
-                                            >
-                                                <MenuItem value="TODOS">Todos los estados</MenuItem>
-                                                {ENROLLMENT_FILTER_OPTIONS.map((opt) => (
-                                                    <MenuItem key={opt.value} value={opt.value}>{opt.label.toUpperCase()}</MenuItem>
-                                                ))}
-                                            </Select>
-                                        </FormControl>
-                                    ) : (
-                                    <FormControl fullWidth size="small">
-                                        <InputLabel id="export-by-state-label">Estado de Pago</InputLabel>
-                                        <Select
-                                            labelId="export-by-state-label"
-                                            label="Estado de Pago"
-                                            value={exportByStateValue}
-                                            onChange={(e) => setExportByStateValue(e.target.value)}
-                                        >
-                                            <MenuItem value="TODOS">Todos los estados</MenuItem>
-                                            <MenuItem value="PAGADO">PAGADO</MenuItem>
-                                            <MenuItem value="PENDIENTE">PENDIENTE</MenuItem>
-                                            <MenuItem value="MORA">MORA</MenuItem>
-                                            <MenuItem value="ELIMINADO">ELIMINADO</MenuItem>
-                                        </Select>
-                                    </FormControl>
-                                    )}
-
-                                    <FormControl fullWidth size="small">
-                                        <InputLabel id="export-by-state-servicestatus-label">Estado del Servicio</InputLabel>
-                                        <Select
-                                            labelId="export-by-state-servicestatus-label"
-                                            label="Estado del Servicio"
-                                            value={exportByStateServiceStatus}
-                                            onChange={(e) => setExportByStateServiceStatus(e.target.value)}
-                                        >
-                                            <MenuItem value="TODOS">Todos los estados</MenuItem>
-                                            <MenuItem value="ACTIVE">ACTIVO</MenuItem>
-                                            <MenuItem value="PAUSED">PAUSADO</MenuItem>
-                                            <MenuItem value="SUSPENDED">SUSPENDIDO</MenuItem>
-                                            <MenuItem value="INACTIVE">INACTIVO</MenuItem>
-                                            {!schoolInOperation && <MenuItem value="PENDING_START">PENDIENTE DE INICIO</MenuItem>}
-                                        </Select>
-                                    </FormControl>
-                                    </Box>
-                                </Box>
-                            </DialogContent>
-                            <DialogActions sx={{ px: 3, py: 2, borderTop: 1, borderColor: 'divider' }}>
-                                <Button onClick={() => setOpenExportByStateDialog(false)}>
-                                    Cancelar
-                                </Button>
-                                <Button
-                                    variant="contained"
-                                    onClick={() => (exportEnrollmentMode
-                                        ? handleDownloadEnrollment(exportByStateEnrollment)
-                                        : handleDownloadByState(exportByStateValue))}
-                                >
-                                    Descargar
-                                </Button>
-                            </DialogActions>
-                        </Dialog>
+                            </Box>
+                        </AppDialog>
 
                         {/* Dialog: Registrar Pago */}
-                        <Dialog open={openRegisterDialog} onClose={() => { setOpenRegisterDialog(false); setSelectedReceipt(null); setReceiptZoom(1); setPaymentTab(0); }} fullWidth maxWidth="lg">
-                            <DialogTitle>Registrar Pago</DialogTitle>
-                            <DialogContent>
-                                <Box sx={{ position: 'relative' }}>
-                                <Grid container spacing={2}>
-                                    {/* Panel de Boletas (Columna Izquierda - Siempre Visible) */}
-                                    <Grid item xs={12} md={7}>
-                                        <Box sx={{ border: '1px solid rgba(0,0,0,0.06)', borderRadius: 1, p: 1, height: 580, overflow: 'auto', backgroundColor: '#fff' }}>
-                                            <ReceiptsPane
-                                                uploadedReceipts={uploadedReceipts}
-                                                uploadedReceiptsLoading={uploadedReceiptsLoading}
-                                                boletaMonth={boletaMonth}
-                                                setBoletaMonth={setBoletaMonth}
-                                                boletaMonthOptions={boletaMonthOptions}
-                                                filteredUploadedReceipts={filteredUploadedReceipts}
-                                                selectedReceipt={selectedReceipt}
-                                                setSelectedReceipt={setSelectedReceipt}
-                                                receiptZoom={receiptZoom}
-                                                setReceiptZoom={setReceiptZoom}
-                                                canManageReceipts={hasPermission('admin-subir-boletas')}
-                                                uploadReceiptLoading={receiptUploadLoading}
-                                                onUploadReceipt={handleUploadRegisterReceipt}
-                                                onReceiptError={(message) => notify.warning(message)}
-                                                onChangeReceiptStatus={handleChangeReceiptStatus}
-                                                downloadFile={(url, name) => {
-                                                    const a = document.createElement('a');
-                                                    a.href = url;
-                                                    a.download = name || '';
-                                                    document.body.appendChild(a);
-                                                    a.click();
-                                                    document.body.removeChild(a);
+                        <AppDialog
+                            open={openRegisterDialog}
+                            onClose={() => { setOpenRegisterDialog(false); setSelectedReceipt(null); setReceiptZoom(1); setPaymentTab(0); }}
+                            title="Registrar pago"
+                            icon={<PaymentsIcon />}
+                            size="lg"
+                            actionsSx={{ flexWrap: 'wrap' }}
+                            actions={(
+                                <>
+                                    {(paymentTab === 0 || paymentTab === 1) && selectedReceipt?.status === 'PENDIENTE' && (
+                                        <FormControlLabel
+                                            sx={{ mr: 'auto' }}
+                                            control={
+                                                <Checkbox
+                                                    size="small"
+                                                    checked={markReceiptAsRegistered}
+                                                    onChange={(e) => setMarkReceiptAsRegistered(e.target.checked)}
+                                                />
+                                            }
+                                            label="Marcar boleta abierta como registrada"
+                                        />
+                                    )}
+                                    <Button onClick={() => { setOpenRegisterDialog(false); setSelectedReceipt(null); setReceiptZoom(1); setPaymentTab(0); }} disabled={uploadedReceiptsLoading || regHistLoading}>Cancelar</Button>
+
+                                    {/* Botón para Pago de Tarifa */}
+                                    {paymentTab === 0 && hasPermission('pagos-pagar-tarifa') && (
+                                        <Button variant="contained" onClick={async () => {
+                                            await handleConfirmRegister();
+                                            // ensure receipt view reset after confirming
+                                            setSelectedReceipt(null);
+                                            setReceiptZoom(1);
+                                        }} disabled={!registerAmount || uploadedReceiptsLoading || regHistLoading || extraDiscountError}>
+                                            Registrar Pago de Tarifa
+                                        </Button>
+                                    )}
+                            
+                                    {/* Botón para Pago de Mora. Con crédito puro solo llama
+                                        /payments/v2/use-credit; con boleta llama /payments/pay-penalty. */}
+                                    {paymentTab === 1 && (payPenaltyUseCredit && Number(payPenaltyBoletaAmount || 0) === 0
+                                        ? hasPermission('pagos-v2-usar-credito')
+                                        : hasPermission('pagos-pagar-mora')) && (
+                                        <Button variant="contained" color={isExonerating ? 'success' : payPenaltyUseCredit ? 'success' : 'warning'} onClick={async () => {
+                                            const creditAmt = payPenaltyUseCredit ? Number(payPenaltyAmount || 0) : 0;
+                                            const boletaAmt = payPenaltyUseCredit ? Number(payPenaltyBoletaAmount || 0) : 0;
+                                            const amt = payPenaltyUseCredit ? boletaAmt : Number(payPenaltyAmount || 0);
+                                            const discount = Number(discountPenaltyAmount || 0);
+
+                                            if (payPenaltyUseCredit) {
+                                                if (!creditAmt || Number.isNaN(creditAmt) || creditAmt <= 0) {
+                                                    notify.error('Ingrese un monto de crédito válido');
+                                                    return;
+                                                }
+                                                if (creditAmt > dialogCredito) {
+                                                    notify.error(`El crédito a aplicar excede el disponible (${formatQ(dialogCredito)})`);
+                                                    return;
+                                                }
+                                            } else {
+                                                if (Number.isNaN(amt) || amt < 0) {
+                                                    notify.error('Ingrese un monto válido');
+                                                    return;
+                                                }
+                                                if (amt === 0 && discount === 0) {
+                                                    notify.error('Debe ingresar un monto de pago o de exoneración');
+                                                    return;
+                                                }
+                                                const total = amt + discount;
+                                                if (total > effectivePenaltyDue) {
+                                                    notify.error(`El monto total (pago + exoneración) excede la mora adeudada (${formatQ(effectivePenaltyDue)})`);
+                                                    return;
+                                                }
+                                            }
+
+                                            try {
+                                                const receiptLinkFields = selectedReceipt?.status === 'PENDIENTE' ? {
+                                                    receiptId: selectedReceipt.id,
+                                                    markReceiptRegistered: markReceiptAsRegistered
+                                                } : {};
+                                                if (payPenaltyUseCredit) {
+                                                    await api.post('/payments/v2/use-credit', {
+                                                        paymentId: registerPaymentTarget.id,
+                                                        amount: creditAmt,
+                                                        targetType: 'PENALTY',
+                                                        ...receiptLinkFields
+                                                    });
+                                                    if (boletaAmt > 0) {
+                                                        await api.post('/payments/pay-penalty', {
+                                                            paymentId: registerPaymentTarget.id,
+                                                            amount: boletaAmt,
+                                                            realPaymentDate: payPenaltyDate,
+                                                            receiptNumber: payPenaltyBoleta,
+                                                            bankAccount: payPenaltyAccount,
+                                                            source: 'manual',
+                                                            ...receiptLinkFields
+                                                        });
+                                                        notify.success(`Crédito (${formatQ(creditAmt)}) y boleta (${formatQ(boletaAmt)}) aplicados a mora`);
+                                                    } else {
+                                                        notify.success('Crédito aplicado a mora');
+                                                    }
+                                                } else {
+                                                    const payloadData = {
+                                                        paymentId: registerPaymentTarget.id,
+                                                        amount: amt,
+                                                        extraordinaryDiscount: discount || 0,
+                                                        realPaymentDate: payPenaltyDate,
+                                                        receiptNumber: payPenaltyBoleta,
+                                                        bankAccount: payPenaltyAccount,
+                                                        notes: discount > 0 ? `Descuento/Exoneración de mora: ${formatQ(discount)}` : null,
+                                                        source: 'manual',
+                                                        ...receiptLinkFields
+                                                    };
+                                                    await api.post('/payments/pay-penalty', payloadData);
+                                                    notify.success(isExonerating ? `Mora exonerada: ${formatQ(discount)}` : 'Pago de mora registrado exitosamente');
+                                                }
+                                                setOpenRegisterDialog(false);
+                                                setIsExonerating(false);
+                                                setPayPenaltyUseCredit(false);
+                                                setPayPenaltyBoletaAmount('');
+                                                setPayPenaltyAmount('');
+                                                setPayPenaltyBoleta('');
+                                                setPayPenaltyAccount('');
+                                                setPayPenaltyDate(moment(currentDate).format('YYYY-MM-DD'));
+                                                setDiscountPenaltyAmount('');
+                                                setExonerateAmount('');
+                                                setPaymentTab(0);
+                                                await fetchAllPayments();
+                                            } catch (err) {
+                                                console.error('Error procesando mora:', err);
+                                                const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Error al procesar el pago de mora';
+                                                notify.error(errorMsg);
+                                            }
+                                        }} disabled={uploadedReceiptsLoading || regHistLoading || effectivePenaltyDue === 0 || (() => {
+                                            if (isExonerating) {
+                                                return !payPenaltyDate || !payPenaltyAccount;
+                                            }
+                                            if (payPenaltyUseCredit) {
+                                                const cAmt = Number(payPenaltyAmount || 0);
+                                                if (!cAmt || cAmt <= 0 || cAmt > dialogCredito) {
+                                                    return true;
+                                                }
+                                                const cRem = Math.max(0, Math.round((effectivePenaltyDue - cAmt) * 100) / 100);
+                                                if (cRem > 0) {
+                                                    const bAmt = Number(payPenaltyBoletaAmount || 0);
+                                                    if (!bAmt || bAmt <= 0) {
+                                                        return true;
+                                                    }
+                                                    return !payPenaltyBoleta || !payPenaltyDate || !payPenaltyAccount;
+                                                }
+                                                return false;
+                                            }
+                                            const amt = Number(payPenaltyAmount || 0);
+                                            const discount = Number(discountPenaltyAmount || 0);
+                                            if (amt === 0 && discount === 0) {
+                                                return true;
+                                            }
+                                            if (amt > 0 && !payPenaltyBoleta) {
+                                                return true;
+                                            }
+                                            return !payPenaltyDate || !payPenaltyAccount;
+                                        })()}>
+                                            {isExonerating ? 'Confirmar Exoneración' : payPenaltyUseCredit && Number(payPenaltyBoletaAmount || 0) > 0 ? 'Aplicar Crédito + Boleta' : payPenaltyUseCredit ? 'Aplicar Crédito' : 'Registrar Pago de Mora'}
+                                        </Button>
+                                    )}
+
+                                    {/* Botón para Inscripción */}
+                                    {paymentTab === 2 && hasPermission('pagos-v2-pagar-inscripcion') && (
+                                        <Button
+                                            variant="contained"
+                                            onClick={async () => {
+                                                const amount = Number(payEnrollmentAmount) || 0;
+                                                const extraordinaryDiscount = Number(payEnrollmentDiscount) || 0;
+                                                if (amount <= 0 && extraordinaryDiscount <= 0) {
+                                                    notify.error('Debe indicar un monto pagado o un descuento extraordinario');
+                                                    return;
+                                                }
+                                                setEnrollmentSaving(true);
+                                                try {
+                                                    await api.post('/enrollment-payments/pay', {
+                                                        enrollmentPaymentId: enrollmentPayment.id,
+                                                        amount,
+                                                        extraordinaryDiscount: extraordinaryDiscount || undefined,
+                                                        realPaymentDate: payEnrollmentDate,
+                                                        receiptNumber: payEnrollmentReceiptNumber || undefined,
+                                                        notes: payEnrollmentNotes || undefined,
+                                                    });
+                                                    notify.success('Pago de inscripción registrado');
+                                                    setOpenRegisterDialog(false);
+                                                    setPaymentTab(0);
+                                                    await fetchAllPayments();
+                                                    await fetchEnrollmentCharges();
+                                                } catch (err) {
+                                                    notify.fromError(err, 'Error al registrar el pago.');
+                                                } finally {
+                                                    setEnrollmentSaving(false);
+                                                }
+                                            }}
+                                            disabled={
+                                                enrollmentSaving
+                                                || uploadedReceiptsLoading
+                                                || regHistLoading
+                                                || !enrollmentPayment
+                                                || enrollmentPayment.amountDue <= 0
+                                                || (!Number(payEnrollmentAmount) && !Number(payEnrollmentDiscount))
+                                            }
+                                        >
+                                            {enrollmentSaving ? 'Guardando...' : 'Registrar Pago / Exoneración'}
+                                        </Button>
+                                    )}
+                                </>
+                            )}
+                        >
+                            <Box sx={{ position: 'relative' }}>
+                            <Grid container spacing={2}>
+                                {/* Panel de Boletas (Columna Izquierda - Siempre Visible) */}
+                                <Grid item xs={12} md={7}>
+                                    <Box sx={{ border: '1px solid rgba(0,0,0,0.06)', borderRadius: 1, p: 1, height: 580, overflow: 'auto', backgroundColor: '#fff' }}>
+                                        <ReceiptsPane
+                                            uploadedReceipts={uploadedReceipts}
+                                            uploadedReceiptsLoading={uploadedReceiptsLoading}
+                                            boletaMonth={boletaMonth}
+                                            setBoletaMonth={setBoletaMonth}
+                                            boletaMonthOptions={boletaMonthOptions}
+                                            filteredUploadedReceipts={filteredUploadedReceipts}
+                                            selectedReceipt={selectedReceipt}
+                                            setSelectedReceipt={setSelectedReceipt}
+                                            receiptZoom={receiptZoom}
+                                            setReceiptZoom={setReceiptZoom}
+                                            canManageReceipts={hasPermission('admin-subir-boletas')}
+                                            uploadReceiptLoading={receiptUploadLoading}
+                                            onUploadReceipt={handleUploadRegisterReceipt}
+                                            onReceiptError={(message) => notify.warning(message)}
+                                            onChangeReceiptStatus={handleChangeReceiptStatus}
+                                            downloadFile={(url, name) => {
+                                                const a = document.createElement('a');
+                                                a.href = url;
+                                                a.download = name || '';
+                                                document.body.appendChild(a);
+                                                a.click();
+                                                document.body.removeChild(a);
+                                            }}
+                                        />
+                                    </Box>
+                                </Grid>
+                                
+                                {/* Panel de Formulario (Columna Derecha - Con Pestañas) */}
+                                <Grid item xs={12} md={5}>
+                                    {/* Pestañas para separar Pago de Tarifa y Pago de Mora */}
+                                    <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+                                        <Tabs value={paymentTab} onChange={(e, newValue) => setPaymentTab(newValue)}>
+                                            <Tab label="Pago de Tarifa" />
+                                            <Tab
+                                                label={`Pago de Mora ${effectivePenaltyDue > 0 ? `(${formatQ(effectivePenaltyDue)})` : '(Q 0.00)'}`}
+                                                sx={{
+                                                    color: effectivePenaltyDue > 0 ? 'error.main' : 'inherit',
+                                                    fontWeight: effectivePenaltyDue > 0 ? 700 : 400,
+                                                    '&.Mui-selected': {
+                                                        color: effectivePenaltyDue > 0 ? 'error.main' : 'primary.main'
+                                                    }
                                                 }}
                                             />
-                                        </Box>
-                                    </Grid>
-                                    
-                                    {/* Panel de Formulario (Columna Derecha - Con Pestañas) */}
-                                    <Grid item xs={12} md={5}>
-                                        {/* Pestañas para separar Pago de Tarifa y Pago de Mora */}
-                                        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-                                            <Tabs value={paymentTab} onChange={(e, newValue) => setPaymentTab(newValue)}>
-                                                <Tab label="Pago de Tarifa" />
-                                                <Tab
-                                                    label={`Pago de Mora ${effectivePenaltyDue > 0 ? `(${formatQ(effectivePenaltyDue)})` : '(Q 0.00)'}`}
-                                                    sx={{
-                                                        color: effectivePenaltyDue > 0 ? 'error.main' : 'inherit',
-                                                        fontWeight: effectivePenaltyDue > 0 ? 700 : 400,
-                                                        '&.Mui-selected': {
-                                                            color: effectivePenaltyDue > 0 ? 'error.main' : 'primary.main'
-                                                        }
-                                                    }}
-                                                />
-                                                <Tab label="Inscripción" />
-                                            </Tabs>
-                                        </Box>
+                                            <Tab label="Inscripción" />
+                                        </Tabs>
+                                    </Box>
 
-                                        {/* Tab Panel 0: Pago de Tarifa */}
-                                        {paymentTab === 0 && (
-                                        <Box sx={{ maxWidth: 420 }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
-                                            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                                                {registerPaymentTarget ? `Familia: ${registerPaymentTarget.User?.FamilyDetail?.familyLastName || ''}` : ''}
-                                                {registerPaymentTarget && (
-                                                    ` (${studentCount} ${studentCount === 1 ? 'estudiante' : 'estudiantes'})`
-                                                )}
-                                            </Typography>
-                                            {/* Show D/A chip when automatic debit is active on the payment or the family's record */}
-                                            { (registerPaymentTarget && (registerPaymentTarget.automaticDebit || registerPaymentTarget.User?.FamilyDetail?.automaticDebit)) && (
-                                                <Chip label="D/A" size="small" color="primary" sx={{ height: 22, fontSize: '0.75rem' }} />
-                                            ) }
-                                            {registerPaymentTarget?.autoDebit && (
-                                                <Chip label="D/A" size="small" color="primary" sx={{ height: 22, fontSize: '0.75rem' }} />
-                                            )}
-                                        </Box>
-                                        {/* Payment summary block: Desglose detallado del cálculo */}
-                                        <Box sx={{ mb: 2, p: 2, backgroundColor: '#fafafa', borderRadius: 1, border: '1px solid rgba(0,0,0,0.04)' }}>
-                                            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>📋 Desglose de Pago</Typography>
-                                            
-                                            {/* Sección: Cargos Base */}
-                                            {dialogPendingPeriods.length <= 1 && (
-                                                <Box sx={{ mb: 2, pb: 1.5, borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
-                                                    <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main', display: 'block', mb: 1 }}>
-                                                        CARGOS BASE
-                                                    </Typography>
-                                                    
-                                                    {/* Tarifa base por estudiante */}
-                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                                                        <Typography variant="body2" color="text.secondary">
-                                                            Tarifa base
-                                                            <Typography component="span" variant="caption" sx={{ ml: 0.5, color: 'text.disabled' }}>
-                                                                ({effectiveRouteType})
-                                                            </Typography>
-                                                        </Typography>
-                                                        <Typography variant="body2">{formatQ(effectiveBaseFee || 0)}</Typography>
-                                                    </Box>
-                                                    
-                                                    {/* Tarifa mensual total (base × estudiantes) */}
-                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                                                        <Typography variant="body2" color="text.secondary">
-                                                            Tarifa mensual
-                                                            <Typography component="span" variant="caption" sx={{ ml: 0.5, color: 'text.disabled' }}>
-                                                                            ({cargosStudents} {cargosStudents === 1 ? 'estudiante' : 'estudiantes'})
-                                                                        </Typography>
-                                                        </Typography>
-                                                        <Typography variant="body2" sx={{ fontWeight: 500 }}>{formatQ(effectiveMonthlyFee || 0)}</Typography>
-                                                    </Box>
-                                                </Box>
-                                            )}
-
-                                            {/* Sección: Descuentos y Créditos */}
-                                            {(() => {
-                                                // When there are multiple unpaid periods, the family discount can vary per period.
-                                                // Avoid showing a misleading single "Descuento familiar" line here.
-                                                const showFamilyLine = dialogFamilySpecialFee > 0 && !hasMultiplePendingPeriods;
-                                                const showBlock = dialogCredito > 0 || showFamilyLine || dialogExtraDiscount > 0;
-                                                if (!showBlock) {
-                                                    return null;
-                                                }
-
-                                                return (
-                                                <Box sx={{ mb: 2, pb: 1.5, borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
-                                                    <Typography variant="caption" sx={{ fontWeight: 600, color: 'success.main', display: 'block', mb: 1 }}>
-                                                        DESCUENTOS Y CRÉDITOS
-                                                    </Typography>
-                                                    
-                                                    {dialogCredito > 0 && (
-                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                                                            <Typography variant="body2" color="text.secondary">
-                                                                <Box component="span" title="Crédito generado por pagos anteriores donde el monto excedió la tarifa del mes. Se aplica automáticamente." sx={{ borderBottom: '1px dashed #999', cursor: 'help' }}>
-                                                                    Crédito a favor ↗
-                                                                </Box>
-                                                            </Typography>
-                                                            <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 500 }}>
-                                                                - {formatQ(dialogCredito || 0)}
-                                                            </Typography>
-                                                        </Box>
-                                                    )}
-                                                    
-                                                    {showFamilyLine && (
-                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                                                            <Typography variant="body2" color="text.secondary">
-                                                                Descuento familiar
-                                                            </Typography>
-                                                            <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 500 }}>
-                                                                - {formatQ(dialogFamilySpecialFee || 0)}
-                                                            </Typography>
-                                                        </Box>
-                                                    )}
-                                                    
-                                                    {dialogExtraDiscount > 0 && (
-                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                                                            <Typography variant="body2" color="text.secondary">Descuento extraordinario</Typography>
-                                                            <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 500 }}>
-                                                                - {formatQ(dialogExtraDiscount || 0)}
-                                                            </Typography>
-                                                        </Box>
-                                                    )}
-                                                </Box>
-                                                );
-                                            })()}
-
-                                            {/* Desglose por períodos pendientes si hay varios meses */}
-                                            {(() => {
-                                                try {
-                                                    const periods = dialogPendingPeriods;
-                                                    
-                                                    if (Array.isArray(periods) && periods.length > 1) {
-                                                        const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-                                                        
-                                                        return (
-                                                            <Box sx={{ mb: 2, pb: 1.5, borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
-                                                                <Box sx={{ p: 1.5, bgcolor: '#fff3e0', borderRadius: 1, border: '1px solid #ff9800' }}>
-                                                                    <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 1.5, color: '#e65100' }}>
-                                                                        ⚠️ Períodos pendientes ({periods.length} meses):
-                                                                    </Typography>
-                                                                    {periods.map((period, idx) => {
-                                                                        const periodDate = moment(period.period);
-                                                                        const monthName = monthNames[periodDate.month()];
-                                                                        const year = periodDate.year();
-                                                                        const dueDate = formatDateShort(period.dueDate);
-                                                                        
-                                                                        // Verificar si es pago parcial
-                                                                        const originalAmount = Number(period.originalAmount ?? dialogMonthlyFee ?? 0) || 0;
-                                                                        const periodDiscount = Number(period.discountApplied ?? 0) || 0;
-                                                                        const periodNetAmount = Number(period.netAmount ?? (originalAmount - periodDiscount)) || 0;
-                                                                        const periodAmountDue = Number(period.amountDue ?? period.amount ?? 0) || 0;
-
-                                                                        const periodRouteType = period.routeType || routeType;
-
-                                                                        // Tarifa base por estudiante para este período (preferir snapshot del período)
-                                                                        const periodStudents = Number(period?.studentsCount ?? registerPaymentTarget?.studentCount ?? studentCount) || 1;
-                                                                        const periodBaseFee = periodStudents > 0 ? (originalAmount / periodStudents) : originalAmount;
-
-                                                                        const isParcial = periodAmountDue < periodNetAmount && periodAmountDue > 0;
-                                                                        const amountPaid = isParcial
-                                                                            ? (periodNetAmount - periodAmountDue)
-                                                                            : (Number(period.amountPaid ?? 0) || 0);
-                                                                        
-                                                                        return (
-                                                                            <Box key={idx} sx={{ mb: idx < periods.length - 1 ? 2 : 0, pb: idx < periods.length - 1 ? 2 : 0, borderBottom: idx < periods.length - 1 ? '1px dashed rgba(0,0,0,0.15)' : 'none' }}>
-                                                                                <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5, color: 'text.primary' }}>
-                                                                                    • {monthName} {year}
-                                                                                    <Typography component="span" sx={{ fontSize: '0.65rem', ml: 0.5, color: 'text.disabled' }}>
-                                                                                        (Vence: {dueDate})
-                                                                                    </Typography>
-                                                                                    {isParcial && (
-                                                                                        <Typography component="span" sx={{ 
-                                                                                            fontSize: '0.65rem', 
-                                                                                            ml: 1, 
-                                                                                            px: 0.75, 
-                                                                                            py: 0.25,
-                                                                                            backgroundColor: '#fff3e0',
-                                                                                            color: '#e65100',
-                                                                                            borderRadius: '4px',
-                                                                                            fontWeight: 600
-                                                                                        }}>
-                                                                                            📝 PAGO PARCIAL
-                                                                                        </Typography>
-                                                                                    )}
-                                                                                </Typography>
-
-                                                                                {/* Tarifa base */}
-                                                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5, ml: 2 }}>
-                                                                                    <Typography variant="caption" color="text.secondary">
-                                                                                        Tarifa base
-                                                                                        <Typography component="span" variant="caption" sx={{ ml: 0.5, color: 'text.disabled' }}>
-                                                                                            ({periodRouteType})
-                                                                                        </Typography>
-                                                                                        :
-                                                                                    </Typography>
-                                                                                    <Typography variant="caption">
-                                                                                        {formatQ(periodBaseFee || 0)}
-                                                                                    </Typography>
-                                                                                </Box>
-                                                                                
-                                                                                {/* Tarifa mensual */}
-                                                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5, ml: 2 }}>
-                                                                                    <Typography variant="caption" color="text.secondary">
-                                                                                        Tarifa mensual ({periodStudents} {periodStudents === 1 ? 'estudiante' : 'estudiantes'}):
-                                                                                    </Typography>
-                                                                                    <Typography variant="caption">
-                                                                                        {formatQ(originalAmount || 0)}
-                                                                                    </Typography>
-                                                                                </Box>
-                                                                                
-                                                                                {/* Descuento familiar aplicado a este período (puede variar por mes) */}
-                                                                                {periodDiscount > 0 && (
-                                                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.3, ml: 2 }}>
-                                                                                        <Typography variant="caption" color="text.secondary">
-                                                                                            Descuento familiar:
-                                                                                        </Typography>
-                                                                                        <Typography variant="caption" sx={{ color: 'success.main' }}>
-                                                                                            - {formatQ(periodDiscount || 0)}
-                                                                                        </Typography>
-                                                                                    </Box>
-                                                                                )}
-                                                                                
-                                                                                {/* Mostrar desglose de pago parcial */}
-                                                                                {isParcial && (
-                                                                                    <>
-                                                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.3, ml: 2 }}>
-                                                                                            <Typography variant="caption" sx={{ color: 'info.main', fontStyle: 'italic' }}>
-                                                                                                Ya pagado:
-                                                                                            </Typography>
-                                                                                            <Typography variant="caption" sx={{ color: 'info.main', fontWeight: 500 }}>
-                                                                                                {formatQ(amountPaid || 0)}
-                                                                                            </Typography>
-                                                                                        </Box>
-                                                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.3, ml: 2 }}>
-                                                                                            <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 500 }}>
-                                                                                                Saldo pendiente:
-                                                                                            </Typography>
-                                                                                            <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 600 }}>
-                                                                                                {formatQ(periodAmountDue || 0)}
-                                                                                            </Typography>
-                                                                                        </Box>
-                                                                                    </>
-                                                                                )}
-                                                                                
-                                                                                {/* Subtotal del período */}
-                                                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5, ml: 2, pt: 0.5, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
-                                                                                    <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                                                                                        {isParcial ? 'A pagar este período:' : 'Subtotal período:'}
-                                                                                    </Typography>
-                                                                                    <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main' }}>
-                                                                                        {formatQ(periodAmountDue || 0)}
-                                                                                    </Typography>
-                                                                                </Box>
-                                                                            </Box>
-                                                                        );
-                                                                    })}
-                                                                </Box>
-                                                            </Box>
-                                                        );
-                                                    }
-
-                                                    // Caso: solo 1 período pendiente
-                                                    // UX: cuando hay 1 solo período pendiente, se muestra únicamente "CARGOS BASE" arriba.
-                                                    if (Array.isArray(periods) && periods.length === 1) {
-                                                        return null;
-                                                    }
-                                                } catch (e) {
-                                                    console.error('Error parsing periods:', e);
-                                                }
-                                                return null;
-                                            })()}
-
-                                            {/* Total a pagar */}
-                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 1.5, borderTop: '2px solid rgba(0,0,0,0.12)' }}>
-                                                <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: '1.1rem' }}>💰 Total a pagar</Typography>
-                                                <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: '1.1rem', color: 'primary.main' }}>
-                                                    {formatQ(dialogTotalToPay || 0)}
-                                                </Typography>
-                                            </Box>
-                                        </Box>
-
-                                        {/* 🔄 INFO: Explicación del flujo de crédito cuando hay crédito a favor */}
-                                        {dialogCredito > 0 && (
-                                            <Box sx={{ mb: 2, p: 1.5, bgcolor: '#e3f2fd', borderRadius: 1.5, border: '1px solid #90caf9' }}>
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                                                    <Typography variant="caption" sx={{ fontWeight: 700, color: '#1565c0' }}>
-                                                        🔄 Flujo del crédito disponible
-                                                    </Typography>
-                                                </Box>
-                                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3 }}>
-                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                        <Box component="span" sx={{ px: 0.6, py: 0.2, bgcolor: '#e8f5e9', borderRadius: 0.5, fontWeight: 600, fontSize: '0.65rem', color: '#2e7d32', whiteSpace: 'nowrap' }}>
-                                                            ↗ Crédito disponible
-                                                        </Box>
-                                                        <Typography variant="caption" sx={{ fontWeight: 600, color: '#1565c0' }}>
-                                                            {formatQ(dialogCredito)}
-                                                        </Typography>
-                                                    </Box>
-                                                    <Typography variant="caption" color="text.secondary">
-                                                        Este crédito proviene de pagos anteriores donde el monto excedió la tarifa del mes.
-                                                        Se aplicará automáticamente a la tarifa del próximo período al generar la facturación mensual.
-                                                    </Typography>
-                                                    {dialogPendingBalance > 0 && (
-                                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.3 }}>
-                                                            {dialogCredito >= dialogPendingBalance
-                                                                ? `✅ El crédito cubre todo el saldo pendiente (${formatQ(dialogPendingBalance)}). No se requiere pago adicional para ponerse al día.`
-                                                                : `💡 El crédito (${formatQ(dialogCredito)}) se aplicará primero al saldo pendiente (${formatQ(dialogPendingBalance)}), reduciéndolo a ${formatQ(Math.max(0, dialogPendingBalance - dialogCredito))}.`
-                                                            }
-                                                        </Typography>
-                                                    )}
-                                                </Box>
-                                            </Box>
-                                        )}
-
-                                        <TextField
-                                            label="Monto pagado"
-                                            type="number"
-                                            fullWidth
-                                            value={registerAmount}
-                                            onChange={(e) => setRegisterAmount(e.target.value)}
-                                            disabled={uploadedReceiptsLoading || regHistLoading}
-                                            inputProps={{ min: 0, step: '0.01' }}
-                                            sx={{ mb: 2 }}
-                                        />
-                                        <TextField
-                                            label="Fecha del Pago"
-                                            type="date"
-                                            fullWidth
-                                            InputLabelProps={{ shrink: true }}
-                                            value={registerPaymentExtra.paymentDate}
-                                            onChange={(e) => setRegisterPaymentExtra(prev => ({ ...prev, paymentDate: e.target.value }))}
-                                            disabled={uploadedReceiptsLoading || regHistLoading}
-                                            sx={{ mb: 2 }}
-                                        />
-                                        <TextField
-                                            label="Número de Boleta"
-                                            fullWidth
-                                            value={registerPaymentExtra.numeroBoleta}
-                                            onChange={(e) => setRegisterPaymentExtra(prev => ({ ...prev, numeroBoleta: e.target.value }))}
-                                            disabled={uploadedReceiptsLoading || regHistLoading}
-                                            sx={{ mb: 2 }}
-                                        />
-                                        <TextField
-                                            label="Descuento Extraordinario (Q)"
-                                            type="number"
-                                            fullWidth
-                                            value={registerPaymentExtra.extraordinaryDiscount}
-                                            onChange={(e) => setRegisterPaymentExtra(prev => ({ ...prev, extraordinaryDiscount: e.target.value }))}
-                                            disabled={uploadedReceiptsLoading || regHistLoading}
-                                            error={extraDiscountError}
-                                            helperText={extraDiscountError ? `El descuento no puede exceder el saldo pendiente (${formatQ(effectivePendingBalance)})` : undefined}
-                                            sx={{ mb: 2 }}
-                                        />
-                                        {dialogGeneratedCredit > 0 && (
-                                            <Alert severity="info" sx={{ mb: 2 }}>
-                                                Se generará {formatQ(dialogGeneratedCredit || 0)} como crédito a favor.
-                                            </Alert>
-                                        )}
-                                        <FormControl fullWidth sx={{ mb: 0 }}>
-                                            <InputLabel>Número de Cuenta</InputLabel>
-                                            <Select
-                                                label="Número de Cuenta"
-                                                value={registerPaymentExtra.bankAccountNumber}
-                                                onChange={(e) => setRegisterPaymentExtra(prev => ({ ...prev, bankAccountNumber: e.target.value }))}
-                                                disabled={uploadedReceiptsLoading || regHistLoading}
-                                            >
-                                                    {(() => {
-                                                        const seen = new Set();
-                                                        const entries = [];
-                                                        try {
-                                                            const sources = [];
-                                                            if (Array.isArray(allSchools) && allSchools.length > 0) {
-                                                                sources.push(...allSchools);
-                                                            }
-                                                            if (registerPaymentTarget?.schoolId && !sources.find(s => s.id === registerPaymentTarget.schoolId)) {
-                                                                const found = allSchools.find(s => s.id === registerPaymentTarget.schoolId);
-                                                                if (found) {
-                                                                    sources.push(found);
-                                                                }
-                                                            }
-
-                                                            sources.forEach(sch => {
-                                                                const raw = sch?.bankAccount || '';
-                                                                if (!raw) {
-                                                                    return;
-                                                                }
-                                                                const parts = raw.split(/[|,;]+/).map(p => p.trim()).filter(Boolean);
-                                                                if (parts.length > 0) {
-                                                                    parts.forEach(p => {
-                                                                        const key = `${sch.id}::${p}`;
-                                                                        if (!seen.has(key)) { seen.add(key); entries.push({ key, value: p, label: `${sch.name} - ${p}` }); }
-                                                                    });
-                                                                } else {
-                                                                    const key = `${sch.id}::${raw}`;
-                                                                    if (!seen.has(key)) { seen.add(key); entries.push({ key, value: raw, label: `${sch.name} - ${raw}` }); }
-                                                                }
-                                                            });
-                                                        } catch (e) {
-                                                            // ignore
-                                                        }
-                                                        if (entries.length === 0) {
-                                                            return <MenuItem value="">(No configurado)</MenuItem>;
-                                                        }
-                                                        return entries.map(opt => <MenuItem key={opt.key} value={opt.value}>{opt.label}</MenuItem>);
-                                                    })()}
-                                            </Select>
-                                        </FormControl>
-                                        </Box>
-                                        )}
-
-                                {/* Tab Panel 1: Pago de Mora */}
-                                {paymentTab === 1 && (
-                                <Box>
-                                    <Typography variant="h6" sx={{ mb: 2, color: effectivePenaltyDue > 0 ? 'error.main' : 'success.main' }}>
-                                        {effectivePenaltyDue > 0 ? '💰 Pago de Mora Acumulada' : '✅ Sin Mora Pendiente'}
-                                    </Typography>
-                                    
-                                    {/* Información de la familia */}
-                                    <Box sx={{ mb: 3, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
-                                        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                                    {/* Tab Panel 0: Pago de Tarifa */}
+                                    {paymentTab === 0 && (
+                                    <Box sx={{ maxWidth: 420 }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+                                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                                             {registerPaymentTarget ? `Familia: ${registerPaymentTarget.User?.FamilyDetail?.familyLastName || ''}` : ''}
                                             {registerPaymentTarget && (
                                                 ` (${studentCount} ${studentCount === 1 ? 'estudiante' : 'estudiantes'})`
                                             )}
                                         </Typography>
+                                        {/* Show D/A chip when automatic debit is active on the payment or the family's record */}
+                                        { (registerPaymentTarget && (registerPaymentTarget.automaticDebit || registerPaymentTarget.User?.FamilyDetail?.automaticDebit)) && (
+                                            <Chip label="D/A" size="small" color="primary" sx={{ height: 22, fontSize: '0.75rem' }} />
+                                        ) }
+                                        {registerPaymentTarget?.autoDebit && (
+                                            <Chip label="D/A" size="small" color="primary" sx={{ height: 22, fontSize: '0.75rem' }} />
+                                        )}
+                                    </Box>
+                                    {/* Payment summary block: Desglose detallado del cálculo */}
+                                    <Box sx={{ mb: 2, p: 2, backgroundColor: '#fafafa', borderRadius: 1, border: '1px solid rgba(0,0,0,0.04)' }}>
+                                        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>📋 Desglose de Pago</Typography>
                                         
-                                        {/* Desglose de mora por período */}
-                                        <Box sx={{ mt: 2, p: 2, bgcolor: '#fff', borderRadius: 1, border: '1px solid rgba(211, 47, 47, 0.2)' }}>
-                                            <Typography variant="caption" sx={{ fontWeight: 600, color: 'error.main', display: 'block', mb: 1 }}>
-                                                MORA ACUMULADA {dialogPenaltyPeriods.length > 0 && `— ${dialogPenaltyPeriods.length} período${dialogPenaltyPeriods.length > 1 ? 's' : ''}`}
-                                            </Typography>
-                                            
-                                            {/* Desglose por período */}
-                                            {dialogPenaltyPeriods.length > 0 && dialogPenaltyPeriods.map((period, idx) => {
-                                                const periodDate = moment(period.period);
-                                                const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-                                                const label = `${monthNames[periodDate.month()]} ${periodDate.year()}`;
-                                                const isFrozen = !!period.penaltyFrozen;
-                                                const isCleared = !!period.penaltyCleared;
-
-                                                // Fecha inicio mora
-                                                const moraStart = period.penaltyStartDate ? moment(period.penaltyStartDate) : null;
-                                                // Fecha fin mora: si está congelada → penaltyFrozenAt; si acumulando → hoy
-                                                const moraEnd = isFrozen && period.penaltyFrozenAt
-                                                    ? moment(period.penaltyFrozenAt)
-                                                    : moment(payPenaltyDate || moment(currentDate).format('YYYY-MM-DD'));
-                                                // Días = fin - inicio + 1 (ambos extremos inclusivos)
-                                                const moraDays = moraStart ? Math.max(0, moraEnd.diff(moraStart, 'days') + 1) : 0;
-
-                                                // En modo retroactivo: reutilizar el cálculo ya hecho en retroactivePenaltyCalc
-                                                const retroItem = retroactivePenaltyCalc ? retroPenaltyByPeriod.get(period.period) : null;
-                                                const computedPenaltyForDisplay = retroItem
-                                                    ? Number(retroItem.penaltyAmount || 0)
-                                                    : Number(period.penaltyDue || 0);
-
-                                                return (
-                                                    <Box key={idx} sx={{ mb: 1, p: 1.5, borderLeft: '4px solid', borderColor: isFrozen ? '#1976d2' : isCleared ? '#4caf50' : '#d32f2f', bgcolor: isFrozen ? '#e3f2fd' : isCleared ? '#e8f5e9' : '#fce4ec', borderRadius: '0 4px 4px 0' }}>
-                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                            <Typography variant="caption" sx={{ fontWeight: 700 }}>
-                                                                {label} {isFrozen && '❄️'} {isCleared && '✅'}
-                                                            </Typography>
-                                                            <Typography variant="caption" sx={{ fontWeight: 700, color: isFrozen ? '#1976d2' : 'error.main' }}>
-                                                                {formatQ(computedPenaltyForDisplay || 0)}
-                                                            </Typography>
-                                                        </Box>
-                                                        {moraStart && (
-                                                            <Box sx={{ mt: 0.5, display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
-                                                                <Typography variant="caption" color="text.secondary">
-                                                                    📅 Inicio: <strong>{formatDate(moraStart)}</strong>
-                                                                </Typography>
-                                                                <Typography variant="caption" color="text.secondary">
-                                                                    {isFrozen ? '🔒 Fin:' : '📆 Hasta:'} <strong>{formatDate(moraEnd)}</strong>
-                                                                </Typography>
-                                                                <Typography variant="caption" sx={{ color: isFrozen ? '#1976d2' : 'error.main', fontWeight: 600 }}>
-                                                                    {moraDays} día{moraDays !== 1 ? 's' : ''}
-                                                                </Typography>
-                                                            </Box>
-                                                        )}
-                                                    </Box>
-                                                );
-                                            })}
-
-                                            {/* Indicador global de períodos congelados */}
-                                            {hasFrozenPeriods && (
-                                                <Box sx={{ mb: 1, p: 1, bgcolor: '#fff3cd', borderRadius: 1, border: '1px solid #ffc107' }}>
-                                                    <Typography variant="caption" sx={{ fontWeight: 600, color: '#856404' }}>
-                                                        ❄️ {dialogPenaltyPeriods.filter(p => p.penaltyFrozen).length} período(s) con mora congelada
-                                                    </Typography>
-                                                </Box>
-                                            )}
-                                            
-                                            {/* Mora acumulada */}
-                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
-                                                <Typography variant="body2" color="text.secondary">Mora acumulada:</Typography>
-                                                <Typography variant="body2" sx={{ color: 'error.main', fontWeight: 500 }}>
-                                                    {formatQ(effectivePenaltyDue || 0)}
+                                        {/* Sección: Cargos Base */}
+                                        {dialogPendingPeriods.length <= 1 && (
+                                            <Box sx={{ mb: 2, pb: 1.5, borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
+                                                <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main', display: 'block', mb: 1 }}>
+                                                    CARGOS BASE
                                                 </Typography>
+                                                
+                                                {/* Tarifa base por estudiante */}
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                                                    <Typography variant="body2" color="text.secondary">
+                                                        Tarifa base
+                                                        <Typography component="span" variant="caption" sx={{ ml: 0.5, color: 'text.disabled' }}>
+                                                            ({effectiveRouteType})
+                                                        </Typography>
+                                                    </Typography>
+                                                    <Typography variant="body2">{formatQ(effectiveBaseFee || 0)}</Typography>
+                                                </Box>
+                                                
+                                                {/* Tarifa mensual total (base × estudiantes) */}
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                                                    <Typography variant="body2" color="text.secondary">
+                                                        Tarifa mensual
+                                                        <Typography component="span" variant="caption" sx={{ ml: 0.5, color: 'text.disabled' }}>
+                                                                        ({cargosStudents} {cargosStudents === 1 ? 'estudiante' : 'estudiantes'})
+                                                                    </Typography>
+                                                    </Typography>
+                                                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{formatQ(effectiveMonthlyFee || 0)}</Typography>
+                                                </Box>
                                             </Box>
+                                        )}
 
-                                            {/* Exoneración (si hay monto en el campo) */}
-                                            {(() => {
-                                                const exonerateValue = isExonerating ? Number(exonerateAmount || 0) : Number(discountPenaltyAmount || 0);
-                                                if (exonerateValue > 0) {
+                                        {/* Sección: Descuentos y Créditos */}
+                                        {(() => {
+                                            // When there are multiple unpaid periods, the family discount can vary per period.
+                                            // Avoid showing a misleading single "Descuento familiar" line here.
+                                            const showFamilyLine = dialogFamilySpecialFee > 0 && !hasMultiplePendingPeriods;
+                                            const showBlock = dialogCredito > 0 || showFamilyLine || dialogExtraDiscount > 0;
+                                            if (!showBlock) {
+                                                return null;
+                                            }
+
+                                            return (
+                                            <Box sx={{ mb: 2, pb: 1.5, borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
+                                                <Typography variant="caption" sx={{ fontWeight: 600, color: 'success.main', display: 'block', mb: 1 }}>
+                                                    DESCUENTOS Y CRÉDITOS
+                                                </Typography>
+                                                
+                                                {dialogCredito > 0 && (
+                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary">
+                                                            <Box component="span" title="Crédito generado por pagos anteriores donde el monto excedió la tarifa del mes. Se aplica automáticamente." sx={{ borderBottom: '1px dashed #999', cursor: 'help' }}>
+                                                                Crédito a favor ↗
+                                                            </Box>
+                                                        </Typography>
+                                                        <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 500 }}>
+                                                            - {formatQ(dialogCredito || 0)}
+                                                        </Typography>
+                                                    </Box>
+                                                )}
+                                                
+                                                {showFamilyLine && (
+                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary">
+                                                            Descuento familiar
+                                                        </Typography>
+                                                        <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 500 }}>
+                                                            - {formatQ(dialogFamilySpecialFee || 0)}
+                                                        </Typography>
+                                                    </Box>
+                                                )}
+                                                
+                                                {dialogExtraDiscount > 0 && (
+                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary">Descuento extraordinario</Typography>
+                                                        <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 500 }}>
+                                                            - {formatQ(dialogExtraDiscount || 0)}
+                                                        </Typography>
+                                                    </Box>
+                                                )}
+                                            </Box>
+                                            );
+                                        })()}
+
+                                        {/* Desglose por períodos pendientes si hay varios meses */}
+                                        {(() => {
+                                            try {
+                                                const periods = dialogPendingPeriods;
+                                                
+                                                if (Array.isArray(periods) && periods.length > 1) {
+                                                    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+                                                    
                                                     return (
-                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                                                            <Typography variant="body2" color="text.secondary">
-                                                                {isExonerating ? 'Exoneración completa:' : 'Exoneración parcial:'}
-                                                            </Typography>
-                                                            <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 500 }}>
-                                                                - {formatQ(exonerateValue || 0)}
-                                                            </Typography>
+                                                        <Box sx={{ mb: 2, pb: 1.5, borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
+                                                            <Box sx={{ p: 1.5, bgcolor: '#fff3e0', borderRadius: 1, border: '1px solid #ff9800' }}>
+                                                                <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 1.5, color: '#e65100' }}>
+                                                                    ⚠️ Períodos pendientes ({periods.length} meses):
+                                                                </Typography>
+                                                                {periods.map((period, idx) => {
+                                                                    const periodDate = moment(period.period);
+                                                                    const monthName = monthNames[periodDate.month()];
+                                                                    const year = periodDate.year();
+                                                                    const dueDate = formatDateShort(period.dueDate);
+                                                                    
+                                                                    // Verificar si es pago parcial
+                                                                    const originalAmount = Number(period.originalAmount ?? dialogMonthlyFee ?? 0) || 0;
+                                                                    const periodDiscount = Number(period.discountApplied ?? 0) || 0;
+                                                                    const periodNetAmount = Number(period.netAmount ?? (originalAmount - periodDiscount)) || 0;
+                                                                    const periodAmountDue = Number(period.amountDue ?? period.amount ?? 0) || 0;
+
+                                                                    const periodRouteType = period.routeType || routeType;
+
+                                                                    // Tarifa base por estudiante para este período (preferir snapshot del período)
+                                                                    const periodStudents = Number(period?.studentsCount ?? registerPaymentTarget?.studentCount ?? studentCount) || 1;
+                                                                    const periodBaseFee = periodStudents > 0 ? (originalAmount / periodStudents) : originalAmount;
+
+                                                                    const isParcial = periodAmountDue < periodNetAmount && periodAmountDue > 0;
+                                                                    const amountPaid = isParcial
+                                                                        ? (periodNetAmount - periodAmountDue)
+                                                                        : (Number(period.amountPaid ?? 0) || 0);
+                                                                    
+                                                                    return (
+                                                                        <Box key={idx} sx={{ mb: idx < periods.length - 1 ? 2 : 0, pb: idx < periods.length - 1 ? 2 : 0, borderBottom: idx < periods.length - 1 ? '1px dashed rgba(0,0,0,0.15)' : 'none' }}>
+                                                                            <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5, color: 'text.primary' }}>
+                                                                                • {monthName} {year}
+                                                                                <Typography component="span" sx={{ fontSize: '0.65rem', ml: 0.5, color: 'text.disabled' }}>
+                                                                                    (Vence: {dueDate})
+                                                                                </Typography>
+                                                                                {isParcial && (
+                                                                                    <Typography component="span" sx={{ 
+                                                                                        fontSize: '0.65rem', 
+                                                                                        ml: 1, 
+                                                                                        px: 0.75, 
+                                                                                        py: 0.25,
+                                                                                        backgroundColor: '#fff3e0',
+                                                                                        color: '#e65100',
+                                                                                        borderRadius: '4px',
+                                                                                        fontWeight: 600
+                                                                                    }}>
+                                                                                        📝 PAGO PARCIAL
+                                                                                    </Typography>
+                                                                                )}
+                                                                            </Typography>
+
+                                                                            {/* Tarifa base */}
+                                                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5, ml: 2 }}>
+                                                                                <Typography variant="caption" color="text.secondary">
+                                                                                    Tarifa base
+                                                                                    <Typography component="span" variant="caption" sx={{ ml: 0.5, color: 'text.disabled' }}>
+                                                                                        ({periodRouteType})
+                                                                                    </Typography>
+                                                                                    :
+                                                                                </Typography>
+                                                                                <Typography variant="caption">
+                                                                                    {formatQ(periodBaseFee || 0)}
+                                                                                </Typography>
+                                                                            </Box>
+                                                                            
+                                                                            {/* Tarifa mensual */}
+                                                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5, ml: 2 }}>
+                                                                                <Typography variant="caption" color="text.secondary">
+                                                                                    Tarifa mensual ({periodStudents} {periodStudents === 1 ? 'estudiante' : 'estudiantes'}):
+                                                                                </Typography>
+                                                                                <Typography variant="caption">
+                                                                                    {formatQ(originalAmount || 0)}
+                                                                                </Typography>
+                                                                            </Box>
+                                                                            
+                                                                            {/* Descuento familiar aplicado a este período (puede variar por mes) */}
+                                                                            {periodDiscount > 0 && (
+                                                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.3, ml: 2 }}>
+                                                                                    <Typography variant="caption" color="text.secondary">
+                                                                                        Descuento familiar:
+                                                                                    </Typography>
+                                                                                    <Typography variant="caption" sx={{ color: 'success.main' }}>
+                                                                                        - {formatQ(periodDiscount || 0)}
+                                                                                    </Typography>
+                                                                                </Box>
+                                                                            )}
+                                                                            
+                                                                            {/* Mostrar desglose de pago parcial */}
+                                                                            {isParcial && (
+                                                                                <>
+                                                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.3, ml: 2 }}>
+                                                                                        <Typography variant="caption" sx={{ color: 'info.main', fontStyle: 'italic' }}>
+                                                                                            Ya pagado:
+                                                                                        </Typography>
+                                                                                        <Typography variant="caption" sx={{ color: 'info.main', fontWeight: 500 }}>
+                                                                                            {formatQ(amountPaid || 0)}
+                                                                                        </Typography>
+                                                                                    </Box>
+                                                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.3, ml: 2 }}>
+                                                                                        <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 500 }}>
+                                                                                            Saldo pendiente:
+                                                                                        </Typography>
+                                                                                        <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 600 }}>
+                                                                                            {formatQ(periodAmountDue || 0)}
+                                                                                        </Typography>
+                                                                                    </Box>
+                                                                                </>
+                                                                            )}
+                                                                            
+                                                                            {/* Subtotal del período */}
+                                                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5, ml: 2, pt: 0.5, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
+                                                                                <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                                                                                    {isParcial ? 'A pagar este período:' : 'Subtotal período:'}
+                                                                                </Typography>
+                                                                                <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main' }}>
+                                                                                    {formatQ(periodAmountDue || 0)}
+                                                                                </Typography>
+                                                                            </Box>
+                                                                        </Box>
+                                                                    );
+                                                                })}
+                                                            </Box>
                                                         </Box>
                                                     );
                                                 }
-                                                return null;
-                                            })()}
 
-                                            {/* Total a pagar (mora - exoneración) */}
-                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, pt: 1, borderTop: '1px solid rgba(0,0,0,0.1)' }}>
-                                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Total a pagar:</Typography>
-                                                <Typography variant="subtitle1" sx={{ fontWeight: 700, color: effectivePenaltyDue > 0 ? 'error.main' : 'success.main' }}>
-                                                    {(() => {
-                                                        const exonerateValue = isExonerating ? Number(exonerateAmount || 0) : Number(discountPenaltyAmount || 0);
-                                                        const total = Math.max(0, effectivePenaltyDue - exonerateValue);
-                                                        return formatQ(total || 0);
-                                                    })()}
-                                                </Typography>
-                                            </Box>
-                                            {dialogCredito > 0 && (
-                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                                                    <Typography variant="body2" sx={{ color: 'success.main' }}>
-                                                        <Box component="span" title="Crédito acumulado de pagos anteriores. Puede usarse para cubrir la mora." sx={{ borderBottom: '1px dashed #999', cursor: 'help' }}>
-                                                            Crédito disponible ↗
-                                                        </Box>
-                                                    </Typography>
-                                                    <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 600 }}>{formatQ(dialogCredito)}</Typography>
-                                                </Box>
-                                            )}
+                                                // Caso: solo 1 período pendiente
+                                                // UX: cuando hay 1 solo período pendiente, se muestra únicamente "CARGOS BASE" arriba.
+                                                if (Array.isArray(periods) && periods.length === 1) {
+                                                    return null;
+                                                }
+                                            } catch (e) {
+                                                console.error('Error parsing periods:', e);
+                                            }
+                                            return null;
+                                        })()}
+
+                                        {/* Total a pagar */}
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 1.5, borderTop: '2px solid rgba(0,0,0,0.12)' }}>
+                                            <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: '1.1rem' }}>💰 Total a pagar</Typography>
+                                            <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: '1.1rem', color: 'primary.main' }}>
+                                                {formatQ(dialogTotalToPay || 0)}
+                                            </Typography>
                                         </Box>
                                     </Box>
 
-                                    {/* Toggle: Usar crédito disponible */}
-                                    {effectivePenaltyDue > 0 && dialogCredito > 0 && !isExonerating && hasPermission('pagos-v2-usar-credito') && (
-                                        <Box sx={{ mb: 2, display: 'flex', gap: 1 }}>
-                                            <Button
-                                                size="small"
-                                                variant={!payPenaltyUseCredit ? 'contained' : 'outlined'}
-                                                onClick={() => {
-                                                    setPayPenaltyUseCredit(false);
-                                                    setPayPenaltyAmount('');
-                                                    setPayPenaltyBoletaAmount('');
-                                                }}
-                                                fullWidth
-                                            >
-                                                Pago con boleta
-                                            </Button>
-                                            <Button
-                                                size="small"
-                                                variant={payPenaltyUseCredit ? 'contained' : 'outlined'}
-                                                color="success"
-                                                onClick={() => {
-                                                    const creditToApply = Math.min(dialogCredito, effectivePenaltyDue);
-                                                    const remainder = Math.max(0, Math.round((effectivePenaltyDue - creditToApply) * 100) / 100);
-                                                    setPayPenaltyUseCredit(true);
-                                                    setPayPenaltyAmount(creditToApply.toFixed(2));
-                                                    setPayPenaltyBoletaAmount(remainder.toFixed(2));
-                                                }}
-                                                fullWidth
-                                            >
-                                                Usar crédito ({formatQ(Math.min(dialogCredito, effectivePenaltyDue))})
-                                            </Button>
-                                        </Box>
-                                    )}
-
-                                    {/* Toggle de Exoneración Completa */}
-                                    {effectivePenaltyDue > 0 && (
-                                        <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 1.5, bgcolor: '#f5f5f5', borderRadius: 1 }}>
-                                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                                ✅ Exoneración Completa
-                                            </Typography>
-                                            <Switch 
-                                                checked={isExonerating}
-                                                onChange={(e) => {
-                                                    setIsExonerating(e.target.checked);
-                                                    if (e.target.checked) {
-                                                        setPayPenaltyUseCredit(false);
-                                                        setPayPenaltyAmount('0');
-                                                        setPayPenaltyBoleta('004');
-                                                        setDiscountPenaltyAmount(effectivePenaltyDue.toString());
-                                                        setExonerateAmount(effectivePenaltyDue.toString());
-                                                    } else {
-                                                        setPayPenaltyAmount('');
-                                                        setPayPenaltyBoleta('');
-                                                        setDiscountPenaltyAmount('');
-                                                        setExonerateAmount('');
-                                                    }
-                                                }}
-                                                color="success"
-                                            />
-                                        </Box>
-                                    )}
-
-                                    {/* Formulario de pago de mora (siempre visible, pero algunos campos bloqueados cuando está exonerando) */}
-                                    <TextField
-                                        label={payPenaltyUseCredit ? 'Crédito a aplicar (Q)' : 'Monto a Pagar'}
-                                        type="number"
-                                        fullWidth
-                                        value={payPenaltyAmount}
-                                        onChange={(e) => {
-                                            setPayPenaltyAmount(e.target.value);
-                                            if (payPenaltyUseCredit) {
-                                                const newCredit = Number(e.target.value || 0);
-                                                const newRem = Math.max(0, Math.round((effectivePenaltyDue - newCredit) * 100) / 100);
-                                                setPayPenaltyBoletaAmount(newRem.toFixed(2));
-                                            }
-                                        }}
-                                        inputProps={{ min: 0, step: '0.01', max: payPenaltyUseCredit ? dialogCredito : effectivePenaltyDue }}
-                                        sx={{ mb: 2 }}
-                                        disabled={effectivePenaltyDue === 0 || isExonerating}
-                                        helperText={isExonerating ? 'Exoneración completa: No se realizará pago' : payPenaltyUseCredit ? `Máximo del crédito: ${formatQ(dialogCredito)}` : ''}
-                                    />
-                                    {payPenaltyUseCredit && (() => {
-                                        const cashRem = Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100);
-                                        return cashRem > 0 ? (
-                                            <Box sx={{ mb: 2, p: 1.5, bgcolor: '#fff3e0', borderRadius: 1, border: '1px solid #ffb74d' }}>
-                                                <Typography variant="body2" sx={{ color: 'warning.dark' }}>
-                                                    ⚠️ El crédito no cubre toda la mora. <strong>Restante a pagar con boleta: {formatQ(cashRem)}</strong>
+                                    {/* 🔄 INFO: Explicación del flujo de crédito cuando hay crédito a favor */}
+                                    {dialogCredito > 0 && (
+                                        <Box sx={{ mb: 2, p: 1.5, bgcolor: '#e3f2fd', borderRadius: 1.5, border: '1px solid #90caf9' }}>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                                                <Typography variant="caption" sx={{ fontWeight: 700, color: '#1565c0' }}>
+                                                    🔄 Flujo del crédito disponible
                                                 </Typography>
                                             </Box>
-                                        ) : (
-                                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
-                                                ℹ️ El crédito cubre toda la mora. No se requiere boleta.
-                                            </Typography>
-                                        );
-                                    })()}
-                                    {(!payPenaltyUseCredit || Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0) && (
-                                        <>
-                                            {payPenaltyUseCredit && (
-                                                <Typography variant="caption" sx={{ fontWeight: 700, color: 'warning.dark', display: 'block', mb: 1, mt: 0.5, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                                    📋 Datos del pago restante
-                                                </Typography>
-                                            )}
-                                            {payPenaltyUseCredit && (
-                                                <TextField
-                                                    label="Monto a pagar con boleta (Q)"
-                                                    type="number"
-                                                    fullWidth
-                                                    value={payPenaltyBoletaAmount}
-                                                    onChange={(e) => setPayPenaltyBoletaAmount(e.target.value)}
-                                                    inputProps={{ min: 0, step: '0.01' }}
-                                                    sx={{ mb: 2 }}
-                                                    required
-                                                    error={!payPenaltyBoletaAmount || Number(payPenaltyBoletaAmount) <= 0}
-                                                    helperText={!payPenaltyBoletaAmount || Number(payPenaltyBoletaAmount) <= 0 ? 'Ingrese el monto a pagar con boleta' : ''}
-                                                />
-                                            )}
-                                            <TextField
-                                                label={payPenaltyUseCredit ? `Fecha de pago del restante` : 'Fecha del Pago'}
-                                                type="date"
-                                                fullWidth
-                                                InputLabelProps={{ shrink: true }}
-                                                value={payPenaltyDate}
-                                                onChange={(e) => setPayPenaltyDate(e.target.value)}
-                                                sx={{ mb: 2 }}
-                                            />
-                                        </>
-                                    )}
-                                    
-                                    {/* Alert retroactivo por período */}
-                                    {retroactivePenaltyCalc?.periods?.some(p => p.daysLate > 0) && (
-                                        <Box sx={{ mb: 2, p: 2, bgcolor: '#fff3e0', borderRadius: 1, border: '1px solid #ff9800' }}>
-                                            <Typography variant="caption" sx={{ fontWeight: 700, color: '#e65100', display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
-                                                ⏰ PAGO RETROACTIVO DETECTADO
-                                            </Typography>
-                                            <Typography variant="body2" sx={{ mb: 1 }}>
-                                                <strong>Fecha de pago:</strong> {retroactivePenaltyCalc.paymentDate}
-                                            </Typography>
-
-                                            {/* Desglose por período */}
-                                            {retroactivePenaltyCalc.periods.filter(p => p.daysLate > 0 || p.frozen).map((p, idx) => {
-                                                const periodDate = moment(p.period);
-                                                const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-                                                const label = `${monthNames[periodDate.month()]} ${periodDate.year()}`;
-                                                return (
-                                                    <Box key={idx} sx={{ ml: 1, mb: 0.5, pl: 1, borderLeft: '3px solid', borderColor: p.frozen ? '#1976d2' : '#ff9800' }}>
-                                                        <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                                                            {label} {p.frozen && '❄️'}
-                                                        </Typography>
-                                                        {p.frozen ? (
-                                                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                                                Mora congelada: {formatQ(p.penaltyAmount || 0)}
-                                                            </Typography>
-                                                        ) : (
-                                                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                                                {p.daysLate} días × {formatQ(retroactivePenaltyCalc.dailyPenalty)} × {Number(p.studentCount || retroactivePenaltyCalc.studentCount || 1)} est. = {formatQ(p.penaltyAmount || 0)}
-                                                            </Typography>
-                                                        )}
+                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3 }}>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                    <Box component="span" sx={{ px: 0.6, py: 0.2, bgcolor: '#e8f5e9', borderRadius: 0.5, fontWeight: 600, fontSize: '0.65rem', color: '#2e7d32', whiteSpace: 'nowrap' }}>
+                                                        ↗ Crédito disponible
                                                     </Box>
-                                                );
-                                            })}
-
-                                            {/* Total retroactivo */}
-                                            <Box sx={{ mt: 1.5, p: 1.5, bgcolor: '#fff', borderRadius: 1, border: '2px solid #ff9800' }}>
-                                                <Typography variant="body1" sx={{ fontWeight: 700, color: '#e65100' }}>
-                                                    💰 Mora hasta {formatDate(payPenaltyDate)}: <span style={{ fontSize: '1.2em' }}>{formatQ(retroactivePenaltyCalc.penaltyUntilPaymentDate || 0)}</span>
+                                                    <Typography variant="caption" sx={{ fontWeight: 600, color: '#1565c0' }}>
+                                                        {formatQ(dialogCredito)}
+                                                    </Typography>
+                                                </Box>
+                                                <Typography variant="caption" color="text.secondary">
+                                                    Este crédito proviene de pagos anteriores donde el monto excedió la tarifa del mes.
+                                                    Se aplicará automáticamente a la tarifa del próximo período al generar la facturación mensual.
                                                 </Typography>
+                                                {dialogPendingBalance > 0 && (
+                                                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.3 }}>
+                                                        {dialogCredito >= dialogPendingBalance
+                                                            ? `✅ El crédito cubre todo el saldo pendiente (${formatQ(dialogPendingBalance)}). No se requiere pago adicional para ponerse al día.`
+                                                            : `💡 El crédito (${formatQ(dialogCredito)}) se aplicará primero al saldo pendiente (${formatQ(dialogPendingBalance)}), reduciéndolo a ${formatQ(Math.max(0, dialogPendingBalance - dialogCredito))}.`
+                                                        }
+                                                    </Typography>
+                                                )}
                                             </Box>
-
-                                            {/* Aplicación del pago */}
-                                            {(() => {
-                                                const paymentAmount = Number(payPenaltyAmount || 0);
-                                                const exonerationAmount = isExonerating ? Number(exonerateAmount || 0) : Number(discountPenaltyAmount || 0);
-                                                const totalReduction = paymentAmount + exonerationAmount;
-                                                if (totalReduction > 0) {
-                                                    const willCoverFull = totalReduction >= retroactivePenaltyCalc.penaltyUntilPaymentDate;
-                                                    return (
-                                                        <Box sx={{ mt: 1.5, p: 1.5, bgcolor: willCoverFull ? '#e8f5e9' : '#fff3e0', borderRadius: 1, border: willCoverFull ? '2px solid #4caf50' : '1px solid #ff9800' }}>
-                                                            <Typography variant="body2" sx={{ fontWeight: 600, color: willCoverFull ? '#2e7d32' : '#e65100', mb: 0.5 }}>
-                                                                📊 Aplicación del Pago Retroactivo:
-                                                            </Typography>
-                                                            {paymentAmount > 0 && <Typography variant="body2">• Pago: {formatQ(paymentAmount || 0)}</Typography>}
-                                                            {exonerationAmount > 0 && <Typography variant="body2">• Exoneración: {formatQ(exonerationAmount || 0)}</Typography>}
-                                                            <Typography variant="body2" sx={{ fontWeight: 700, color: willCoverFull ? '#2e7d32' : '#e65100', mt: 1 }}>
-                                                                {willCoverFull ? <>✅ Cubre toda la mora hasta {formatDate(payPenaltyDate)}</> : <>⚠️ Pago parcial: resta {formatQ((retroactivePenaltyCalc.penaltyUntilPaymentDate - totalReduction) || 0)}</>}
-                                                            </Typography>
-                                                        </Box>
-                                                    );
-                                                }
-                                                return null;
-                                            })()}
                                         </Box>
                                     )}
-                                    
-                                    {(!payPenaltyUseCredit || Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0) && (
-                                        <TextField
-                                            label="Número de Boleta"
-                                            fullWidth
-                                            value={payPenaltyBoleta}
-                                            onChange={(e) => setPayPenaltyBoleta(e.target.value)}
-                                            sx={{ mb: 2 }}
-                                            disabled={isExonerating}
-                                            required={payPenaltyUseCredit && !isExonerating}
-                                            error={payPenaltyUseCredit && !isExonerating && !payPenaltyBoleta && Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0}
-                                            helperText={
-                                                isExonerating
-                                                    ? '004 - Exoneración completa'
-                                                    : payPenaltyUseCredit && !payPenaltyBoleta && Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0
-                                                        ? 'Ingrese el número de boleta para registrar el pago del restante'
-                                                        : ''
-                                            }
-                                        />
+
+                                    <MoneyField
+                                        label="Monto pagado"
+                                        fullWidth
+                                        value={registerAmount}
+                                        onChange={(e) => setRegisterAmount(e.target.value)}
+                                        disabled={uploadedReceiptsLoading || regHistLoading}
+                                        inputProps={{ min: 0, step: '0.01' }}
+                                        sx={{ mb: 2 }}
+                                    />
+                                    <TextField
+                                        label="Fecha del Pago"
+                                        type="date"
+                                        fullWidth
+                                        InputLabelProps={{ shrink: true }}
+                                        value={registerPaymentExtra.paymentDate}
+                                        onChange={(e) => setRegisterPaymentExtra(prev => ({ ...prev, paymentDate: e.target.value }))}
+                                        disabled={uploadedReceiptsLoading || regHistLoading}
+                                        sx={{ mb: 2 }}
+                                    />
+                                    <TextField
+                                        label="Número de Boleta"
+                                        fullWidth
+                                        value={registerPaymentExtra.numeroBoleta}
+                                        onChange={(e) => setRegisterPaymentExtra(prev => ({ ...prev, numeroBoleta: e.target.value }))}
+                                        disabled={uploadedReceiptsLoading || regHistLoading}
+                                        sx={{ mb: 2 }}
+                                    />
+                                    <MoneyField
+                                        label="Descuento extraordinario"
+                                        fullWidth
+                                        value={registerPaymentExtra.extraordinaryDiscount}
+                                        onChange={(e) => setRegisterPaymentExtra(prev => ({ ...prev, extraordinaryDiscount: e.target.value }))}
+                                        disabled={uploadedReceiptsLoading || regHistLoading}
+                                        error={extraDiscountError}
+                                        helperText={extraDiscountError ? `El descuento no puede exceder el saldo pendiente (${formatQ(effectivePendingBalance)})` : undefined}
+                                        sx={{ mb: 2 }}
+                                    />
+                                    {dialogGeneratedCredit > 0 && (
+                                        <Alert severity="info" sx={{ mb: 2 }}>
+                                            Se generará {formatQ(dialogGeneratedCredit || 0)} como crédito a favor.
+                                        </Alert>
                                     )}
-                                    {!payPenaltyUseCredit && (
-                                        <TextField
-                                            label="Exonerar Mora (Q)"
-                                            type="number"
-                                            fullWidth
-                                            value={discountPenaltyAmount}
-                                            onChange={(e) => setDiscountPenaltyAmount(e.target.value)}
-                                            inputProps={{ min: 0, step: '0.01', max: effectivePenaltyDue }}
-                                            sx={{ mb: 2 }}
-                                            disabled={effectivePenaltyDue === 0 || isExonerating}
-                                            helperText={isExonerating ? 'Exoneración del monto completo de la mora' : ''}
-                                        />
-                                    )}
-                                    {(!payPenaltyUseCredit || Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0) && (
-                                    <FormControl fullWidth sx={{ mb: 2 }}>
+                                    <FormControl fullWidth sx={{ mb: 0 }}>
                                         <InputLabel>Número de Cuenta</InputLabel>
                                         <Select
                                             label="Número de Cuenta"
-                                            value={payPenaltyAccount}
-                                            onChange={(e) => setPayPenaltyAccount(e.target.value)}
+                                            value={registerPaymentExtra.bankAccountNumber}
+                                            onChange={(e) => setRegisterPaymentExtra(prev => ({ ...prev, bankAccountNumber: e.target.value }))}
+                                            disabled={uploadedReceiptsLoading || regHistLoading}
                                         >
-                                            {(() => {
-                                                const seen = new Set();
-                                                const entries = [];
-                                                try {
-                                                    const sources = [];
-                                                    if (Array.isArray(allSchools) && allSchools.length > 0) {
-                                                        sources.push(...allSchools);
-                                                    }
-                                                    if (registerPaymentTarget?.schoolId && !sources.find(s => s.id === registerPaymentTarget.schoolId)) {
-                                                        const found = allSchools.find(s => s.id === registerPaymentTarget.schoolId);
-                                                        if (found) {
-                                                            sources.push(found);
+                                                {(() => {
+                                                    const seen = new Set();
+                                                    const entries = [];
+                                                    try {
+                                                        const sources = [];
+                                                        if (Array.isArray(allSchools) && allSchools.length > 0) {
+                                                            sources.push(...allSchools);
                                                         }
-                                                    }
+                                                        if (registerPaymentTarget?.schoolId && !sources.find(s => s.id === registerPaymentTarget.schoolId)) {
+                                                            const found = allSchools.find(s => s.id === registerPaymentTarget.schoolId);
+                                                            if (found) {
+                                                                sources.push(found);
+                                                            }
+                                                        }
 
-                                                    sources.forEach(sch => {
-                                                        const raw = sch?.bankAccount || '';
-                                                        if (!raw) {
-                                                            return;
-                                                        }
-                                                        const parts = raw.split(/[|,;]+/).map(p => p.trim()).filter(Boolean);
-                                                        if (parts.length > 0) {
-                                                            parts.forEach(p => {
-                                                                const key = `${sch.id}::${p}`;
-                                                                if (!seen.has(key)) { seen.add(key); entries.push({ key, value: p, label: `${sch.name} - ${p}` }); }
-                                                            });
-                                                        } else {
-                                                            const key = `${sch.id}::${raw}`;
-                                                            if (!seen.has(key)) { seen.add(key); entries.push({ key, value: raw, label: `${sch.name} - ${raw}` }); }
-                                                        }
-                                                    });
-                                                } catch (e) {
-                                                    // ignore
-                                                }
-                                                if (entries.length === 0) {
-                                                    return <MenuItem value="">(No configurado)</MenuItem>;
-                                                }
+                                                        sources.forEach(sch => {
+                                                            const raw = sch?.bankAccount || '';
+                                                            if (!raw) {
+                                                                return;
+                                                            }
+                                                            const parts = raw.split(/[|,;]+/).map(p => p.trim()).filter(Boolean);
+                                                            if (parts.length > 0) {
+                                                                parts.forEach(p => {
+                                                                    const key = `${sch.id}::${p}`;
+                                                                    if (!seen.has(key)) { seen.add(key); entries.push({ key, value: p, label: `${sch.name} - ${p}` }); }
+                                                                });
+                                                            } else {
+                                                                const key = `${sch.id}::${raw}`;
+                                                                if (!seen.has(key)) { seen.add(key); entries.push({ key, value: raw, label: `${sch.name} - ${raw}` }); }
+                                                            }
+                                                        });
+                                                    } catch (e) {
+                                                        // ignore
+                                                    }
+                                                    if (entries.length === 0) {
+                                                        return <MenuItem value="">(No configurado)</MenuItem>;
+                                                    }
                                                     return entries.map(opt => <MenuItem key={opt.key} value={opt.value}>{opt.label}</MenuItem>);
                                                 })()}
                                         </Select>
                                     </FormControl>
+                                    </Box>
                                     )}
 
-                                    {effectivePenaltyDue > 0 ? (
-                                        <Box sx={{ mt: 2, p: 2, bgcolor: '#fff3cd', borderRadius: 1, border: '1px solid #ffc107' }}>
-                                            <Typography variant="caption" color="text.secondary">
-                                                💡 <strong>Nota:</strong> Este pago se aplicará exclusivamente a la mora acumulada. 
-                                                El saldo de tarifa permanecerá sin cambios.
-                                            </Typography>
-                                        </Box>
-                                    ) : (
-                                        <Box sx={{ mt: 2, p: 2, bgcolor: '#d4edda', borderRadius: 1, border: '1px solid #c3e6cb' }}>
-                                            <Typography variant="caption" sx={{ color: '#155724' }}>
-                                                ✅ <strong>Esta familia no tiene mora pendiente.</strong>
-                                            </Typography>
-                                        </Box>
-                                    )}
-                                </Box>
-                                )}
+                            {/* Tab Panel 1: Pago de Mora */}
+                            {paymentTab === 1 && (
+                            <Box>
+                                <Typography variant="h6" sx={{ mb: 2, color: effectivePenaltyDue > 0 ? 'error.main' : 'success.main' }}>
+                                    {effectivePenaltyDue > 0 ? '💰 Pago de Mora Acumulada' : '✅ Sin Mora Pendiente'}
+                                </Typography>
+                                
+                                {/* Información de la familia */}
+                                <Box sx={{ mb: 3, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                                    <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                                        {registerPaymentTarget ? `Familia: ${registerPaymentTarget.User?.FamilyDetail?.familyLastName || ''}` : ''}
+                                        {registerPaymentTarget && (
+                                            ` (${studentCount} ${studentCount === 1 ? 'estudiante' : 'estudiantes'})`
+                                        )}
+                                    </Typography>
+                                    
+                                    {/* Desglose de mora por período */}
+                                    <Box sx={{ mt: 2, p: 2, bgcolor: '#fff', borderRadius: 1, border: '1px solid rgba(211, 47, 47, 0.2)' }}>
+                                        <Typography variant="caption" sx={{ fontWeight: 600, color: 'error.main', display: 'block', mb: 1 }}>
+                                            MORA ACUMULADA {dialogPenaltyPeriods.length > 0 && `— ${dialogPenaltyPeriods.length} período${dialogPenaltyPeriods.length > 1 ? 's' : ''}`}
+                                        </Typography>
+                                        
+                                        {/* Desglose por período */}
+                                        {dialogPenaltyPeriods.length > 0 && dialogPenaltyPeriods.map((period, idx) => {
+                                            const periodDate = moment(period.period);
+                                            const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+                                            const label = `${monthNames[periodDate.month()]} ${periodDate.year()}`;
+                                            const isFrozen = !!period.penaltyFrozen;
+                                            const isCleared = !!period.penaltyCleared;
 
-                                {/* Tab Panel 2: Inscripción */}
-                                {paymentTab === 2 && (
-                                <Box>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                                        <Typography variant="h6">🎓 Inscripción de Ciclo</Typography>
-                                        {enrollmentPayment && (
-                                            <StatusChip domain={ENROLLMENT_PAYMENT_STATUS} value={enrollmentPayment.status} />
+                                            // Fecha inicio mora
+                                            const moraStart = period.penaltyStartDate ? moment(period.penaltyStartDate) : null;
+                                            // Fecha fin mora: si está congelada → penaltyFrozenAt; si acumulando → hoy
+                                            const moraEnd = isFrozen && period.penaltyFrozenAt
+                                                ? moment(period.penaltyFrozenAt)
+                                                : moment(payPenaltyDate || moment(currentDate).format('YYYY-MM-DD'));
+                                            // Días = fin - inicio + 1 (ambos extremos inclusivos)
+                                            const moraDays = moraStart ? Math.max(0, moraEnd.diff(moraStart, 'days') + 1) : 0;
+
+                                            // En modo retroactivo: reutilizar el cálculo ya hecho en retroactivePenaltyCalc
+                                            const retroItem = retroactivePenaltyCalc ? retroPenaltyByPeriod.get(period.period) : null;
+                                            const computedPenaltyForDisplay = retroItem
+                                                ? Number(retroItem.penaltyAmount || 0)
+                                                : Number(period.penaltyDue || 0);
+
+                                            return (
+                                                <Box key={idx} sx={{ mb: 1, p: 1.5, borderLeft: '4px solid', borderColor: isFrozen ? '#1976d2' : isCleared ? '#4caf50' : '#d32f2f', bgcolor: isFrozen ? '#e3f2fd' : isCleared ? '#e8f5e9' : '#fce4ec', borderRadius: '0 4px 4px 0' }}>
+                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                                                            {label} {isFrozen && '❄️'} {isCleared && '✅'}
+                                                        </Typography>
+                                                        <Typography variant="caption" sx={{ fontWeight: 700, color: isFrozen ? '#1976d2' : 'error.main' }}>
+                                                            {formatQ(computedPenaltyForDisplay || 0)}
+                                                        </Typography>
+                                                    </Box>
+                                                    {moraStart && (
+                                                        <Box sx={{ mt: 0.5, display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
+                                                            <Typography variant="caption" color="text.secondary">
+                                                                📅 Inicio: <strong>{formatDate(moraStart)}</strong>
+                                                            </Typography>
+                                                            <Typography variant="caption" color="text.secondary">
+                                                                {isFrozen ? '🔒 Fin:' : '📆 Hasta:'} <strong>{formatDate(moraEnd)}</strong>
+                                                            </Typography>
+                                                            <Typography variant="caption" sx={{ color: isFrozen ? '#1976d2' : 'error.main', fontWeight: 600 }}>
+                                                                {moraDays} día{moraDays !== 1 ? 's' : ''}
+                                                            </Typography>
+                                                        </Box>
+                                                    )}
+                                                </Box>
+                                            );
+                                        })}
+
+                                        {/* Indicador global de períodos congelados */}
+                                        {hasFrozenPeriods && (
+                                            <Box sx={{ mb: 1, p: 1, bgcolor: '#fff3cd', borderRadius: 1, border: '1px solid #ffc107' }}>
+                                                <Typography variant="caption" sx={{ fontWeight: 600, color: '#856404' }}>
+                                                    ❄️ {dialogPenaltyPeriods.filter(p => p.penaltyFrozen).length} período(s) con mora congelada
+                                                </Typography>
+                                            </Box>
+                                        )}
+                                        
+                                        {/* Mora acumulada */}
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+                                            <Typography variant="body2" color="text.secondary">Mora acumulada:</Typography>
+                                            <Typography variant="body2" sx={{ color: 'error.main', fontWeight: 500 }}>
+                                                {formatQ(effectivePenaltyDue || 0)}
+                                            </Typography>
+                                        </Box>
+
+                                        {/* Exoneración (si hay monto en el campo) */}
+                                        {(() => {
+                                            const exonerateValue = isExonerating ? Number(exonerateAmount || 0) : Number(discountPenaltyAmount || 0);
+                                            if (exonerateValue > 0) {
+                                                return (
+                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                                                        <Typography variant="body2" color="text.secondary">
+                                                            {isExonerating ? 'Exoneración completa:' : 'Exoneración parcial:'}
+                                                        </Typography>
+                                                        <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 500 }}>
+                                                            - {formatQ(exonerateValue || 0)}
+                                                        </Typography>
+                                                    </Box>
+                                                );
+                                            }
+                                            return null;
+                                        })()}
+
+                                        {/* Total a pagar (mora - exoneración) */}
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, pt: 1, borderTop: '1px solid rgba(0,0,0,0.1)' }}>
+                                            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Total a pagar:</Typography>
+                                            <Typography variant="subtitle1" sx={{ fontWeight: 700, color: effectivePenaltyDue > 0 ? 'error.main' : 'success.main' }}>
+                                                {(() => {
+                                                    const exonerateValue = isExonerating ? Number(exonerateAmount || 0) : Number(discountPenaltyAmount || 0);
+                                                    const total = Math.max(0, effectivePenaltyDue - exonerateValue);
+                                                    return formatQ(total || 0);
+                                                })()}
+                                            </Typography>
+                                        </Box>
+                                        {dialogCredito > 0 && (
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                                                <Typography variant="body2" sx={{ color: 'success.main' }}>
+                                                    <Box component="span" title="Crédito acumulado de pagos anteriores. Puede usarse para cubrir la mora." sx={{ borderBottom: '1px dashed #999', cursor: 'help' }}>
+                                                        Crédito disponible ↗
+                                                    </Box>
+                                                </Typography>
+                                                <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 600 }}>{formatQ(dialogCredito)}</Typography>
+                                            </Box>
                                         )}
                                     </Box>
-
-                                    {!enrollmentPayment && (
-                                        <Box sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
-                                            <Typography variant="body2" color="text.secondary">
-                                                Esta familia no tiene cargo de inscripción para este ciclo (el colegio no tiene monto de inscripción configurado, o aún no se ha generado).
-                                            </Typography>
-                                        </Box>
-                                    )}
-
-                                    {enrollmentPayment && (
-                                        <>
-                                            <Box sx={{ mb: 2, p: 2, bgcolor: '#fafafa', borderRadius: 1, border: '1px solid rgba(0,0,0,0.04)' }}>
-                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                                    <Typography variant="body2" color="text.secondary">Monto original ({enrollmentPayment.studentsCount} est.)</Typography>
-                                                    <Typography variant="body2">{formatQ(enrollmentPayment.originalAmount || 0)}</Typography>
-                                                </Box>
-                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                                    <Typography variant="body2" color="text.secondary">Descuento aplicado</Typography>
-                                                    <Typography variant="body2">{formatQ(enrollmentPayment.discountApplied || 0)}</Typography>
-                                                </Box>
-                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                                    <Typography variant="body2" color="text.secondary">Monto neto</Typography>
-                                                    <Typography variant="body2">{formatQ(enrollmentPayment.netAmount || 0)}</Typography>
-                                                </Box>
-                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                                    <Typography variant="body2" color="text.secondary">Pagado</Typography>
-                                                    <Typography variant="body2">{formatQ(enrollmentPayment.amountPaid || 0)}</Typography>
-                                                </Box>
-                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.5, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
-                                                    <Typography variant="body2" sx={{ fontWeight: 700 }}>Saldo pendiente</Typography>
-                                                    <Typography variant="body2" sx={{ fontWeight: 700 }}>{formatQ(enrollmentPayment.amountDue || 0)}</Typography>
-                                                </Box>
-                                                {enrollmentPayment.manualAdjustmentAmount > 0 && (
-                                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                                                        Ajuste manual acumulado: {formatQ(enrollmentPayment.manualAdjustmentAmount || 0)}
-                                                        {enrollmentPayment.manualAdjustmentReason ? ` — ${enrollmentPayment.manualAdjustmentReason}` : ''}
-                                                    </Typography>
-                                                )}
-                                            </Box>
-
-                                            {enrollmentPayment.amountDue > 0 && (
-                                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                                    <TextField
-                                                        label="Monto pagado (Q)"
-                                                        type="number"
-                                                        value={payEnrollmentAmount}
-                                                        onChange={(e) => setPayEnrollmentAmount(e.target.value)}
-                                                        inputProps={{ min: '0', step: '0.01' }}
-                                                    />
-                                                    <TextField
-                                                        label={`Descuento extraordinario / exoneración (Q, opcional, máx. ${formatQ(enrollmentPayment.amountDue)})`}
-                                                        type="number"
-                                                        value={payEnrollmentDiscount}
-                                                        onChange={(e) => setPayEnrollmentDiscount(e.target.value)}
-                                                        inputProps={{ min: '0', step: '0.01', max: enrollmentPayment.amountDue }}
-                                                    />
-                                                    <TextField
-                                                        label="Fecha real de pago"
-                                                        type="date"
-                                                        value={payEnrollmentDate}
-                                                        onChange={(e) => setPayEnrollmentDate(e.target.value)}
-                                                        InputLabelProps={{ shrink: true }}
-                                                    />
-                                                    <TextField
-                                                        label="Número de boleta (opcional)"
-                                                        value={payEnrollmentReceiptNumber}
-                                                        onChange={(e) => setPayEnrollmentReceiptNumber(e.target.value)}
-                                                    />
-                                                    <TextField
-                                                        label="Notas / motivo del descuento (opcional)"
-                                                        multiline
-                                                        minRows={2}
-                                                        value={payEnrollmentNotes}
-                                                        onChange={(e) => setPayEnrollmentNotes(e.target.value)}
-                                                    />
-                                                </Box>
-                                            )}
-                                        </>
-                                    )}
                                 </Box>
-                                )}
-                                    </Grid>
-                                </Grid>
 
-                                {/* Loading overlay when receipts/history are being fetched */}
-                                {(uploadedReceiptsLoading || regHistLoading) && (
-                                    <Box sx={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', zIndex: 30 }}>
-                                        <CircularProgress />
-                                        <Typography sx={{ mt: 2 }}>Cargando información de boletas y historial...</Typography>
-                                    </Box>
-                                )}
-                                </Box>
-                            </DialogContent>
-                            <DialogActions sx={{ flexWrap: 'wrap' }}>
-                                {(paymentTab === 0 || paymentTab === 1) && selectedReceipt?.status === 'PENDIENTE' && (
-                                    <FormControlLabel
-                                        sx={{ mr: 'auto' }}
-                                        control={
-                                            <Checkbox
-                                                size="small"
-                                                checked={markReceiptAsRegistered}
-                                                onChange={(e) => setMarkReceiptAsRegistered(e.target.checked)}
-                                            />
-                                        }
-                                        label="Marcar boleta abierta como registrada"
-                                    />
-                                )}
-                                <Button onClick={() => { setOpenRegisterDialog(false); setSelectedReceipt(null); setReceiptZoom(1); setPaymentTab(0); }} disabled={uploadedReceiptsLoading || regHistLoading}>Cancelar</Button>
-
-                                {/* Botón para Pago de Tarifa */}
-                                {paymentTab === 0 && hasPermission('pagos-pagar-tarifa') && (
-                                    <Button variant="contained" onClick={async () => {
-                                        await handleConfirmRegister();
-                                        // ensure receipt view reset after confirming
-                                        setSelectedReceipt(null);
-                                        setReceiptZoom(1);
-                                    }} disabled={!registerAmount || uploadedReceiptsLoading || regHistLoading || extraDiscountError}>
-                                        Registrar Pago de Tarifa
-                                    </Button>
-                                )}
-                                
-                                {/* Botón para Pago de Mora. Con crédito puro solo llama
-                                    /payments/v2/use-credit; con boleta llama /payments/pay-penalty. */}
-                                {paymentTab === 1 && (payPenaltyUseCredit && Number(payPenaltyBoletaAmount || 0) === 0
-                                    ? hasPermission('pagos-v2-usar-credito')
-                                    : hasPermission('pagos-pagar-mora')) && (
-                                    <Button variant="contained" color={isExonerating ? 'success' : payPenaltyUseCredit ? 'success' : 'warning'} onClick={async () => {
-                                        const creditAmt = payPenaltyUseCredit ? Number(payPenaltyAmount || 0) : 0;
-                                        const boletaAmt = payPenaltyUseCredit ? Number(payPenaltyBoletaAmount || 0) : 0;
-                                        const amt = payPenaltyUseCredit ? boletaAmt : Number(payPenaltyAmount || 0);
-                                        const discount = Number(discountPenaltyAmount || 0);
-
-                                        if (payPenaltyUseCredit) {
-                                            if (!creditAmt || Number.isNaN(creditAmt) || creditAmt <= 0) {
-                                                notify.error('Ingrese un monto de crédito válido');
-                                                return;
-                                            }
-                                            if (creditAmt > dialogCredito) {
-                                                notify.error(`El crédito a aplicar excede el disponible (${formatQ(dialogCredito)})`);
-                                                return;
-                                            }
-                                        } else {
-                                            if (Number.isNaN(amt) || amt < 0) {
-                                                notify.error('Ingrese un monto válido');
-                                                return;
-                                            }
-                                            if (amt === 0 && discount === 0) {
-                                                notify.error('Debe ingresar un monto de pago o de exoneración');
-                                                return;
-                                            }
-                                            const total = amt + discount;
-                                            if (total > effectivePenaltyDue) {
-                                                notify.error(`El monto total (pago + exoneración) excede la mora adeudada (${formatQ(effectivePenaltyDue)})`);
-                                                return;
-                                            }
-                                        }
-
-                                        try {
-                                            const receiptLinkFields = selectedReceipt?.status === 'PENDIENTE' ? {
-                                                receiptId: selectedReceipt.id,
-                                                markReceiptRegistered: markReceiptAsRegistered
-                                            } : {};
-                                            if (payPenaltyUseCredit) {
-                                                await api.post('/payments/v2/use-credit', {
-                                                    paymentId: registerPaymentTarget.id,
-                                                    amount: creditAmt,
-                                                    targetType: 'PENALTY',
-                                                    ...receiptLinkFields
-                                                });
-                                                if (boletaAmt > 0) {
-                                                    await api.post('/payments/pay-penalty', {
-                                                        paymentId: registerPaymentTarget.id,
-                                                        amount: boletaAmt,
-                                                        realPaymentDate: payPenaltyDate,
-                                                        receiptNumber: payPenaltyBoleta,
-                                                        bankAccount: payPenaltyAccount,
-                                                        source: 'manual',
-                                                        ...receiptLinkFields
-                                                    });
-                                                    notify.success(`Crédito (${formatQ(creditAmt)}) y boleta (${formatQ(boletaAmt)}) aplicados a mora`);
-                                                } else {
-                                                    notify.success('Crédito aplicado a mora');
-                                                }
-                                            } else {
-                                                const payloadData = {
-                                                    paymentId: registerPaymentTarget.id,
-                                                    amount: amt,
-                                                    extraordinaryDiscount: discount || 0,
-                                                    realPaymentDate: payPenaltyDate,
-                                                    receiptNumber: payPenaltyBoleta,
-                                                    bankAccount: payPenaltyAccount,
-                                                    notes: discount > 0 ? `Descuento/Exoneración de mora: ${formatQ(discount)}` : null,
-                                                    source: 'manual',
-                                                    ...receiptLinkFields
-                                                };
-                                                await api.post('/payments/pay-penalty', payloadData);
-                                                notify.success(isExonerating ? `Mora exonerada: ${formatQ(discount)}` : 'Pago de mora registrado exitosamente');
-                                            }
-                                            setOpenRegisterDialog(false);
-                                            setIsExonerating(false);
-                                            setPayPenaltyUseCredit(false);
-                                            setPayPenaltyBoletaAmount('');
-                                            setPayPenaltyAmount('');
-                                            setPayPenaltyBoleta('');
-                                            setPayPenaltyAccount('');
-                                            setPayPenaltyDate(moment(currentDate).format('YYYY-MM-DD'));
-                                            setDiscountPenaltyAmount('');
-                                            setExonerateAmount('');
-                                            setPaymentTab(0);
-                                            await fetchAllPayments();
-                                        } catch (err) {
-                                            console.error('Error procesando mora:', err);
-                                            const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Error al procesar el pago de mora';
-                                            notify.error(errorMsg);
-                                        }
-                                    }} disabled={uploadedReceiptsLoading || regHistLoading || effectivePenaltyDue === 0 || (() => {
-                                        if (isExonerating) {
-                                            return !payPenaltyDate || !payPenaltyAccount;
-                                        }
-                                        if (payPenaltyUseCredit) {
-                                            const cAmt = Number(payPenaltyAmount || 0);
-                                            if (!cAmt || cAmt <= 0 || cAmt > dialogCredito) {
-                                                return true;
-                                            }
-                                            const cRem = Math.max(0, Math.round((effectivePenaltyDue - cAmt) * 100) / 100);
-                                            if (cRem > 0) {
-                                                const bAmt = Number(payPenaltyBoletaAmount || 0);
-                                                if (!bAmt || bAmt <= 0) {
-                                                    return true;
-                                                }
-                                                return !payPenaltyBoleta || !payPenaltyDate || !payPenaltyAccount;
-                                            }
-                                            return false;
-                                        }
-                                        const amt = Number(payPenaltyAmount || 0);
-                                        const discount = Number(discountPenaltyAmount || 0);
-                                        if (amt === 0 && discount === 0) {
-                                            return true;
-                                        }
-                                        if (amt > 0 && !payPenaltyBoleta) {
-                                            return true;
-                                        }
-                                        return !payPenaltyDate || !payPenaltyAccount;
-                                    })()}>
-                                        {isExonerating ? 'Confirmar Exoneración' : payPenaltyUseCredit && Number(payPenaltyBoletaAmount || 0) > 0 ? 'Aplicar Crédito + Boleta' : payPenaltyUseCredit ? 'Aplicar Crédito' : 'Registrar Pago de Mora'}
-                                    </Button>
-                                )}
-
-                                {/* Botón para Inscripción */}
-                                {paymentTab === 2 && hasPermission('pagos-v2-pagar-inscripcion') && (
-                                    <Button
-                                        variant="contained"
-                                        onClick={async () => {
-                                            const amount = Number(payEnrollmentAmount) || 0;
-                                            const extraordinaryDiscount = Number(payEnrollmentDiscount) || 0;
-                                            if (amount <= 0 && extraordinaryDiscount <= 0) {
-                                                notify.error('Debe indicar un monto pagado o un descuento extraordinario');
-                                                return;
-                                            }
-                                            setEnrollmentSaving(true);
-                                            try {
-                                                await api.post('/enrollment-payments/pay', {
-                                                    enrollmentPaymentId: enrollmentPayment.id,
-                                                    amount,
-                                                    extraordinaryDiscount: extraordinaryDiscount || undefined,
-                                                    realPaymentDate: payEnrollmentDate,
-                                                    receiptNumber: payEnrollmentReceiptNumber || undefined,
-                                                    notes: payEnrollmentNotes || undefined,
-                                                });
-                                                notify.success('Pago de inscripción registrado');
-                                                setOpenRegisterDialog(false);
-                                                setPaymentTab(0);
-                                                await fetchAllPayments();
-                                                await fetchEnrollmentCharges();
-                                            } catch (err) {
-                                                notify.fromError(err, 'Error al registrar el pago.');
-                                            } finally {
-                                                setEnrollmentSaving(false);
-                                            }
-                                        }}
-                                        disabled={
-                                            enrollmentSaving
-                                            || uploadedReceiptsLoading
-                                            || regHistLoading
-                                            || !enrollmentPayment
-                                            || enrollmentPayment.amountDue <= 0
-                                            || (!Number(payEnrollmentAmount) && !Number(payEnrollmentDiscount))
-                                        }
-                                    >
-                                        {enrollmentSaving ? 'Guardando...' : 'Registrar Pago / Exoneración'}
-                                    </Button>
-                                )}
-                            </DialogActions>
-                        </Dialog>
-
-                        {/* Dialog: Notas */}
-                        <Dialog open={openNotesDialog} onClose={handleCloseNotes} fullWidth maxWidth="sm">
-                            <DialogTitle>Editar Notas</DialogTitle>
-                            <DialogContent>
-                                <TextField
-                                    label="Notas"
-                                    fullWidth
-                                    multiline
-                                    minRows={3}
-                                    value={notesDraft}
-                                    onChange={(e) => setNotesDraft(e.target.value)}
-                                />
-                            </DialogContent>
-                            <DialogActions>
-                                <Button onClick={handleCloseNotes}>Cancelar</Button>
-                                {hasPermission('pagos-v2-actualizar-notas') && (
-                                    <Button variant="contained" onClick={handleSaveNotes}>Guardar</Button>
-                                )}
-                            </DialogActions>
-                        </Dialog>
-
-                        {/* Dialog: Configurar Auto Débito */}
-                        <Dialog open={openAutoDebitDialog} onClose={() => setOpenAutoDebitDialog(false)} maxWidth="sm" fullWidth>
-                            <DialogTitle>Activar Débito Automático</DialogTitle>
-                            <DialogContent>
-                                <Box sx={{ mb: 3, p: 2, bgcolor: '#e3f2fd', borderRadius: 1, border: '1px solid #2196f3' }}>
-                                    <Typography variant="body2" sx={{ mb: 1 }}>
-                                        <strong>¿A partir de cuándo deseas aplicar el débito automático?</strong>
-                                    </Typography>
-                                    <Typography variant="caption" color="text.secondary">
-                                        Selecciona si el débito automático debe aplicarse al mes actual o al siguiente mes.
-                                    </Typography>
-                                </Box>
-                                <Typography variant="body2" sx={{ mb: 2, fontWeight: 'bold' }}>
-                                    Selecciona una opción:
-                                </Typography>
-                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                    <Button 
-                                        variant="outlined" 
-                                        color="primary"
-                                        fullWidth
-                                        onClick={async () => {
-                                            try {
-                                                const { userId, payment } = autoDebitPayload;
-                                                await api.post('/payments/v2/activate-auto-debit', { 
-                                                    userId,
-                                                    paymentId: payment?.id,
-                                                    schoolId: payment?.schoolId,
-                                                    cicloEscolarId: payment?.cicloEscolarId,
-                                                    activateAutoDebit: true,
-                                                    applyToCurrentMonth: true 
-                                                });
-                                                notify.success('Débito automático activado para el mes actual. Se procesó el pago y se exoneró la mora existente.');
-                                                setOpenAutoDebitDialog(false);
-                                                setAutoDebitPayload(null);
-                                                // Actualizar vista
-                                                await fetchAllPayments();
-                                            } catch (err) {
-                                                console.error(err);
-                                                notify.error('Error activando débito automático');
-                                            }
-                                        }}
-                                        sx={{ py: 2, textAlign: 'left', justifyContent: 'flex-start' }}
-                                    >
-                                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
-                                            <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-                                                📅 Aplicar al mes actual
-                                            </Typography>
-                                            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
-                                                Si ya pasó la fecha de pago, se procesará inmediatamente y se exonerará la mora existente.
-                                            </Typography>
-                                        </Box>
-                                    </Button>
-                                    
-                                    <Button 
-                                        variant="outlined" 
-                                        color="secondary"
-                                        fullWidth
-                                        onClick={async () => {
-                                            try {
-                                                const { userId, payment } = autoDebitPayload;
-                                                await api.post('/payments/v2/activate-auto-debit', { 
-                                                    userId,
-                                                    paymentId: payment?.id,
-                                                    schoolId: payment?.schoolId,
-                                                    cicloEscolarId: payment?.cicloEscolarId,
-                                                    activateAutoDebit: true,
-                                                    applyToCurrentMonth: false 
-                                                });
-                                                notify.success('Débito automático activado. Se aplicará a partir del siguiente mes.');
-                                                setOpenAutoDebitDialog(false);
-                                                setAutoDebitPayload(null);
-                                                // Actualizar vista
-                                                await fetchAllPayments();
-                                            } catch (err) {
-                                                console.error(err);
-                                                notify.error('Error activando débito automático');
-                                            }
-                                        }}
-                                        sx={{ py: 2, textAlign: 'left', justifyContent: 'flex-start' }}
-                                    >
-                                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
-                                            <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-                                                📆 Aplicar al siguiente mes
-                                            </Typography>
-                                            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
-                                                El débito automático se aplicará cuando llegue el siguiente mes. El mes actual se procesa normalmente.
-                                            </Typography>
-                                        </Box>
-                                    </Button>
-                                </Box>
-                            </DialogContent>
-                            <DialogActions>
-                                <Button onClick={() => {
-                                    setOpenAutoDebitDialog(false);
-                                    setAutoDebitPayload(null);
-                                }}>
-                                    Cancelar
-                                </Button>
-                            </DialogActions>
-                        </Dialog>
-
-                        {/* Dialog: Pagar Mora Congelada */}
-                        <Dialog open={openPayPenaltyDialog} onClose={() => setOpenPayPenaltyDialog(false)} maxWidth="sm" fullWidth>
-                            <DialogTitle>Pagar Mora {hasFrozenPeriods ? 'Congelada' : 'Acumulada'}</DialogTitle>
-                            <DialogContent>
-                                <Box sx={{ mb: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
-                                    <Typography variant="body2" sx={{ mb: 1 }}>
-                                        <strong>Mora {hasFrozenPeriods ? 'Congelada' : 'Acumulada'}:</strong> {formatQ(effectivePenaltyDue)}
-                                    </Typography>
-                                    {dialogCredito > 0 && (
-                                        <Typography variant="body2" sx={{ color: 'success.main' }}>
-                                            <strong>Crédito disponible:</strong> {formatQ(dialogCredito)}
-                                        </Typography>
-                                    )}
-                                    {hasFrozenPeriods && (
-                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                                            ❄️ {dialogPenaltyPeriods.filter(p => p.penaltyFrozen).length} período(s) con mora congelada
-                                        </Typography>
-                                    )}
-                                    {!hasFrozenPeriods && (
-                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                                            💡 Puedes pagar esta mora por separado antes de pagar la tarifa completa.
-                                        </Typography>
-                                    )}
-                                </Box>
-                                {/* Toggle método de pago si hay crédito disponible */}
-                                {dialogCredito > 0 && (
+                                {/* Toggle: Usar crédito disponible */}
+                                {effectivePenaltyDue > 0 && dialogCredito > 0 && !isExonerating && hasPermission('pagos-v2-usar-credito') && (
                                     <Box sx={{ mb: 2, display: 'flex', gap: 1 }}>
                                         <Button
                                             size="small"
@@ -5742,6 +5156,7 @@ const SchoolPaymentsPage = () => {
                                             onClick={() => {
                                                 setPayPenaltyUseCredit(false);
                                                 setPayPenaltyAmount('');
+                                                setPayPenaltyBoletaAmount('');
                                             }}
                                             fullWidth
                                         >
@@ -5752,9 +5167,11 @@ const SchoolPaymentsPage = () => {
                                             variant={payPenaltyUseCredit ? 'contained' : 'outlined'}
                                             color="success"
                                             onClick={() => {
+                                                const creditToApply = Math.min(dialogCredito, effectivePenaltyDue);
+                                                const remainder = Math.max(0, Math.round((effectivePenaltyDue - creditToApply) * 100) / 100);
                                                 setPayPenaltyUseCredit(true);
-                                                const maxCredit = Math.min(dialogCredito, effectivePenaltyDue);
-                                                setPayPenaltyAmount(maxCredit.toFixed(2));
+                                                setPayPenaltyAmount(creditToApply.toFixed(2));
+                                                setPayPenaltyBoletaAmount(remainder.toFixed(2));
                                             }}
                                             fullWidth
                                         >
@@ -5762,327 +5179,840 @@ const SchoolPaymentsPage = () => {
                                         </Button>
                                     </Box>
                                 )}
-                                {(() => {
-                                    const creditAmt = Number(payPenaltyAmount || 0);
-                                    const cashRemainder = payPenaltyUseCredit
-                                        ? Math.max(0, Math.round((effectivePenaltyDue - creditAmt) * 100) / 100)
-                                        : 0;
-                                    const showBoletaFields = !payPenaltyUseCredit || cashRemainder > 0;
-                                    return (
-                                        <>
-                                            <TextField
-                                                fullWidth
-                                                label={payPenaltyUseCredit ? 'Crédito a aplicar (Q)' : 'Monto a Pagar (Q)'}
-                                                type="number"
-                                                value={payPenaltyAmount}
-                                                onChange={(e) => setPayPenaltyAmount(e.target.value)}
-                                                inputProps={{ min: 0.01, step: '0.01', max: payPenaltyUseCredit ? dialogCredito : effectivePenaltyDue }}
-                                                helperText={payPenaltyUseCredit ? `Máximo del crédito: ${formatQ(dialogCredito)}` : undefined}
-                                                sx={{ mb: 2 }}
-                                            />
-                                            {payPenaltyUseCredit && cashRemainder > 0 && (
-                                                <Box sx={{ mb: 2, p: 1.5, bgcolor: '#fff3e0', borderRadius: 1, border: '1px solid #ffb74d' }}>
-                                                    <Typography variant="body2" sx={{ color: 'warning.dark' }}>
-                                                        ⚠️ El crédito no cubre toda la mora. <strong>Restante a pagar con boleta: {formatQ(cashRemainder)}</strong>
-                                                    </Typography>
-                                                </Box>
-                                            )}
-                                            {payPenaltyUseCredit && cashRemainder <= 0 && (
-                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
-                                                    ℹ️ El crédito cubre toda la mora. No se requiere boleta.
-                                                </Typography>
-                                            )}
-                                            {showBoletaFields && (
-                                                <>
-                                                    <TextField
-                                                        fullWidth
-                                                        label={payPenaltyUseCredit ? `Fecha de pago del restante (${formatQ(cashRemainder)})` : 'Fecha de Pago'}
-                                                        type="date"
-                                                        value={payPenaltyDate}
-                                                        onChange={(e) => setPayPenaltyDate(e.target.value)}
-                                                        InputLabelProps={{ shrink: true }}
-                                                        sx={{ mb: 2 }}
-                                                    />
-                                                    <TextField
-                                                        fullWidth
-                                                        label="Número de Boleta"
-                                                        value={payPenaltyBoleta}
-                                                        onChange={(e) => setPayPenaltyBoleta(e.target.value)}
-                                                        sx={{ mb: 2 }}
-                                                    />
-                                                    <TextField
-                                                        fullWidth
-                                                        label="Número de Cuenta Bancaria"
-                                                        value={payPenaltyAccount}
-                                                        onChange={(e) => setPayPenaltyAccount(e.target.value)}
-                                                    />
-                                                </>
-                                            )}
-                                        </>
+
+                                {/* Toggle de Exoneración Completa */}
+                                {effectivePenaltyDue > 0 && (
+                                    <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 1.5, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                            ✅ Exoneración Completa
+                                        </Typography>
+                                        <Switch 
+                                            checked={isExonerating}
+                                            onChange={(e) => {
+                                                setIsExonerating(e.target.checked);
+                                                if (e.target.checked) {
+                                                    setPayPenaltyUseCredit(false);
+                                                    setPayPenaltyAmount('0');
+                                                    setPayPenaltyBoleta('004');
+                                                    setDiscountPenaltyAmount(effectivePenaltyDue.toString());
+                                                    setExonerateAmount(effectivePenaltyDue.toString());
+                                                } else {
+                                                    setPayPenaltyAmount('');
+                                                    setPayPenaltyBoleta('');
+                                                    setDiscountPenaltyAmount('');
+                                                    setExonerateAmount('');
+                                                }
+                                            }}
+                                            color="success"
+                                        />
+                                    </Box>
+                                )}
+
+                                {/* Formulario de pago de mora (siempre visible, pero algunos campos bloqueados cuando está exonerando) */}
+                                <MoneyField
+                                    label={payPenaltyUseCredit ? 'Crédito a aplicar' : 'Monto a pagar'}
+                                    fullWidth
+                                    value={payPenaltyAmount}
+                                    onChange={(e) => {
+                                        setPayPenaltyAmount(e.target.value);
+                                        if (payPenaltyUseCredit) {
+                                            const newCredit = Number(e.target.value || 0);
+                                            const newRem = Math.max(0, Math.round((effectivePenaltyDue - newCredit) * 100) / 100);
+                                            setPayPenaltyBoletaAmount(newRem.toFixed(2));
+                                        }
+                                    }}
+                                    inputProps={{ min: 0, step: '0.01', max: payPenaltyUseCredit ? dialogCredito : effectivePenaltyDue }}
+                                    sx={{ mb: 2 }}
+                                    disabled={effectivePenaltyDue === 0 || isExonerating}
+                                    helperText={isExonerating ? 'Exoneración completa: No se realizará pago' : payPenaltyUseCredit ? `Máximo del crédito: ${formatQ(dialogCredito)}` : ''}
+                                />
+                                {payPenaltyUseCredit && (() => {
+                                    const cashRem = Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100);
+                                    return cashRem > 0 ? (
+                                        <Box sx={{ mb: 2, p: 1.5, bgcolor: '#fff3e0', borderRadius: 1, border: '1px solid #ffb74d' }}>
+                                            <Typography variant="body2" sx={{ color: 'warning.dark' }}>
+                                                ⚠️ El crédito no cubre toda la mora. <strong>Restante a pagar con boleta: {formatQ(cashRem)}</strong>
+                                            </Typography>
+                                        </Box>
+                                    ) : (
+                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+                                            ℹ️ El crédito cubre toda la mora. No se requiere boleta.
+                                        </Typography>
                                     );
                                 })()}
-                            </DialogContent>
-                            <DialogActions>
-                                <Button onClick={() => {
-                                    setOpenPayPenaltyDialog(false);
-                                    setPayPenaltyAmount('');
-                                    setPayPenaltyBoleta('');
-                                    setPayPenaltyAccount('');
-                                    setPayPenaltyDate(moment(currentDate).format('YYYY-MM-DD'));
-                                    setPayPenaltyUseCredit(false);
-                                }}>Cancelar</Button>
-                                <Button variant="contained" color={payPenaltyUseCredit ? 'success' : 'primary'} onClick={async () => {
-                                    const creditAmt = payPenaltyUseCredit ? Number(payPenaltyAmount || 0) : 0;
-                                    const cashAmt = payPenaltyUseCredit
-                                        ? Math.max(0, Math.round((effectivePenaltyDue - creditAmt) * 100) / 100)
-                                        : Number(payPenaltyAmount || 0);
-                                    const currentPenalty = Number(registerPaymentTarget?.penaltyDue || 0);
+                                {(!payPenaltyUseCredit || Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0) && (
+                                    <>
+                                        {payPenaltyUseCredit && (
+                                            <Typography variant="caption" sx={{ fontWeight: 700, color: 'warning.dark', display: 'block', mb: 1, mt: 0.5, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                                📋 Datos del pago restante
+                                            </Typography>
+                                        )}
+                                        {payPenaltyUseCredit && (
+                                            <MoneyField
+                                                label="Monto a pagar con boleta"
+                                                fullWidth
+                                                value={payPenaltyBoletaAmount}
+                                                onChange={(e) => setPayPenaltyBoletaAmount(e.target.value)}
+                                                inputProps={{ min: 0, step: '0.01' }}
+                                                sx={{ mb: 2 }}
+                                                required
+                                                error={!payPenaltyBoletaAmount || Number(payPenaltyBoletaAmount) <= 0}
+                                                helperText={!payPenaltyBoletaAmount || Number(payPenaltyBoletaAmount) <= 0 ? 'Ingrese el monto a pagar con boleta' : ''}
+                                            />
+                                        )}
+                                        <TextField
+                                            label={payPenaltyUseCredit ? `Fecha de pago del restante` : 'Fecha del Pago'}
+                                            type="date"
+                                            fullWidth
+                                            InputLabelProps={{ shrink: true }}
+                                            value={payPenaltyDate}
+                                            onChange={(e) => setPayPenaltyDate(e.target.value)}
+                                            sx={{ mb: 2 }}
+                                        />
+                                    </>
+                                )}
+                                
+                                {/* Alert retroactivo por período */}
+                                {retroactivePenaltyCalc?.periods?.some(p => p.daysLate > 0) && (
+                                    <Box sx={{ mb: 2, p: 2, bgcolor: '#fff3e0', borderRadius: 1, border: '1px solid #ff9800' }}>
+                                        <Typography variant="caption" sx={{ fontWeight: 700, color: '#e65100', display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+                                            ⏰ PAGO RETROACTIVO DETECTADO
+                                        </Typography>
+                                        <Typography variant="body2" sx={{ mb: 1 }}>
+                                            <strong>Fecha de pago:</strong> {retroactivePenaltyCalc.paymentDate}
+                                        </Typography>
 
-                                    // Validaciones
-                                    if (payPenaltyUseCredit) {
-                                        if (!creditAmt || Number.isNaN(creditAmt) || creditAmt <= 0) {
-                                            notify.error('Ingrese un monto de crédito válido');
-                                            return;
-                                        }
-                                        if (creditAmt > dialogCredito) {
-                                            notify.error(`El crédito a aplicar excede el disponible (${formatQ(dialogCredito)})`);
-                                            return;
-                                        }
-                                        if (creditAmt + cashAmt > currentPenalty + 0.005) {
-                                            notify.error(`El total excede la mora adeudada (${formatQ(currentPenalty)})`);
-                                            return;
-                                        }
-                                    } else {
-                                        if (!cashAmt || Number.isNaN(cashAmt) || cashAmt <= 0) {
-                                            notify.error('Ingrese un monto válido');
-                                            return;
-                                        }
-                                        if (cashAmt > currentPenalty) {
-                                            notify.error(`El monto excede la mora adeudada (${formatQ(currentPenalty)})`);
-                                            return;
-                                        }
-                                    }
+                                        {/* Desglose por período */}
+                                        {retroactivePenaltyCalc.periods.filter(p => p.daysLate > 0 || p.frozen).map((p, idx) => {
+                                            const periodDate = moment(p.period);
+                                            const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+                                            const label = `${monthNames[periodDate.month()]} ${periodDate.year()}`;
+                                            return (
+                                                <Box key={idx} sx={{ ml: 1, mb: 0.5, pl: 1, borderLeft: '3px solid', borderColor: p.frozen ? '#1976d2' : '#ff9800' }}>
+                                                    <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                                                        {label} {p.frozen && '❄️'}
+                                                    </Typography>
+                                                    {p.frozen ? (
+                                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                                            Mora congelada: {formatQ(p.penaltyAmount || 0)}
+                                                        </Typography>
+                                                    ) : (
+                                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                                            {p.daysLate} días × {formatQ(retroactivePenaltyCalc.dailyPenalty)} × {Number(p.studentCount || retroactivePenaltyCalc.studentCount || 1)} est. = {formatQ(p.penaltyAmount || 0)}
+                                                        </Typography>
+                                                    )}
+                                                </Box>
+                                            );
+                                        })}
 
-                                    try {
-                                        if (payPenaltyUseCredit) {
-                                            // 1. Aplicar crédito a mora
-                                            await api.post('/payments/v2/use-credit', {
-                                                paymentId: registerPaymentTarget.id,
-                                                amount: creditAmt,
-                                                targetType: 'PENALTY'
-                                            });
-                                            // 2. Si hay restante, pagar con boleta
-                                            if (cashAmt > 0) {
-                                                await api.post(`/payments/${registerPaymentTarget.id}/pay-penalty`, {
-                                                    amountPaid: cashAmt,
-                                                    receiptNumber: payPenaltyBoleta,
-                                                    bankAccountNumber: payPenaltyAccount,
-                                                    paidAt: payPenaltyDate
-                                                });
-                                                notify.success(`Crédito (${formatQ(creditAmt)}) y boleta (${formatQ(cashAmt)}) aplicados a mora`);
-                                            } else {
-                                                notify.success('Crédito aplicado a mora');
+                                        {/* Total retroactivo */}
+                                        <Box sx={{ mt: 1.5, p: 1.5, bgcolor: '#fff', borderRadius: 1, border: '2px solid #ff9800' }}>
+                                            <Typography variant="body1" sx={{ fontWeight: 700, color: '#e65100' }}>
+                                                💰 Mora hasta {formatDate(payPenaltyDate)}: <span style={{ fontSize: '1.2em' }}>{formatQ(retroactivePenaltyCalc.penaltyUntilPaymentDate || 0)}</span>
+                                            </Typography>
+                                        </Box>
+
+                                        {/* Aplicación del pago */}
+                                        {(() => {
+                                            const paymentAmount = Number(payPenaltyAmount || 0);
+                                            const exonerationAmount = isExonerating ? Number(exonerateAmount || 0) : Number(discountPenaltyAmount || 0);
+                                            const totalReduction = paymentAmount + exonerationAmount;
+                                            if (totalReduction > 0) {
+                                                const willCoverFull = totalReduction >= retroactivePenaltyCalc.penaltyUntilPaymentDate;
+                                                return (
+                                                    <Box sx={{ mt: 1.5, p: 1.5, bgcolor: willCoverFull ? '#e8f5e9' : '#fff3e0', borderRadius: 1, border: willCoverFull ? '2px solid #4caf50' : '1px solid #ff9800' }}>
+                                                        <Typography variant="body2" sx={{ fontWeight: 600, color: willCoverFull ? '#2e7d32' : '#e65100', mb: 0.5 }}>
+                                                            📊 Aplicación del Pago Retroactivo:
+                                                        </Typography>
+                                                        {paymentAmount > 0 && <Typography variant="body2">• Pago: {formatQ(paymentAmount || 0)}</Typography>}
+                                                        {exonerationAmount > 0 && <Typography variant="body2">• Exoneración: {formatQ(exonerationAmount || 0)}</Typography>}
+                                                        <Typography variant="body2" sx={{ fontWeight: 700, color: willCoverFull ? '#2e7d32' : '#e65100', mt: 1 }}>
+                                                            {willCoverFull ? <>✅ Cubre toda la mora hasta {formatDate(payPenaltyDate)}</> : <>⚠️ Pago parcial: resta {formatQ((retroactivePenaltyCalc.penaltyUntilPaymentDate - totalReduction) || 0)}</>}
+                                                        </Typography>
+                                                    </Box>
+                                                );
                                             }
-                                        } else {
-                                            // Pago en efectivo/boleta
+                                            return null;
+                                        })()}
+                                    </Box>
+                                )}
+                                
+                                {(!payPenaltyUseCredit || Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0) && (
+                                    <TextField
+                                        label="Número de Boleta"
+                                        fullWidth
+                                        value={payPenaltyBoleta}
+                                        onChange={(e) => setPayPenaltyBoleta(e.target.value)}
+                                        sx={{ mb: 2 }}
+                                        disabled={isExonerating}
+                                        required={payPenaltyUseCredit && !isExonerating}
+                                        error={payPenaltyUseCredit && !isExonerating && !payPenaltyBoleta && Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0}
+                                        helperText={
+                                            isExonerating
+                                                ? '004 - Exoneración completa'
+                                                : payPenaltyUseCredit && !payPenaltyBoleta && Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0
+                                                    ? 'Ingrese el número de boleta para registrar el pago del restante'
+                                                    : ''
+                                        }
+                                    />
+                                )}
+                                {!payPenaltyUseCredit && (
+                                    <MoneyField
+                                        label="Exonerar mora"
+                                        fullWidth
+                                        value={discountPenaltyAmount}
+                                        onChange={(e) => setDiscountPenaltyAmount(e.target.value)}
+                                        inputProps={{ min: 0, step: '0.01', max: effectivePenaltyDue }}
+                                        sx={{ mb: 2 }}
+                                        disabled={effectivePenaltyDue === 0 || isExonerating}
+                                        helperText={isExonerating ? 'Exoneración del monto completo de la mora' : ''}
+                                    />
+                                )}
+                                {(!payPenaltyUseCredit || Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0) && (
+                                <FormControl fullWidth sx={{ mb: 2 }}>
+                                    <InputLabel>Número de Cuenta</InputLabel>
+                                    <Select
+                                        label="Número de Cuenta"
+                                        value={payPenaltyAccount}
+                                        onChange={(e) => setPayPenaltyAccount(e.target.value)}
+                                    >
+                                        {(() => {
+                                            const seen = new Set();
+                                            const entries = [];
+                                            try {
+                                                const sources = [];
+                                                if (Array.isArray(allSchools) && allSchools.length > 0) {
+                                                    sources.push(...allSchools);
+                                                }
+                                                if (registerPaymentTarget?.schoolId && !sources.find(s => s.id === registerPaymentTarget.schoolId)) {
+                                                    const found = allSchools.find(s => s.id === registerPaymentTarget.schoolId);
+                                                    if (found) {
+                                                        sources.push(found);
+                                                    }
+                                                }
+
+                                                sources.forEach(sch => {
+                                                    const raw = sch?.bankAccount || '';
+                                                    if (!raw) {
+                                                        return;
+                                                    }
+                                                    const parts = raw.split(/[|,;]+/).map(p => p.trim()).filter(Boolean);
+                                                    if (parts.length > 0) {
+                                                        parts.forEach(p => {
+                                                            const key = `${sch.id}::${p}`;
+                                                            if (!seen.has(key)) { seen.add(key); entries.push({ key, value: p, label: `${sch.name} - ${p}` }); }
+                                                        });
+                                                    } else {
+                                                        const key = `${sch.id}::${raw}`;
+                                                        if (!seen.has(key)) { seen.add(key); entries.push({ key, value: raw, label: `${sch.name} - ${raw}` }); }
+                                                    }
+                                                });
+                                            } catch (e) {
+                                                // ignore
+                                            }
+                                            if (entries.length === 0) {
+                                                return <MenuItem value="">(No configurado)</MenuItem>;
+                                            }
+                                                return entries.map(opt => <MenuItem key={opt.key} value={opt.value}>{opt.label}</MenuItem>);
+                                            })()}
+                                    </Select>
+                                </FormControl>
+                                )}
+
+                                {effectivePenaltyDue > 0 ? (
+                                    <Box sx={{ mt: 2, p: 2, bgcolor: '#fff3cd', borderRadius: 1, border: '1px solid #ffc107' }}>
+                                        <Typography variant="caption" color="text.secondary">
+                                            💡 <strong>Nota:</strong> Este pago se aplicará exclusivamente a la mora acumulada. 
+                                            El saldo de tarifa permanecerá sin cambios.
+                                        </Typography>
+                                    </Box>
+                                ) : (
+                                    <Box sx={{ mt: 2, p: 2, bgcolor: '#d4edda', borderRadius: 1, border: '1px solid #c3e6cb' }}>
+                                        <Typography variant="caption" sx={{ color: '#155724' }}>
+                                            ✅ <strong>Esta familia no tiene mora pendiente.</strong>
+                                        </Typography>
+                                    </Box>
+                                )}
+                            </Box>
+                            )}
+
+                            {/* Tab Panel 2: Inscripción */}
+                            {paymentTab === 2 && (
+                            <Box>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                                    <Typography variant="h6">🎓 Inscripción de Ciclo</Typography>
+                                    {enrollmentPayment && (
+                                        <StatusChip domain={ENROLLMENT_PAYMENT_STATUS} value={enrollmentPayment.status} />
+                                    )}
+                                </Box>
+
+                                {!enrollmentPayment && (
+                                    <Box sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Esta familia no tiene cargo de inscripción para este ciclo (el colegio no tiene monto de inscripción configurado, o aún no se ha generado).
+                                        </Typography>
+                                    </Box>
+                                )}
+
+                                {enrollmentPayment && (
+                                    <>
+                                        <Box sx={{ mb: 2, p: 2, bgcolor: '#fafafa', borderRadius: 1, border: '1px solid rgba(0,0,0,0.04)' }}>
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                                <Typography variant="body2" color="text.secondary">Monto original ({enrollmentPayment.studentsCount} est.)</Typography>
+                                                <Typography variant="body2">{formatQ(enrollmentPayment.originalAmount || 0)}</Typography>
+                                            </Box>
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                                <Typography variant="body2" color="text.secondary">Descuento aplicado</Typography>
+                                                <Typography variant="body2">{formatQ(enrollmentPayment.discountApplied || 0)}</Typography>
+                                            </Box>
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                                <Typography variant="body2" color="text.secondary">Monto neto</Typography>
+                                                <Typography variant="body2">{formatQ(enrollmentPayment.netAmount || 0)}</Typography>
+                                            </Box>
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                                <Typography variant="body2" color="text.secondary">Pagado</Typography>
+                                                <Typography variant="body2">{formatQ(enrollmentPayment.amountPaid || 0)}</Typography>
+                                            </Box>
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.5, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
+                                                <Typography variant="body2" sx={{ fontWeight: 700 }}>Saldo pendiente</Typography>
+                                                <Typography variant="body2" sx={{ fontWeight: 700 }}>{formatQ(enrollmentPayment.amountDue || 0)}</Typography>
+                                            </Box>
+                                            {enrollmentPayment.manualAdjustmentAmount > 0 && (
+                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                                                    Ajuste manual acumulado: {formatQ(enrollmentPayment.manualAdjustmentAmount || 0)}
+                                                    {enrollmentPayment.manualAdjustmentReason ? ` — ${enrollmentPayment.manualAdjustmentReason}` : ''}
+                                                </Typography>
+                                            )}
+                                        </Box>
+
+                                        {enrollmentPayment.amountDue > 0 && (
+                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                                <MoneyField
+                                                    label="Monto pagado"
+                                                    value={payEnrollmentAmount}
+                                                    onChange={(e) => setPayEnrollmentAmount(e.target.value)}
+                                                    inputProps={{ min: '0', step: '0.01' }}
+                                                />
+                                                <MoneyField
+                                                    label={`Descuento extraordinario / exoneración (opcional, máx. ${formatQ(enrollmentPayment.amountDue)})`}
+                                                    value={payEnrollmentDiscount}
+                                                    onChange={(e) => setPayEnrollmentDiscount(e.target.value)}
+                                                    inputProps={{ min: '0', step: '0.01', max: enrollmentPayment.amountDue }}
+                                                />
+                                                <TextField
+                                                    label="Fecha real de pago"
+                                                    type="date"
+                                                    value={payEnrollmentDate}
+                                                    onChange={(e) => setPayEnrollmentDate(e.target.value)}
+                                                    InputLabelProps={{ shrink: true }}
+                                                />
+                                                <TextField
+                                                    label="Número de boleta (opcional)"
+                                                    value={payEnrollmentReceiptNumber}
+                                                    onChange={(e) => setPayEnrollmentReceiptNumber(e.target.value)}
+                                                />
+                                                <TextField
+                                                    label="Notas / motivo del descuento (opcional)"
+                                                    multiline
+                                                    minRows={2}
+                                                    value={payEnrollmentNotes}
+                                                    onChange={(e) => setPayEnrollmentNotes(e.target.value)}
+                                                />
+                                            </Box>
+                                        )}
+                                    </>
+                                )}
+                            </Box>
+                            )}
+                                </Grid>
+                            </Grid>
+
+                            {/* Loading overlay when receipts/history are being fetched */}
+                            {(uploadedReceiptsLoading || regHistLoading) && (
+                                <Box sx={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', zIndex: 30 }}>
+                                    <CircularProgress />
+                                    <Typography sx={{ mt: 2 }}>Cargando información de boletas y historial...</Typography>
+                                </Box>
+                            )}
+                            </Box>
+                        </AppDialog>
+
+                        {/* Dialog: Notas */}
+                        <AppDialog
+                            open={openNotesDialog}
+                            onClose={handleCloseNotes}
+                            title="Editar notas"
+                            size="sm"
+                            onSubmit={handleSaveNotes}
+                            submitLabel="Guardar"
+                            readOnly={!(hasPermission('pagos-v2-actualizar-notas'))}
+                        >
+                            <TextField
+                                label="Notas"
+                                fullWidth
+                                multiline
+                                minRows={3}
+                                value={notesDraft}
+                                onChange={(e) => setNotesDraft(e.target.value)}
+                            />
+                        </AppDialog>
+
+                        {/* Dialog: Configurar Auto Débito */}
+                        <AppDialog
+                            open={openAutoDebitDialog}
+                            onClose={() => setOpenAutoDebitDialog(false)}
+                            title="Activar débito automático"
+                            size="sm"
+                            readOnly
+                        >
+                            <Box sx={{ mb: 3, p: 2, bgcolor: '#e3f2fd', borderRadius: 1, border: '1px solid #2196f3' }}>
+                                <Typography variant="body2" sx={{ mb: 1 }}>
+                                    <strong>¿A partir de cuándo deseas aplicar el débito automático?</strong>
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                    Selecciona si el débito automático debe aplicarse al mes actual o al siguiente mes.
+                                </Typography>
+                            </Box>
+                            <Typography variant="body2" sx={{ mb: 2, fontWeight: 'bold' }}>
+                                Selecciona una opción:
+                            </Typography>
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                <Button 
+                                    variant="outlined" 
+                                    color="primary"
+                                    fullWidth
+                                    onClick={async () => {
+                                        try {
+                                            const { userId, payment } = autoDebitPayload;
+                                            await api.post('/payments/v2/activate-auto-debit', { 
+                                                userId,
+                                                paymentId: payment?.id,
+                                                schoolId: payment?.schoolId,
+                                                cicloEscolarId: payment?.cicloEscolarId,
+                                                activateAutoDebit: true,
+                                                applyToCurrentMonth: true 
+                                            });
+                                            notify.success('Débito automático activado para el mes actual. Se procesó el pago y se exoneró la mora existente.');
+                                            setOpenAutoDebitDialog(false);
+                                            setAutoDebitPayload(null);
+                                            // Actualizar vista
+                                            await fetchAllPayments();
+                                        } catch (err) {
+                                            console.error(err);
+                                            notify.error('Error activando débito automático');
+                                        }
+                                    }}
+                                    sx={{ py: 2, textAlign: 'left', justifyContent: 'flex-start' }}
+                                >
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
+                                        <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                                            📅 Aplicar al mes actual
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                                            Si ya pasó la fecha de pago, se procesará inmediatamente y se exonerará la mora existente.
+                                        </Typography>
+                                    </Box>
+                                </Button>
+                                    
+                                <Button 
+                                    variant="outlined" 
+                                    color="secondary"
+                                    fullWidth
+                                    onClick={async () => {
+                                        try {
+                                            const { userId, payment } = autoDebitPayload;
+                                            await api.post('/payments/v2/activate-auto-debit', { 
+                                                userId,
+                                                paymentId: payment?.id,
+                                                schoolId: payment?.schoolId,
+                                                cicloEscolarId: payment?.cicloEscolarId,
+                                                activateAutoDebit: true,
+                                                applyToCurrentMonth: false 
+                                            });
+                                            notify.success('Débito automático activado. Se aplicará a partir del siguiente mes.');
+                                            setOpenAutoDebitDialog(false);
+                                            setAutoDebitPayload(null);
+                                            // Actualizar vista
+                                            await fetchAllPayments();
+                                        } catch (err) {
+                                            console.error(err);
+                                            notify.error('Error activando débito automático');
+                                        }
+                                    }}
+                                    sx={{ py: 2, textAlign: 'left', justifyContent: 'flex-start' }}
+                                >
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
+                                        <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                                            📆 Aplicar al siguiente mes
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                                            El débito automático se aplicará cuando llegue el siguiente mes. El mes actual se procesa normalmente.
+                                        </Typography>
+                                    </Box>
+                                </Button>
+                            </Box>
+                        </AppDialog>
+
+                        {/* Dialog: Pagar Mora Congelada */}
+                        <AppDialog
+                            open={openPayPenaltyDialog}
+                            onClose={() => setOpenPayPenaltyDialog(false)}
+                            title={`Pagar mora ${hasFrozenPeriods ? 'congelada' : 'acumulada'}`}
+                            size="sm"
+                            onSubmit={async () => {
+                                const creditAmt = payPenaltyUseCredit ? Number(payPenaltyAmount || 0) : 0;
+                                const cashAmt = payPenaltyUseCredit
+                                    ? Math.max(0, Math.round((effectivePenaltyDue - creditAmt) * 100) / 100)
+                                    : Number(payPenaltyAmount || 0);
+                                const currentPenalty = Number(registerPaymentTarget?.penaltyDue || 0);
+
+                                // Validaciones
+                                if (payPenaltyUseCredit) {
+                                    if (!creditAmt || Number.isNaN(creditAmt) || creditAmt <= 0) {
+                                        notify.error('Ingrese un monto de crédito válido');
+                                        return;
+                                    }
+                                    if (creditAmt > dialogCredito) {
+                                        notify.error(`El crédito a aplicar excede el disponible (${formatQ(dialogCredito)})`);
+                                        return;
+                                    }
+                                    if (creditAmt + cashAmt > currentPenalty + 0.005) {
+                                        notify.error(`El total excede la mora adeudada (${formatQ(currentPenalty)})`);
+                                        return;
+                                    }
+                                } else {
+                                    if (!cashAmt || Number.isNaN(cashAmt) || cashAmt <= 0) {
+                                        notify.error('Ingrese un monto válido');
+                                        return;
+                                    }
+                                    if (cashAmt > currentPenalty) {
+                                        notify.error(`El monto excede la mora adeudada (${formatQ(currentPenalty)})`);
+                                        return;
+                                    }
+                                }
+
+                                try {
+                                    if (payPenaltyUseCredit) {
+                                        // 1. Aplicar crédito a mora
+                                        await api.post('/payments/v2/use-credit', {
+                                            paymentId: registerPaymentTarget.id,
+                                            amount: creditAmt,
+                                            targetType: 'PENALTY'
+                                        });
+                                        // 2. Si hay restante, pagar con boleta
+                                        if (cashAmt > 0) {
                                             await api.post(`/payments/${registerPaymentTarget.id}/pay-penalty`, {
                                                 amountPaid: cashAmt,
                                                 receiptNumber: payPenaltyBoleta,
                                                 bankAccountNumber: payPenaltyAccount,
                                                 paidAt: payPenaltyDate
                                             });
-                                            notify.success('Pago de mora registrado');
+                                            notify.success(`Crédito (${formatQ(creditAmt)}) y boleta (${formatQ(cashAmt)}) aplicados a mora`);
+                                        } else {
+                                            notify.success('Crédito aplicado a mora');
                                         }
-                                        setOpenPayPenaltyDialog(false);
-                                        setPayPenaltyAmount('');
-                                        setPayPenaltyBoleta('');
-                                        setPayPenaltyAccount('');
-                                        setPayPenaltyDate(moment(currentDate).format('YYYY-MM-DD'));
-                                        setPayPenaltyUseCredit(false);
-                                        // Refrescar datos
-                                        await fetchAllPayments();
-                                        // Actualizar el registerPaymentTarget con los datos frescos
-                                        const updated = await api.get(`/payments/${registerPaymentTarget.id}`);
-                                        if (updated.data) {
-                                            setRegisterPaymentTarget(updated.data);
-                                        }
-                                    } catch (err) {
-                                        console.error('Error pagando mora:', err);
-                                        console.error('Error response:', err.response?.data);
-                                        const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Error al registrar pago de mora';
-                                        notify.error(errorMsg);
+                                    } else {
+                                        // Pago en efectivo/boleta
+                                        await api.post(`/payments/${registerPaymentTarget.id}/pay-penalty`, {
+                                            amountPaid: cashAmt,
+                                            receiptNumber: payPenaltyBoleta,
+                                            bankAccountNumber: payPenaltyAccount,
+                                            paidAt: payPenaltyDate
+                                        });
+                                        notify.success('Pago de mora registrado');
                                     }
-                                }}>{payPenaltyUseCredit && Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0 ? 'Aplicar Crédito + Boleta' : payPenaltyUseCredit ? 'Aplicar Crédito' : 'Registrar Pago'}</Button>
-                            </DialogActions>
-                        </Dialog>
+                                    setOpenPayPenaltyDialog(false);
+                                    setPayPenaltyAmount('');
+                                    setPayPenaltyBoleta('');
+                                    setPayPenaltyAccount('');
+                                    setPayPenaltyDate(moment(currentDate).format('YYYY-MM-DD'));
+                                    setPayPenaltyUseCredit(false);
+                                    // Refrescar datos
+                                    await fetchAllPayments();
+                                    // Actualizar el registerPaymentTarget con los datos frescos
+                                    const updated = await api.get(`/payments/${registerPaymentTarget.id}`);
+                                    if (updated.data) {
+                                        setRegisterPaymentTarget(updated.data);
+                                    }
+                                } catch (err) {
+                                    console.error('Error pagando mora:', err);
+                                    console.error('Error response:', err.response?.data);
+                                    const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Error al registrar pago de mora';
+                                    notify.error(errorMsg);
+                                }
+                            }}
+                            submitLabel={payPenaltyUseCredit && Math.max(0, Math.round((effectivePenaltyDue - Number(payPenaltyAmount || 0)) * 100) / 100) > 0 ? 'Aplicar crédito + boleta' : payPenaltyUseCredit ? 'Aplicar crédito' : 'Registrar pago'}
+                        >
+                            <Box sx={{ mb: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                                <Typography variant="body2" sx={{ mb: 1 }}>
+                                    <strong>Mora {hasFrozenPeriods ? 'Congelada' : 'Acumulada'}:</strong> {formatQ(effectivePenaltyDue)}
+                                </Typography>
+                                {dialogCredito > 0 && (
+                                    <Typography variant="body2" sx={{ color: 'success.main' }}>
+                                        <strong>Crédito disponible:</strong> {formatQ(dialogCredito)}
+                                    </Typography>
+                                )}
+                                {hasFrozenPeriods && (
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                                        ❄️ {dialogPenaltyPeriods.filter(p => p.penaltyFrozen).length} período(s) con mora congelada
+                                    </Typography>
+                                )}
+                                {!hasFrozenPeriods && (
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                                        💡 Puedes pagar esta mora por separado antes de pagar la tarifa completa.
+                                    </Typography>
+                                )}
+                            </Box>
+                            {/* Toggle método de pago si hay crédito disponible */}
+                            {dialogCredito > 0 && (
+                                <Box sx={{ mb: 2, display: 'flex', gap: 1 }}>
+                                    <Button
+                                        size="small"
+                                        variant={!payPenaltyUseCredit ? 'contained' : 'outlined'}
+                                        onClick={() => {
+                                            setPayPenaltyUseCredit(false);
+                                            setPayPenaltyAmount('');
+                                        }}
+                                        fullWidth
+                                    >
+                                        Pago con boleta
+                                    </Button>
+                                    <Button
+                                        size="small"
+                                        variant={payPenaltyUseCredit ? 'contained' : 'outlined'}
+                                        color="success"
+                                        onClick={() => {
+                                            setPayPenaltyUseCredit(true);
+                                            const maxCredit = Math.min(dialogCredito, effectivePenaltyDue);
+                                            setPayPenaltyAmount(maxCredit.toFixed(2));
+                                        }}
+                                        fullWidth
+                                    >
+                                        Usar crédito ({formatQ(Math.min(dialogCredito, effectivePenaltyDue))})
+                                    </Button>
+                                </Box>
+                            )}
+                            {(() => {
+                                const creditAmt = Number(payPenaltyAmount || 0);
+                                const cashRemainder = payPenaltyUseCredit
+                                    ? Math.max(0, Math.round((effectivePenaltyDue - creditAmt) * 100) / 100)
+                                    : 0;
+                                const showBoletaFields = !payPenaltyUseCredit || cashRemainder > 0;
+                                return (
+                                    <>
+                                        <MoneyField
+                                            fullWidth
+                                            label={payPenaltyUseCredit ? 'Crédito a aplicar' : 'Monto a pagar'}
+                                            value={payPenaltyAmount}
+                                            onChange={(e) => setPayPenaltyAmount(e.target.value)}
+                                            inputProps={{ min: 0.01, step: '0.01', max: payPenaltyUseCredit ? dialogCredito : effectivePenaltyDue }}
+                                            helperText={payPenaltyUseCredit ? `Máximo del crédito: ${formatQ(dialogCredito)}` : undefined}
+                                            sx={{ mb: 2 }}
+                                        />
+                                        {payPenaltyUseCredit && cashRemainder > 0 && (
+                                            <Box sx={{ mb: 2, p: 1.5, bgcolor: '#fff3e0', borderRadius: 1, border: '1px solid #ffb74d' }}>
+                                                <Typography variant="body2" sx={{ color: 'warning.dark' }}>
+                                                    ⚠️ El crédito no cubre toda la mora. <strong>Restante a pagar con boleta: {formatQ(cashRemainder)}</strong>
+                                                </Typography>
+                                            </Box>
+                                        )}
+                                        {payPenaltyUseCredit && cashRemainder <= 0 && (
+                                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+                                                ℹ️ El crédito cubre toda la mora. No se requiere boleta.
+                                            </Typography>
+                                        )}
+                                        {showBoletaFields && (
+                                            <>
+                                                <TextField
+                                                    fullWidth
+                                                    label={payPenaltyUseCredit ? `Fecha de pago del restante (${formatQ(cashRemainder)})` : 'Fecha de Pago'}
+                                                    type="date"
+                                                    value={payPenaltyDate}
+                                                    onChange={(e) => setPayPenaltyDate(e.target.value)}
+                                                    InputLabelProps={{ shrink: true }}
+                                                    sx={{ mb: 2 }}
+                                                />
+                                                <TextField
+                                                    fullWidth
+                                                    label="Número de Boleta"
+                                                    value={payPenaltyBoleta}
+                                                    onChange={(e) => setPayPenaltyBoleta(e.target.value)}
+                                                    sx={{ mb: 2 }}
+                                                />
+                                                <TextField
+                                                    fullWidth
+                                                    label="Número de Cuenta Bancaria"
+                                                    value={payPenaltyAccount}
+                                                    onChange={(e) => setPayPenaltyAccount(e.target.value)}
+                                                />
+                                            </>
+                                        )}
+                                    </>
+                                );
+                            })()}
+                        </AppDialog>
 
                         {/* Dialog: Descontar/Exonerar Mora Congelada */}
-                        <Dialog open={openDiscountPenaltyDialog} onClose={() => setOpenDiscountPenaltyDialog(false)} maxWidth="sm" fullWidth>
-                            <DialogTitle>Descontar / Exonerar Mora {hasFrozenPeriods ? 'Congelada' : 'Acumulada'}</DialogTitle>
-                            <DialogContent>
-                                <Box sx={{ mb: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
-                                    <Typography variant="body2" sx={{ mb: 1 }}>
-                                        <strong>Mora {hasFrozenPeriods ? 'Congelada' : 'Acumulada'}:</strong> {formatQ(effectivePenaltyDue)}
-                                    </Typography>
-                                    {hasFrozenPeriods && (
-                                        <Typography variant="caption" color="text.secondary">
-                                            ❄️ {dialogPenaltyPeriods.filter(p => p.penaltyFrozen).length} período(s) con mora congelada
-                                        </Typography>
-                                    )}
-                                </Box>
-                                <Box sx={{ mb: 2 }}>
-                                    <Typography variant="caption" color="text.secondary" sx={{ mb: 1 }}>Tipo de Operación</Typography>
-                                    <Box sx={{ display: 'flex', gap: 2 }}>
-                                        <Button 
-                                            variant={discountPenaltyType === 'DISCOUNT' ? 'contained' : 'outlined'}
-                                            onClick={() => setDiscountPenaltyType('DISCOUNT')}
-                                            fullWidth
-                                        >
-                                            Descuento Parcial
-                                        </Button>
-                                        <Button 
-                                            variant={discountPenaltyType === 'EXONERATION' ? 'contained' : 'outlined'}
-                                            onClick={() => setDiscountPenaltyType('EXONERATION')}
-                                            fullWidth
-                                        >
-                                            Exoneración Total
-                                        </Button>
-                                    </Box>
-                                </Box>
-                                <TextField 
-                                    fullWidth 
-                                    label="Monto a Descontar/Exonerar (Q)" 
-                                    type="number" 
-                                    value={discountPenaltyAmount} 
-                                    onChange={(e) => setDiscountPenaltyAmount(e.target.value)}
-                                    sx={{ mb: 2 }}
-                                />
-                                <TextField 
-                                    fullWidth 
-                                    label="Notas" 
-                                    multiline
-                                    rows={3}
-                                    value={discountPenaltyNotes} 
-                                    onChange={(e) => setDiscountPenaltyNotes(e.target.value)}
-                                    placeholder="Razón del descuento o exoneración..."
-                                />
-                            </DialogContent>
-                            <DialogActions>
-                                <Button onClick={() => {
+                        <AppDialog
+                            open={openDiscountPenaltyDialog}
+                            onClose={() => setOpenDiscountPenaltyDialog(false)}
+                            title={`Descontar / exonerar mora ${hasFrozenPeriods ? 'congelada' : 'acumulada'}`}
+                            size="sm"
+                            onSubmit={async () => {
+                                const amt = Number(discountPenaltyAmount || 0);
+                                if (!amt || Number.isNaN(amt) || amt <= 0) {
+                                    notify.error('Ingrese un monto válido');
+                                    return;
+                                }
+                                const currentPenalty = (registerPaymentTarget?.frozenPenalty || 0) > 0 
+                                    ? registerPaymentTarget?.frozenPenalty 
+                                    : registerPaymentTarget?.accumulatedPenalty || 0;
+                                if (amt > currentPenalty) {
+                                    notify.error(`El monto excede la mora (${formatQ(currentPenalty)})`);
+                                    return;
+                                }
+                                try {
+                                    // Determinar si es mora congelada o acumulada
+                                    const isFrozen = (registerPaymentTarget?.frozenPenalty || 0) > 0;
+                                        
+                                    if (isFrozen) {
+                                        // Usar endpoint de exoneración de mora congelada
+                                        await api.post(`/payments/${registerPaymentTarget.id}/exonerate-penalty`, {
+                                            discountAmount: amt,
+                                            type: discountPenaltyType,
+                                            notes: discountPenaltyNotes
+                                        });
+                                    } else {
+                                        // Usar endpoint específico para exonerar mora acumulada
+                                        await api.post(`/payments/${registerPaymentTarget.id}/exonerate-accumulated-penalty`, {
+                                            discountAmount: amt,
+                                            type: discountPenaltyType,
+                                            notes: discountPenaltyNotes
+                                        });
+                                    }
+                                    const message = discountPenaltyType === 'EXONERATION' ? 'Mora exonerada exitosamente' : 'Descuento aplicado a mora';
+                                    notify.success(message);
                                     setOpenDiscountPenaltyDialog(false);
                                     setDiscountPenaltyAmount('');
                                     setDiscountPenaltyType('DISCOUNT');
                                     setDiscountPenaltyNotes('');
-                                }}>Cancelar</Button>
-                                <Button variant="contained" color="warning" onClick={async () => {
-                                    const amt = Number(discountPenaltyAmount || 0);
-                                    if (!amt || Number.isNaN(amt) || amt <= 0) {
-                                        notify.error('Ingrese un monto válido');
-                                        return;
+                                    // Refrescar datos
+                                    await fetchAllPayments();
+                                    // Actualizar el registerPaymentTarget con los datos frescos
+                                    const updated = await api.get(`/payments/${registerPaymentTarget.id}`);
+                                    if (updated.data) {
+                                        setRegisterPaymentTarget(updated.data);
                                     }
-                                    const currentPenalty = (registerPaymentTarget?.frozenPenalty || 0) > 0 
-                                        ? registerPaymentTarget?.frozenPenalty 
-                                        : registerPaymentTarget?.accumulatedPenalty || 0;
-                                    if (amt > currentPenalty) {
-                                        notify.error(`El monto excede la mora (${formatQ(currentPenalty)})`);
-                                        return;
-                                    }
-                                    try {
-                                        // Determinar si es mora congelada o acumulada
-                                        const isFrozen = (registerPaymentTarget?.frozenPenalty || 0) > 0;
-                                        
-                                        if (isFrozen) {
-                                            // Usar endpoint de exoneración de mora congelada
-                                            await api.post(`/payments/${registerPaymentTarget.id}/exonerate-penalty`, {
-                                                discountAmount: amt,
-                                                type: discountPenaltyType,
-                                                notes: discountPenaltyNotes
-                                            });
-                                        } else {
-                                            // Usar endpoint específico para exonerar mora acumulada
-                                            await api.post(`/payments/${registerPaymentTarget.id}/exonerate-accumulated-penalty`, {
-                                                discountAmount: amt,
-                                                type: discountPenaltyType,
-                                                notes: discountPenaltyNotes
-                                            });
-                                        }
-                                        const message = discountPenaltyType === 'EXONERATION' ? 'Mora exonerada exitosamente' : 'Descuento aplicado a mora';
-                                        notify.success(message);
-                                        setOpenDiscountPenaltyDialog(false);
-                                        setDiscountPenaltyAmount('');
-                                        setDiscountPenaltyType('DISCOUNT');
-                                        setDiscountPenaltyNotes('');
-                                        // Refrescar datos
-                                        await fetchAllPayments();
-                                        // Actualizar el registerPaymentTarget con los datos frescos
-                                        const updated = await api.get(`/payments/${registerPaymentTarget.id}`);
-                                        if (updated.data) {
-                                            setRegisterPaymentTarget(updated.data);
-                                        }
-                                    } catch (err) {
-                                        console.error('Error descatando/exonerando mora:', err);
-                                        notify.error('Error al descontar/exonerar mora');
-                                    }
-                                }}>{discountPenaltyType === 'EXONERATION' ? 'Exonerar' : 'Aplicar Descuento'}</Button>
-                            </DialogActions>
-                        </Dialog>
+                                } catch (err) {
+                                    console.error('Error descatando/exonerando mora:', err);
+                                    notify.error('Error al descontar/exonerar mora');
+                                }
+                            }}
+                            submitLabel={discountPenaltyType === 'EXONERATION' ? 'Exonerar' : 'Aplicar descuento'}
+                        >
+                            <Box sx={{ mb: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                                <Typography variant="body2" sx={{ mb: 1 }}>
+                                    <strong>Mora {hasFrozenPeriods ? 'Congelada' : 'Acumulada'}:</strong> {formatQ(effectivePenaltyDue)}
+                                </Typography>
+                                {hasFrozenPeriods && (
+                                    <Typography variant="caption" color="text.secondary">
+                                        ❄️ {dialogPenaltyPeriods.filter(p => p.penaltyFrozen).length} período(s) con mora congelada
+                                    </Typography>
+                                )}
+                            </Box>
+                            <Box sx={{ mb: 2 }}>
+                                <Typography variant="caption" color="text.secondary" sx={{ mb: 1 }}>Tipo de Operación</Typography>
+                                <Box sx={{ display: 'flex', gap: 2 }}>
+                                    <Button 
+                                        variant={discountPenaltyType === 'DISCOUNT' ? 'contained' : 'outlined'}
+                                        onClick={() => setDiscountPenaltyType('DISCOUNT')}
+                                        fullWidth
+                                    >
+                                        Descuento Parcial
+                                    </Button>
+                                    <Button 
+                                        variant={discountPenaltyType === 'EXONERATION' ? 'contained' : 'outlined'}
+                                        onClick={() => setDiscountPenaltyType('EXONERATION')}
+                                        fullWidth
+                                    >
+                                        Exoneración Total
+                                    </Button>
+                                </Box>
+                            </Box>
+                            <MoneyField 
+                                fullWidth 
+                                label="Monto a descontar/exonerar"
+                                value={discountPenaltyAmount} 
+                                onChange={(e) => setDiscountPenaltyAmount(e.target.value)}
+                                sx={{ mb: 2 }}
+                            />
+                            <TextField 
+                                fullWidth 
+                                label="Notas" 
+                                multiline
+                                rows={3}
+                                value={discountPenaltyNotes} 
+                                onChange={(e) => setDiscountPenaltyNotes(e.target.value)}
+                                placeholder="Razón del descuento o exoneración..."
+                            />
+                        </AppDialog>
 
                         {/* Dialog: Preview de Boleta (triggered from notification) */}
-                        <Dialog open={!!previewReceipt} onClose={() => setPreviewReceipt(null)} fullWidth maxWidth="md">
-                            <DialogTitle>Vista previa de Boleta</DialogTitle>
-                            <DialogContent>
-                                {previewReceipt ? (
-                                    previewReceipt.fileUrl ? (
-                                        (previewReceipt.fileUrl.match(/(\.png|\.jpe?g|\.gif|\.webp|\.bmp)(\?|$)/i)) ? (
-                                            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                                                <img src={previewReceipt.fileUrl} alt="boleta" style={{ maxWidth: '100%', maxHeight: '60vh' }} />
-                                            </Box>
-                                        ) : (
-                                            <Box>
-                                                <Button variant="outlined" href={previewReceipt.fileUrl} target="_blank" rel="noreferrer">Abrir archivo</Button>
-                                            </Box>
-                                        )
-                                    ) : (
-                                        <Typography variant="body2">No se encontró la imagen de la boleta.</Typography>
-                                    )
-                                ) : null}
-                            </DialogContent>
-                            <DialogActions>
-                                <Button onClick={() => setPreviewReceipt(null)}>Cerrar</Button>
-                                <Button variant="contained" onClick={() => {
-                                    const navPayment = location.state?.payment ? location.state.payment : null;
-                                    const localPreview = previewReceipt;
-                                    setPreviewReceipt(null);
-                                    if (navPayment) {
-                                        const key = `navPaymentButton:${location.search || navPayment?.id || navPayment?.User?.id || ''}`;
-                                        if (!processedOpenRegisterRef.current.has(key)) {
-                                            processedOpenRegisterRef.current.add(key);
-                                            handleOpenRegister(navPayment);
-                                        }
-                                    } else if (localPreview) {
-                                        (async () => {
-                                            try {
-                                                const uid = localPreview.userId || new URLSearchParams(location.search).get('userId');
-                                                if (uid) {
-                                                    const res = await api.get('/payments', { params: buildPaymentParams({ userId: uid, page: 1, limit: 1 }) });
-                                                    const arr = res.data.payments || res.data.rows || [];
-                                                    const first = arr[0];
-                                                    if (first) {
-                                                        const key = `previewFallback:${location.search || uid}`;
-                                                        if (!processedOpenRegisterRef.current.has(key)) {
-                                                            processedOpenRegisterRef.current.add(key);
-                                                            handleOpenRegister(first);
-                                                        }
+                        <AppDialog
+                            open={!!previewReceipt}
+                            onClose={() => setPreviewReceipt(null)}
+                            title="Vista previa de boleta"
+                            size="md"
+                            onSubmit={() => {
+                                const navPayment = location.state?.payment ? location.state.payment : null;
+                                const localPreview = previewReceipt;
+                                setPreviewReceipt(null);
+                                if (navPayment) {
+                                    const key = `navPaymentButton:${location.search || navPayment?.id || navPayment?.User?.id || ''}`;
+                                    if (!processedOpenRegisterRef.current.has(key)) {
+                                        processedOpenRegisterRef.current.add(key);
+                                        handleOpenRegister(navPayment);
+                                    }
+                                } else if (localPreview) {
+                                    (async () => {
+                                        try {
+                                            const uid = localPreview.userId || new URLSearchParams(location.search).get('userId');
+                                            if (uid) {
+                                                const res = await api.get('/payments', { params: buildPaymentParams({ userId: uid, page: 1, limit: 1 }) });
+                                                const arr = res.data.payments || res.data.rows || [];
+                                                const first = arr[0];
+                                                if (first) {
+                                                    const key = `previewFallback:${location.search || uid}`;
+                                                    if (!processedOpenRegisterRef.current.has(key)) {
+                                                        processedOpenRegisterRef.current.add(key);
+                                                        handleOpenRegister(first);
                                                     }
                                                 }
-                                            } catch (e) {
-                                                console.error('Error opening register from preview fallback', e);
                                             }
-                                        })();
-                                    }
-                                }}>Registrar Pago</Button>
-                            </DialogActions>
-                        </Dialog>
+                                        } catch (e) {
+                                            console.error('Error opening register from preview fallback', e);
+                                        }
+                                    })();
+                                }
+                            }}
+                            submitLabel="Registrar pago"
+                        >
+                            {previewReceipt ? (
+                                previewReceipt.fileUrl ? (
+                                    (previewReceipt.fileUrl.match(/(\.png|\.jpe?g|\.gif|\.webp|\.bmp)(\?|$)/i)) ? (
+                                        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                                            <img src={previewReceipt.fileUrl} alt="boleta" style={{ maxWidth: '100%', maxHeight: '60vh' }} />
+                                        </Box>
+                                    ) : (
+                                        <Box>
+                                            <Button variant="outlined" href={previewReceipt.fileUrl} target="_blank" rel="noreferrer">Abrir archivo</Button>
+                                        </Box>
+                                    )
+                                ) : (
+                                    <Typography variant="body2">No se encontró la imagen de la boleta.</Typography>
+                                )
+                            ) : null}
+                        </AppDialog>
 
                         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
                             <AppTablePagination count={paginationCount} {...table.paginationProps} />

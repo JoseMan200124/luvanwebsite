@@ -1,15 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     Box,
-    Button,
     Card,
     CardContent,
     Chip,
     CircularProgress,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
     IconButton,
     Table,
     TableBody,
@@ -32,6 +27,7 @@ import { setSelectedCicloEscolarId } from '../utils/schoolContext';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import useNotify from '../hooks/useNotify';
+import AppDialog from '../components/dialogs/AppDialog';
 
 const emptyForm = {
     anio: ''
@@ -216,17 +212,19 @@ const CiclosEscolaresPage = () => {
                 </CardContent>
             </Card>
 
-            <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-                <DialogTitle>{selectedCiclo ? 'Editar Ciclo Escolar' : 'Nuevo Ciclo Escolar'}</DialogTitle>
-                <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-                    <TextField name="anio" label="Año" value={form.anio} onChange={handleChange} slotProps={{ htmlInput: { inputMode: 'numeric' } }} fullWidth />
-                    <TextField label="Etiqueta" value={form.anio ? `Ciclo Escolar ${form.anio}` : ''} fullWidth disabled />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseDialog}>Cancelar</Button>
-                    <Button onClick={handleSave} variant="contained" disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</Button>
-                </DialogActions>
-            </Dialog>
+            <AppDialog
+                open={openDialog}
+                onClose={handleCloseDialog}
+                title={selectedCiclo ? 'Editar ciclo escolar' : 'Nuevo ciclo escolar'}
+                size="sm"
+                onSubmit={handleSave}
+                submitLabel="Guardar"
+                submitting={saving}
+                contentSx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}
+            >
+                <TextField name="anio" label="Año" value={form.anio} onChange={handleChange} slotProps={{ htmlInput: { inputMode: 'numeric' } }} fullWidth />
+                <TextField label="Etiqueta" value={form.anio ? `Ciclo Escolar ${form.anio}` : ''} fullWidth disabled />
+            </AppDialog>
 
         </PageContainer>
     );

@@ -1,10 +1,10 @@
 // src/components/school/NivelesEducativosModal.jsx
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton,
+    Box, Button, IconButton,
     Paper, Alert, Stack, TextField, Typography, CircularProgress,
 } from '@mui/material';
-import { Add, Edit, Delete, DragIndicator } from '@mui/icons-material';
+import { Add, Edit, Delete, DragIndicator, School } from '@mui/icons-material';
 import {
     listEducationLevels, createEducationLevel, updateEducationLevel,
     deleteEducationLevel, getEducationLevelUsage,
@@ -12,6 +12,7 @@ import {
 import PermissionGuard from '../PermissionGuard';
 import usePermissions from '../../hooks/usePermissions';
 import useNotify from '../../hooks/useNotify';
+import AppDialog from '../dialogs/AppDialog';
 
 /**
  * Gestión del catálogo de niveles educativos del sistema. Se abre desde el
@@ -205,71 +206,73 @@ const NivelesEducativosModal = ({ open, onClose }) => {
 
     return (
         <>
-            <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-                <DialogTitle>Niveles educativos</DialogTitle>
-                <DialogContent dividers>
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2, gap: 2, flexWrap: 'wrap' }}>
-                        <Typography variant="body2" color="text.secondary">
-                            Catálogo del sistema. Arrastra cada fila para cambiar el orden. Los grados de cada nivel se definen en cada colegio, en "Editar Colegio".
-                        </Typography>
-                        <PermissionGuard permission="niveles-crear">
-                            <Button
-                                variant="contained"
-                                size="small"
-                                startIcon={<Add />}
-                                onClick={() => setEditing({ name: '' })}
-                            >
-                                Nuevo nivel
-                            </Button>
-                        </PermissionGuard>
-                    </Box>
-
-                    {levelsList}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={onClose}>Cerrar</Button>
-                </DialogActions>
-            </Dialog>
-
-            <Dialog open={Boolean(editing)} onClose={() => setEditing(null)} maxWidth="xs" fullWidth>
-                <DialogTitle>{editing?.id ? 'Editar nivel' : 'Nuevo nivel'}</DialogTitle>
-                <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-                    <TextField
-                        label="Nombre"
-                        size="small"
-                        value={editing?.name || ''}
-                        onChange={(e) => setEditing((prev) => ({ ...prev, name: e.target.value }))}
-                        autoFocus
-                    />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setEditing(null)}>Cancelar</Button>
-                    {hasPermission(editing?.id ? 'niveles-editar' : 'niveles-crear') && (
-                        <Button variant="contained" onClick={handleSaveLevel}>Guardar</Button>
-                    )}
-                </DialogActions>
-            </Dialog>
-
-            <Dialog open={Boolean(deleting)} onClose={() => setDeleting(null)} maxWidth="xs" fullWidth>
-                <DialogTitle>Eliminar nivel</DialogTitle>
-                <DialogContent>
-                    <Typography variant="body2">
-                        Se eliminará el nivel <strong>{deleting?.level?.name}</strong>.
+            <AppDialog
+                open={open}
+                onClose={onClose}
+                title="Niveles educativos"
+                icon={<School />}
+                size="sm"
+                readOnly
+            >
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2, gap: 2, flexWrap: 'wrap' }}>
+                    <Typography variant="body2" color="text.secondary">
+                        Catálogo del sistema. Arrastra cada fila para cambiar el orden. Los grados de cada nivel se definen en cada colegio, en "Editar Colegio".
                     </Typography>
-                    {(deleting?.usage?.count ?? 0) > 0 && (
-                        <Alert severity="warning" sx={{ mt: 2 }}>
-                            {deleting.usage.count} colegio(s) tienen grados asignados a este nivel.
-                            Esas asignaciones se perderán.
-                        </Alert>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setDeleting(null)}>Cancelar</Button>
-                    <PermissionGuard permission="niveles-eliminar">
-                        <Button color="error" variant="contained" onClick={handleDelete}>Eliminar</Button>
+                    <PermissionGuard permission="niveles-crear">
+                        <Button
+                            variant="contained"
+                            size="small"
+                            startIcon={<Add />}
+                            onClick={() => setEditing({ name: '' })}
+                        >
+                            Nuevo nivel
+                        </Button>
                     </PermissionGuard>
-                </DialogActions>
-            </Dialog>
+                </Box>
+
+                {levelsList}
+            </AppDialog>
+
+            <AppDialog
+                open={Boolean(editing)}
+                onClose={() => setEditing(null)}
+                title={editing?.id ? 'Editar nivel' : 'Nuevo nivel'}
+                size="xs"
+                onSubmit={handleSaveLevel}
+                submitLabel="Guardar"
+                readOnly={!(hasPermission(editing?.id ? 'niveles-editar' : 'niveles-crear'))}
+                contentSx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}
+            >
+                <TextField
+                    label="Nombre"
+                    size="small"
+                    value={editing?.name || ''}
+                    onChange={(e) => setEditing((prev) => ({ ...prev, name: e.target.value }))}
+                    autoFocus
+                />
+            </AppDialog>
+
+            <AppDialog
+                open={Boolean(deleting)}
+                onClose={() => setDeleting(null)}
+                title="Eliminar nivel"
+                icon={<Delete />}
+                tone="danger"
+                size="xs"
+                onSubmit={handleDelete}
+                submitLabel="Eliminar"
+                readOnly={!hasPermission('niveles-eliminar')}
+            >
+                <Typography variant="body2">
+                    Se eliminará el nivel <strong>{deleting?.level?.name}</strong>.
+                </Typography>
+                {(deleting?.usage?.count ?? 0) > 0 && (
+                    <Alert severity="warning" sx={{ mt: 2 }}>
+                        {deleting.usage.count} colegio(s) tienen grados asignados a este nivel.
+                        Esas asignaciones se perderán.
+                    </Alert>
+                )}
+            </AppDialog>
 
         </>
     );

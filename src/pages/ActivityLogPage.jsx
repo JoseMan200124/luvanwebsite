@@ -15,10 +15,6 @@ import {
     Chip,
     IconButton,
     Tooltip,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     Button,
     AccordionActions,
     Divider,
@@ -39,7 +35,8 @@ import {
     LocalHospital as HospitalIcon,
     Build as BuildIcon,
     LocationOn as LocationOnIcon,
-    Report as ReportIcon
+    Report as ReportIcon,
+    ReceiptLong as ReceiptLongIcon
 } from '@mui/icons-material';
 
 import {
@@ -59,6 +56,7 @@ import tw, { styled } from 'twin.macro';
 import api from '../utils/axiosConfig';
 import usePermissions from '../hooks/usePermissions';
 import useNotify from '../hooks/useNotify';
+import { validate, hasErrors, focusFirstError, clearError } from '../utils/validators';
 import moment from 'moment-timezone';
 import useTableState from '../hooks/useTableState';
 import useIsMobile from '../hooks/useIsMobile';
@@ -69,6 +67,7 @@ import { MobileCard, MobileField } from '../components/table/MobileCard';
 import { sortRows } from '../utils/tableSort';
 import { formatDateTime, formatDate } from '../utils/dateFormat';
 import { formatQ } from '../utils/currency';
+import AppDialog from '../components/dialogs/AppDialog';
 
 // -------------
 // Funciones de formateo
@@ -274,6 +273,8 @@ const ActivityLogPage = () => {
         otroFallaDetalle: ''
     });
 
+    const [incidentErrors, setIncidentErrors] = useState({});
+
     const [expanded, setExpanded] = useState(false);
 
     // Filtros & Paginación
@@ -426,9 +427,31 @@ const ActivityLogPage = () => {
 
     const handleCloseIncidentDialog = () => {
         setOpenIncidentDialog(false);
+        setIncidentErrors({});
+    };
+    
+    const handleTraceRoute = () => {
+        const destination = `${selectedCoords.lat},${selectedCoords.lng}`;
+        const openRoute = (origin) => window.open(
+            `https://www.google.com/maps/dir/?api=1${origin ? `&origin=${origin}` : ''}&destination=${destination}`,
+            '_blank'
+        );
+        if (!navigator.geolocation) {
+            openRoute(null);
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            (pos) => openRoute(`${pos.coords.latitude},${pos.coords.longitude}`),
+            (err) => {
+                console.error('No se pudo obtener geolocalización =>', err);
+                openRoute(null);
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
     };
 
     const handleIncidentFormChange = (field, value) => {
+        setIncidentErrors((prev) => clearError(prev, field));
         setIncidentForm((prev) => ({
             ...prev,
             [field]: value
@@ -436,8 +459,10 @@ const ActivityLogPage = () => {
     };
 
     const handleSubmitIncident = async () => {
-        if (!incidentForm.descripcion) {
-            notify.warning('La descripción es obligatoria para el incidente');
+        const found = validate(incidentForm, { descripcion: ['required'] });
+        setIncidentErrors(found);
+        if (hasErrors(found)) {
+            focusFirstError(found);
             return;
         }
         if (!incidentForm.busId) {
@@ -1469,231 +1494,182 @@ const ActivityLogPage = () => {
 
             {/* Dialog Boletas: requiere la llave de GET /parents/:id/receipts */}
             {puedeVerBoletas && (
-                <Dialog
+                <AppDialog
                     open={openBoletasDialog}
                     onClose={handleCloseBoletasDialog}
-                    maxWidth="md"
-                    fullWidth
+                    title="Boletas registradas"
+                    subtitle={currentParentName}
+                    icon={<ReceiptLongIcon />}
+                    size="md"
+                    readOnly
                 >
-                    <DialogTitle>Boletas registradas de {currentParentName}</DialogTitle>
-                    <DialogContent dividers>
-                        {loadingBoletas && (
-                            <div tw="flex justify-center p-4">
-                                <CircularProgress />
-                            </div>
-                        )}
-                        {!loadingBoletas && currentBoletas.length === 0 && (
-                            <Typography>No hay boletas para este padre.</Typography>
-                        )}
-                        {!loadingBoletas && currentBoletas.length > 0 && (
-                            <Grid2 container spacing={2}>
-                                {currentBoletas.map((b) => (
-                                    <Grid2 size={{ xs: 12, md: 4 }} key={b.id}>
-                                        <Paper elevation={2} sx={{ p: 2, borderRadius: '8px' }}>
-                                            {String(b.uploadSource || '').toUpperCase() === 'ADMIN' && (
-                                                <Chip size="small" variant="outlined" color="primary" label="Administrador" sx={{ mb: 1 }} />
-                                            )}
-                                            <Typography variant="body2">
-                                                <strong>Fecha:</strong>{' '}
-                                                {formatDateTime(b.displayDate || b.uploadedAt, { utc: true })}
-                                            </Typography>
-                                            <img
-                                                src={b.fileUrl}
-                                                alt="Boleta"
-                                                style={{
-                                                    maxWidth: '100%',
-                                                    border: '1px solid #ddd',
-                                                    borderRadius: '4px',
-                                                    marginTop: '8px'
-                                                }}
-                                            />
-                                        </Paper>
-                                    </Grid2>
-                                ))}
-                            </Grid2>
-                        )}
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCloseBoletasDialog} variant="outlined">
-                            Cerrar
-                        </Button>
-                    </DialogActions>
-                </Dialog>
+                    {loadingBoletas && (
+                        <div tw="flex justify-center p-4">
+                            <CircularProgress />
+                        </div>
+                    )}
+                    {!loadingBoletas && currentBoletas.length === 0 && (
+                        <Typography>No hay boletas para este padre.</Typography>
+                    )}
+                    {!loadingBoletas && currentBoletas.length > 0 && (
+                        <Grid2 container spacing={2}>
+                            {currentBoletas.map((b) => (
+                                <Grid2 size={{ xs: 12, md: 4 }} key={b.id}>
+                                    <Paper elevation={2} sx={{ p: 2, borderRadius: '8px' }}>
+                                        {String(b.uploadSource || '').toUpperCase() === 'ADMIN' && (
+                                            <Chip size="small" variant="outlined" color="primary" label="Administrador" sx={{ mb: 1 }} />
+                                        )}
+                                        <Typography variant="body2">
+                                            <strong>Fecha:</strong>{' '}
+                                            {formatDateTime(b.displayDate || b.uploadedAt, { utc: true })}
+                                        </Typography>
+                                        <img
+                                            src={b.fileUrl}
+                                            alt="Boleta"
+                                            style={{
+                                                maxWidth: '100%',
+                                                border: '1px solid #ddd',
+                                                borderRadius: '4px',
+                                                marginTop: '8px'
+                                            }}
+                                        />
+                                    </Paper>
+                                </Grid2>
+                            ))}
+                        </Grid2>
+                    )}
+                </AppDialog>
             )}
 
             {/* Dialog ver Mapa */}
-            <Dialog open={openMapDialog} onClose={handleCloseMap} maxWidth="md" fullWidth>
-                <DialogTitle>Ubicación en Mapa</DialogTitle>
-                <DialogContent dividers>
-                    {selectedCoords.lat && selectedCoords.lng ? (
-                        <iframe
-                            title={`Map showing location at ${selectedCoords.lat}, ${selectedCoords.lng}`}
-                            width="100%"
-                            height="450"
-                            style={{ border: 0 }}
-                            loading="lazy"
-                            allowFullScreen
-                            src={`https://www.google.com/maps?q=${selectedCoords.lat},${selectedCoords.lng}&z=15&output=embed`}
-                        />
-                    ) : (
-                        <Typography>Coordenadas no disponibles</Typography>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button variant="outlined" onClick={handleCloseMap}>
-                        Cerrar
+            <AppDialog
+                open={openMapDialog}
+                onClose={handleCloseMap}
+                title="Ubicación en mapa"
+                icon={<LocationOnIcon />}
+                size="md"
+                readOnly
+                extraActions={selectedCoords.lat && selectedCoords.lng ? (
+                    <Button variant="contained" color="primary" onClick={handleTraceRoute}>
+                        Trazar ruta
                     </Button>
-                    {selectedCoords.lat && selectedCoords.lng && (
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            onClick={() => {
-                                if (navigator.geolocation) {
-                                    navigator.geolocation.getCurrentPosition(
-                                        (pos) => {
-                                            const userLat = pos.coords.latitude;
-                                            const userLng = pos.coords.longitude;
-                                            window.open(
-                                                `https://www.google.com/maps/dir/?api=1&origin=${userLat},${userLng}&destination=${selectedCoords.lat},${selectedCoords.lng}`,
-                                                '_blank'
-                                            );
-                                        },
-                                        (err) => {
-                                            console.error('No se pudo obtener geolocalización =>', err);
-                                            window.open(
-                                                `https://www.google.com/maps/dir/?api=1&destination=${selectedCoords.lat},${selectedCoords.lng}`,
-                                                '_blank'
-                                            );
-                                        },
-                                        {
-                                            enableHighAccuracy: true,
-                                            timeout: 10000,
-                                            maximumAge: 0
-                                        }
-                                    );
-                                } else {
-                                    window.open(
-                                        `https://www.google.com/maps/dir/?api=1&destination=${selectedCoords.lat},${selectedCoords.lng}`,
-                                        '_blank'
-                                    );
-                                }
-                            }}
-                        >
-                            Trazar ruta
-                        </Button>
-                    )}
-                </DialogActions>
-            </Dialog>
+                ) : null}
+            >
+                {selectedCoords.lat && selectedCoords.lng ? (
+                    <iframe
+                        title={`Map showing location at ${selectedCoords.lat}, ${selectedCoords.lng}`}
+                        width="100%"
+                        height="450"
+                        style={{ border: 0 }}
+                        loading="lazy"
+                        allowFullScreen
+                        src={`https://www.google.com/maps?q=${selectedCoords.lat},${selectedCoords.lng}&z=15&output=embed`}
+                    />
+                ) : (
+                    <Typography>Coordenadas no disponibles</Typography>
+                )}
+            </AppDialog>
 
             {/* Dialog Reportar Incidente */}
-            <Dialog
+            <AppDialog
                 open={openIncidentDialog}
                 onClose={handleCloseIncidentDialog}
-                maxWidth="sm"
-                fullWidth
+                title="Reportar incidente"
+                icon={<ReportIcon />}
+                size="sm"
+                onSubmit={handleSubmitIncident}
+                submitLabel="Reportar"
+                submitting={loading}
+                readOnly={!puedeCrearIncidente}
             >
-                <DialogTitle>Reportar Incidente</DialogTitle>
-                <DialogContent dividers>
-                    <Grid2 container spacing={2}>
-                        <Grid2 size={{ xs: 12, sm: 6 }}>
-                            <FormControl fullWidth margin="normal">
-                                <InputLabel id="tipo-falla-label">Tipo de Falla</InputLabel>
-                                <Select
-                                    labelId="tipo-falla-label"
-                                    label="Tipo de Falla"
-                                    value={incidentForm.tipoFalla}
-                                    onChange={(e) => handleIncidentFormChange('tipoFalla', e.target.value)}
-                                >
-                                    <MenuItem value="mecánico">Mecánico</MenuItem>
-                                    <MenuItem value="eléctrico">Eléctrico</MenuItem>
-                                    <MenuItem value="choque">Choque</MenuItem>
-                                    <MenuItem value="otro">Otro</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Grid2>
+                <Grid2 container spacing={2}>
+                    <Grid2 size={{ xs: 12, sm: 6 }}>
+                        <FormControl fullWidth margin="normal">
+                            <InputLabel id="tipo-falla-label">Tipo de falla</InputLabel>
+                            <Select
+                                labelId="tipo-falla-label"
+                                label="Tipo de falla"
+                                value={incidentForm.tipoFalla}
+                                onChange={(e) => handleIncidentFormChange('tipoFalla', e.target.value)}
+                            >
+                                <MenuItem value="mecánico">Mecánico</MenuItem>
+                                <MenuItem value="eléctrico">Eléctrico</MenuItem>
+                                <MenuItem value="choque">Choque</MenuItem>
+                                <MenuItem value="otro">Otro</MenuItem>
+                            </Select>
+                        </FormControl>
+                    </Grid2>
 
-                        <Grid2 size={{ xs: 12, sm: 6 }}>
-                            <FormControl fullWidth margin="normal">
-                                <InputLabel id="tipo-incidente-label">Tipo de Incidente</InputLabel>
-                                <Select
-                                    labelId="tipo-incidente-label"
-                                    label="Tipo de Incidente"
-                                    value={incidentForm.tipo}
-                                    onChange={(e) => handleIncidentFormChange('tipo', e.target.value)}
-                                >
-                                    <MenuItem value="incidente">Problema menor</MenuItem>
-                                    <MenuItem value="accidente">Problema mayor</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Grid2>
+                    <Grid2 size={{ xs: 12, sm: 6 }}>
+                        <FormControl fullWidth margin="normal">
+                            <InputLabel id="tipo-incidente-label">Tipo de incidente</InputLabel>
+                            <Select
+                                labelId="tipo-incidente-label"
+                                label="Tipo de incidente"
+                                value={incidentForm.tipo}
+                                onChange={(e) => handleIncidentFormChange('tipo', e.target.value)}
+                            >
+                                <MenuItem value="incidente">Problema menor</MenuItem>
+                                <MenuItem value="accidente">Problema mayor</MenuItem>
+                            </Select>
+                        </FormControl>
+                    </Grid2>
 
-                        {incidentForm.tipoFalla === 'otro' && (
-                            <Grid2 size={{ xs: 12 }}>
-                                <TextField
-                                    label="Detalle de la Falla (Otro)"
-                                    value={incidentForm.otroFallaDetalle}
-                                    onChange={(e) => handleIncidentFormChange('otroFallaDetalle', e.target.value)}
-                                    fullWidth
-                                />
-                            </Grid2>
-                        )}
-
-                        <Grid2 size={{ xs: 12 }}>
-                            <FormControlLabel
-                                control={
-                                    <Switch
-                                        checked={incidentForm.pudoContinuarRuta}
-                                        onChange={(e) =>
-                                            handleIncidentFormChange('pudoContinuarRuta', e.target.checked)
-                                        }
-                                    />
-                                }
-                                label="¿Pudo continuar la ruta?"
-                            />
-                        </Grid2>
-
-                        <Grid2 size={{ xs: 12 }}>
-                            <FormControlLabel
-                                control={
-                                    <Switch
-                                        checked={incidentForm.seUtilizoBusSuplente}
-                                        onChange={(e) =>
-                                            handleIncidentFormChange('seUtilizoBusSuplente', e.target.checked)
-                                        }
-                                    />
-                                }
-                                label="¿Se utilizó bus suplente?"
-                            />
-                        </Grid2>
-
+                    {incidentForm.tipoFalla === 'otro' && (
                         <Grid2 size={{ xs: 12 }}>
                             <TextField
-                                label="Descripción"
-                                value={incidentForm.descripcion}
-                                onChange={(e) => handleIncidentFormChange('descripcion', e.target.value)}
-                                multiline
-                                rows={4}
+                                label="Detalle de la falla (otro)"
+                                value={incidentForm.otroFallaDetalle}
+                                onChange={(e) => handleIncidentFormChange('otroFallaDetalle', e.target.value)}
                                 fullWidth
                             />
                         </Grid2>
-                    </Grid2>
-                </DialogContent>
-                <DialogActions>
-                    <Button variant="outlined" onClick={handleCloseIncidentDialog}>
-                        Cancelar
-                    </Button>
-                    {puedeCrearIncidente && (
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            onClick={handleSubmitIncident}
-                            disabled={loading}
-                        >
-                            Reportar
-                        </Button>
                     )}
-                </DialogActions>
-            </Dialog>
+
+                    <Grid2 size={{ xs: 12 }}>
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    checked={incidentForm.pudoContinuarRuta}
+                                    onChange={(e) =>
+                                        handleIncidentFormChange('pudoContinuarRuta', e.target.checked)
+                                    }
+                                />
+                            }
+                            label="¿Pudo continuar la ruta?"
+                        />
+                    </Grid2>
+
+                    <Grid2 size={{ xs: 12 }}>
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    checked={incidentForm.seUtilizoBusSuplente}
+                                    onChange={(e) =>
+                                        handleIncidentFormChange('seUtilizoBusSuplente', e.target.checked)
+                                    }
+                                />
+                            }
+                            label="¿Se utilizó bus suplente?"
+                        />
+                    </Grid2>
+
+                    <Grid2 size={{ xs: 12 }}>
+                        <TextField
+                            label="Descripción"
+                            name="descripcion"
+                            required
+                            error={Boolean(incidentErrors.descripcion)}
+                            helperText={incidentErrors.descripcion}
+                            value={incidentForm.descripcion}
+                            onChange={(e) => handleIncidentFormChange('descripcion', e.target.value)}
+                            multiline
+                            rows={4}
+                            fullWidth
+                        />
+                    </Grid2>
+                </Grid2>
+            </AppDialog>
 
         </PageContainer>
     );

@@ -1,10 +1,11 @@
 // src/components/paradas/FamiliaCard.jsx
 import React, { memo, useCallback, useState } from 'react';
-import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Grid, Paper, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, Grid, Paper, Typography } from '@mui/material';
 import { Add, ExpandLess, ExpandMore } from '@mui/icons-material';
 import { paradaNueva, revisarEstudiante, revisarFamilia } from './paradasModel';
 import ListaParadasComparada from './ListaParadasComparada';
 import ParadaFila from './ParadaFila';
+import AppDialog from '../dialogs/AppDialog';
 
 function EstudianteParadas({ familyDetailId, est, contexto, soloLectura, despachar }) {
     const [verCambios, setVerCambios] = useState(false);
@@ -55,17 +56,19 @@ function EstudianteParadas({ familyDetailId, est, contexto, soloLectura, despach
                     Agregar parada
                 </Button>
             )}
-            <Dialog open={verCambios} onClose={() => setVerCambios(false)} maxWidth="md" fullWidth>
-                <DialogTitle>Cambios de {est.fullName}</DialogTitle>
-                <DialogContent>
-                    <Typography variant="body2" color="text.secondary" gutterBottom>Resaltado: lo que es distinto entre ambas columnas.</Typography>
-                    <Grid container spacing={2}>
-                        <Grid item xs={12} md={6}><ListaParadasComparada titulo="Ahora en la plataforma" paradas={est.paradasActuales || []} otras={est.paradas} /></Grid>
-                        <Grid item xs={12} md={6}><ListaParadasComparada titulo="En este borrador" paradas={est.paradas} otras={est.paradasActuales || []} /></Grid>
-                    </Grid>
-                </DialogContent>
-                <DialogActions><Button onClick={() => setVerCambios(false)}>Cerrar</Button></DialogActions>
-            </Dialog>
+            <AppDialog
+                open={verCambios}
+                onClose={() => setVerCambios(false)}
+                title={`Cambios de ${est.fullName}`}
+                subtitle="Resaltado: lo que es distinto entre ambas columnas."
+                size="md"
+                readOnly
+            >
+                <Grid container spacing={2}>
+                    <Grid item xs={12} md={6}><ListaParadasComparada titulo="Ahora en la plataforma" paradas={est.paradasActuales || []} otras={est.paradas} /></Grid>
+                    <Grid item xs={12} md={6}><ListaParadasComparada titulo="En este borrador" paradas={est.paradas} otras={est.paradasActuales || []} /></Grid>
+                </Grid>
+            </AppDialog>
         </Box>
     );
 }

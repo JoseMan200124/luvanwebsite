@@ -1,5 +1,5 @@
 // src/pages/ColaboradoresPage.jsx
-import React, { useState, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useContext, useCallback, useRef } from 'react';
 import {
     Paper,
     Typography,
@@ -35,7 +35,6 @@ import {
     Add,
     ExpandMore,
     FileUpload,
-    GetApp,
     Mail,
     DirectionsBus,
     ToggleOn,
@@ -70,6 +69,7 @@ import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
 import { formatClock, formatDateTime } from '../utils/dateFormat';
 import { SERVICE_STATUS } from '../constants/statuses';
+import AppDialog from '../components/dialogs/AppDialog';
 
 const COLABORADOR_STATUS_OPTIONS = ['Nuevo', 'Duplicado', 'Actualizado', 'Sin asignaciones', 'Activo', 'Inactivo']
     .map((status) => ({ value: status, label: status }));
@@ -1468,280 +1468,279 @@ const ColaboradoresPage = () => {
 
     const paginatedColaboradores = sortedColaboradores.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
+    // Valores con que se abrió el formulario de colaborador: cerrar con cambios pide confirmación.
+    const colaboradorFormSnapshot = JSON.stringify(colaboradorForm);
+    const colaboradorInitialRef = useRef('');
+    const colaboradorDialogOpen = openCreateDialog || openEditDialog;
+    useEffect(() => {
+        if (colaboradorDialogOpen) {
+            colaboradorInitialRef.current = colaboradorFormSnapshot;
+        }
+    
+    }, [colaboradorDialogOpen]);
+
     const renderColaboradorDialog = (isEdit = false) => (
-        <Dialog 
-            open={isEdit ? openEditDialog : openCreateDialog} 
+        <AppDialog
+            open={isEdit ? openEditDialog : openCreateDialog}
             onClose={handleCloseDialogs}
-            maxWidth="md"
-            fullWidth
+            title={isEdit ? 'Editar colaborador' : 'Nuevo colaborador'}
+            size="md"
+            onSubmit={isEdit ? handleUpdateColaborador : handleCreateColaborador}
+            submitLabel={isEdit ? 'Actualizar' : 'Crear'}
+            submitDisabled={!colaboradorForm.username || !colaboradorForm.email || (!isEdit && !colaboradorForm.password)}
+            readOnly={!(hasPermission(isEdit ? 'corporaciones-editar-colaborador' : 'corporaciones-crear-colaborador'))}
+            dirty={colaboradorFormSnapshot !== colaboradorInitialRef.current}
         >
-            <DialogTitle>
-                {isEdit ? 'Editar Colaborador' : 'Crear Nuevo Colaborador'}
-            </DialogTitle>
-            <DialogContent>
-                <Box sx={{ mt: 2 }}>
-                    {/* Información Básica */}
-                    <StyledAccordion 
-                        expanded={expandedPanels.basicInfo}
-                        onChange={handleAccordionChange('basicInfo')}
-                    >
-                        <AccordionSummary expandIcon={<ExpandMore />}>
-                            <Typography variant="subtitle1" fontWeight="bold">
-                                Información Básica
-                            </Typography>
-                        </AccordionSummary>
-                        <AccordionDetails>
-                            <Grid container spacing={2}>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField
-                                        fullWidth
-                                        label="Nombres"
-                                        value={colaboradorForm.firstName}
-                                        onChange={(e) => handleFormChange('firstName', e.target.value)}
-                                        required
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField
-                                        fullWidth
-                                        label="Apellidos"
-                                        value={colaboradorForm.lastName}
-                                        onChange={(e) => handleFormChange('lastName', e.target.value)}
-                                        required
-                                    />
-                                </Grid>
-                                <Grid item xs={12}>
-                                    <TextField
-                                        fullWidth
-                                        label="Nombre Usuario"
-                                        value={colaboradorForm.username}
-                                        onChange={(e) => handleFormChange('username', e.target.value)}
-                                        required
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField
-                                        fullWidth
-                                        label="Email"
-                                        type="email"
-                                        value={colaboradorForm.email}
-                                        onChange={(e) => handleFormChange('email', e.target.value)}
-                                        required
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField
-                                        fullWidth
-                                        label={isEdit ? 'Nueva Contraseña (opcional)' : 'Contraseña'}
-                                        type="password"
-                                        autoComplete="new-password"
-                                        value={colaboradorForm.password}
-                                        onChange={(e) => handleFormChange('password', e.target.value)}
-                                        required={!isEdit}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField
-                                        fullWidth
-                                        label="Teléfono"
-                                        value={colaboradorForm.phoneNumber}
-                                        onChange={(e) => handleFormChange('phoneNumber', e.target.value)}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField
-                                        fullWidth
-                                        label="Número de empleado"
-                                        value={colaboradorForm.employeeNumber}
-                                        onChange={(e) => handleFormChange('employeeNumber', e.target.value)}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <FormControl fullWidth>
-                                        <InputLabel>Horario</InputLabel>
-                                        <Select
-                                            value={colaboradorForm.selectedSchedule}
-                                            label="Horario"
-                                            onChange={(e) => handleFormChange('selectedSchedule', e.target.value)}
-                                        >
-                                            <MenuItem value={-1}>
-                                                <em>Seleccionar horario</em>
-                                            </MenuItem>
-                                            {Array.isArray(corporationData?.schedules) && corporationData.schedules.length > 0 ? (
-                                                corporationData.schedules.map((schedule, idx) => (
-                                                    <MenuItem key={idx} value={idx}>
-                                                        {schedule.name} ({formatClock(schedule.entryTime)} - {formatClock(schedule.exitTime)})
-                                                    </MenuItem>
-                                                ))
-                                            ) : (
-                                                <MenuItem disabled value={-1}>
-                                                    No hay horarios configurados
+            <Box sx={{ mt: 2 }}>
+                {/* Información Básica */}
+                <StyledAccordion 
+                    expanded={expandedPanels.basicInfo}
+                    onChange={handleAccordionChange('basicInfo')}
+                >
+                    <AccordionSummary expandIcon={<ExpandMore />}>
+                        <Typography variant="subtitle1" fontWeight="bold">
+                            Información Básica
+                        </Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                        <Grid container spacing={2}>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Nombres"
+                                    value={colaboradorForm.firstName}
+                                    onChange={(e) => handleFormChange('firstName', e.target.value)}
+                                    required
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Apellidos"
+                                    value={colaboradorForm.lastName}
+                                    onChange={(e) => handleFormChange('lastName', e.target.value)}
+                                    required
+                                />
+                            </Grid>
+                            <Grid item xs={12}>
+                                <TextField
+                                    fullWidth
+                                    label="Nombre Usuario"
+                                    value={colaboradorForm.username}
+                                    onChange={(e) => handleFormChange('username', e.target.value)}
+                                    required
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Email"
+                                    type="email"
+                                    value={colaboradorForm.email}
+                                    onChange={(e) => handleFormChange('email', e.target.value)}
+                                    required
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label={isEdit ? 'Nueva Contraseña (opcional)' : 'Contraseña'}
+                                    type="password"
+                                    autoComplete="new-password"
+                                    value={colaboradorForm.password}
+                                    onChange={(e) => handleFormChange('password', e.target.value)}
+                                    required={!isEdit}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Teléfono"
+                                    value={colaboradorForm.phoneNumber}
+                                    onChange={(e) => handleFormChange('phoneNumber', e.target.value)}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Número de empleado"
+                                    value={colaboradorForm.employeeNumber}
+                                    onChange={(e) => handleFormChange('employeeNumber', e.target.value)}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Horario</InputLabel>
+                                    <Select
+                                        value={colaboradorForm.selectedSchedule}
+                                        label="Horario"
+                                        onChange={(e) => handleFormChange('selectedSchedule', e.target.value)}
+                                    >
+                                        <MenuItem value={-1}>
+                                            <em>Seleccionar horario</em>
+                                        </MenuItem>
+                                        {Array.isArray(corporationData?.schedules) && corporationData.schedules.length > 0 ? (
+                                            corporationData.schedules.map((schedule, idx) => (
+                                                <MenuItem key={idx} value={idx}>
+                                                    {schedule.name} ({formatClock(schedule.entryTime)} - {formatClock(schedule.exitTime)})
                                                 </MenuItem>
-                                            )}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
+                                            ))
+                                        ) : (
+                                            <MenuItem disabled value={-1}>
+                                                No hay horarios configurados
+                                            </MenuItem>
+                                        )}
+                                    </Select>
+                                </FormControl>
                             </Grid>
-                        </AccordionDetails>
-                    </StyledAccordion>
+                        </Grid>
+                    </AccordionDetails>
+                </StyledAccordion>
 
-                    {/* Campos adicionales (dinámicos definidos por la corporación) */}
-                    {Array.isArray(corporationData?.extraEnrollmentFields) && corporationData.extraEnrollmentFields.length > 0 && (
-                        <StyledAccordion 
-                            expanded={expandedPanels.extraFields}
-                            onChange={handleAccordionChange('extraFields')}
-                        >
-                            <AccordionSummary expandIcon={<ExpandMore />}>
-                                <Typography variant="subtitle1" fontWeight="bold">Campos Adicionales</Typography>
-                            </AccordionSummary>
-                            <AccordionDetails>
-                                <Grid container spacing={2}>
-                                    {corporationData.extraEnrollmentFields.map((field, idx) => {
-                                        const fieldName = field.fieldName || field.label || field.name || field.key || `extra_${idx}`;
-                                        const label = fieldName;
-                                        const type = (field.type || 'text').toLowerCase();
-
-                                        const handleChangeExtra = (value) => {
-                                            setExtraFieldsValues(prev => ({ ...prev, [fieldName]: value }));
-                                        };
-
-                                        return (
-                                            <Grid item xs={12} sm={6} key={fieldName}>
-                                                {type === 'select' ? (
-                                                    <FormControl fullWidth>
-                                                        <InputLabel>{label}</InputLabel>
-                                                        <Select
-                                                            value={extraFieldsValues[fieldName] ?? ''}
-                                                            label={label}
-                                                            onChange={(e) => handleChangeExtra(e.target.value)}
-                                                        >
-                                                            {(Array.isArray(field.options) ? field.options : []).map((opt, i) => (
-                                                                <MenuItem key={i} value={opt.value ?? opt}>{opt.label ?? opt}</MenuItem>
-                                                            ))}
-                                                        </Select>
-                                                    </FormControl>
-                                                ) : type === 'textarea' ? (
-                                                    <TextField
-                                                        fullWidth
-                                                        label={label}
-                                                        multiline
-                                                        rows={4}
-                                                        value={extraFieldsValues[fieldName] ?? ''}
-                                                        onChange={(e) => handleChangeExtra(e.target.value)}
-                                                    />
-                                                ) : type === 'checkbox' ? (
-                                                    <FormControl fullWidth>
-                                                        <InputLabel shrink>{label}</InputLabel>
-                                                        <Select
-                                                            value={extraFieldsValues[fieldName] ? 'true' : 'false'}
-                                                            onChange={(e) => handleChangeExtra(e.target.value === 'true')}
-                                                        >
-                                                            <MenuItem value={'true'}>Sí</MenuItem>
-                                                            <MenuItem value={'false'}>No</MenuItem>
-                                                        </Select>
-                                                    </FormControl>
-                                                ) : (
-                                                    <TextField
-                                                        fullWidth
-                                                        label={label}
-                                                        value={extraFieldsValues[fieldName] ?? ''}
-                                                        onChange={(e) => handleChangeExtra(e.target.value)}
-                                                    />
-                                                )}
-                                            </Grid>
-                                        );
-                                    })}
-                                </Grid>
-                            </AccordionDetails>
-                        </StyledAccordion>
-                    )}
-
-                    {/* Información de Contacto */}
+                {/* Campos adicionales (dinámicos definidos por la corporación) */}
+                {Array.isArray(corporationData?.extraEnrollmentFields) && corporationData.extraEnrollmentFields.length > 0 && (
                     <StyledAccordion 
-                        expanded={expandedPanels.contactInfo}
-                        onChange={handleAccordionChange('contactInfo')}
+                        expanded={expandedPanels.extraFields}
+                        onChange={handleAccordionChange('extraFields')}
                     >
                         <AccordionSummary expandIcon={<ExpandMore />}>
-                            <Typography variant="subtitle1" fontWeight="bold">
-                                Información de Contacto
-                            </Typography>
+                            <Typography variant="subtitle1" fontWeight="bold">Campos Adicionales</Typography>
                         </AccordionSummary>
                         <AccordionDetails>
                             <Grid container spacing={2}>
-                                <Grid item xs={12}>
-                                    <TextField
-                                        fullWidth
-                                        label="Dirección de Servicio"
-                                        value={colaboradorForm.serviceAddress}
-                                        onChange={(e) => handleFormChange('serviceAddress', e.target.value)}
-                                        multiline
-                                        rows={2}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField
-                                        fullWidth
-                                        label="Zona o Sector"
-                                        value={colaboradorForm.zoneOrSector}
-                                        onChange={(e) => handleFormChange('zoneOrSector', e.target.value)}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <FormControl fullWidth>
-                                        <InputLabel>Tipo de Ruta</InputLabel>
-                                        <Select
-                                            value={colaboradorForm.routeType}
-                                            label="Tipo de Ruta"
-                                            onChange={(e) => handleFormChange('routeType', e.target.value)}
-                                        >
-                                            <MenuItem value="Completa">Completa</MenuItem>
-                                            <MenuItem value="Media PM">Media PM</MenuItem>
-                                            <MenuItem value="Media AM">Media AM</MenuItem>
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField
-                                        fullWidth
-                                        label="Contacto de Emergencia"
-                                        value={colaboradorForm.emergencyContact}
-                                        onChange={(e) => handleFormChange('emergencyContact', e.target.value)}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField
-                                        fullWidth
-                                        label="Relación (Emergencia)"
-                                        value={colaboradorForm.emergencyRelationship}
-                                        onChange={(e) => handleFormChange('emergencyRelationship', e.target.value)}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField
-                                        fullWidth
-                                        label="Teléfono de Emergencia"
-                                        value={colaboradorForm.emergencyPhone}
-                                        onChange={(e) => handleFormChange('emergencyPhone', e.target.value)}
-                                    />
-                                </Grid>
+                                {corporationData.extraEnrollmentFields.map((field, idx) => {
+                                    const fieldName = field.fieldName || field.label || field.name || field.key || `extra_${idx}`;
+                                    const label = fieldName;
+                                    const type = (field.type || 'text').toLowerCase();
+
+                                    const handleChangeExtra = (value) => {
+                                        setExtraFieldsValues(prev => ({ ...prev, [fieldName]: value }));
+                                    };
+
+                                    return (
+                                        <Grid item xs={12} sm={6} key={fieldName}>
+                                            {type === 'select' ? (
+                                                <FormControl fullWidth>
+                                                    <InputLabel>{label}</InputLabel>
+                                                    <Select
+                                                        value={extraFieldsValues[fieldName] ?? ''}
+                                                        label={label}
+                                                        onChange={(e) => handleChangeExtra(e.target.value)}
+                                                    >
+                                                        {(Array.isArray(field.options) ? field.options : []).map((opt, i) => (
+                                                            <MenuItem key={i} value={opt.value ?? opt}>{opt.label ?? opt}</MenuItem>
+                                                        ))}
+                                                    </Select>
+                                                </FormControl>
+                                            ) : type === 'textarea' ? (
+                                                <TextField
+                                                    fullWidth
+                                                    label={label}
+                                                    multiline
+                                                    rows={4}
+                                                    value={extraFieldsValues[fieldName] ?? ''}
+                                                    onChange={(e) => handleChangeExtra(e.target.value)}
+                                                />
+                                            ) : type === 'checkbox' ? (
+                                                <FormControl fullWidth>
+                                                    <InputLabel shrink>{label}</InputLabel>
+                                                    <Select
+                                                        value={extraFieldsValues[fieldName] ? 'true' : 'false'}
+                                                        onChange={(e) => handleChangeExtra(e.target.value === 'true')}
+                                                    >
+                                                        <MenuItem value={'true'}>Sí</MenuItem>
+                                                        <MenuItem value={'false'}>No</MenuItem>
+                                                    </Select>
+                                                </FormControl>
+                                            ) : (
+                                                <TextField
+                                                    fullWidth
+                                                    label={label}
+                                                    value={extraFieldsValues[fieldName] ?? ''}
+                                                    onChange={(e) => handleChangeExtra(e.target.value)}
+                                                />
+                                            )}
+                                        </Grid>
+                                    );
+                                })}
                             </Grid>
                         </AccordionDetails>
                     </StyledAccordion>
-                </Box>
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={handleCloseDialogs}>Cancelar</Button>
-                {hasPermission(isEdit ? 'corporaciones-editar-colaborador' : 'corporaciones-crear-colaborador') && (
-                    <Button
-                        onClick={isEdit ? handleUpdateColaborador : handleCreateColaborador}
-                        variant="contained"
-                        disabled={!colaboradorForm.username || !colaboradorForm.email || (!isEdit && !colaboradorForm.password)}
-                    >
-                        {isEdit ? 'Actualizar' : 'Crear'}
-                    </Button>
                 )}
-            </DialogActions>
-        </Dialog>
+
+                {/* Información de Contacto */}
+                <StyledAccordion 
+                    expanded={expandedPanels.contactInfo}
+                    onChange={handleAccordionChange('contactInfo')}
+                >
+                    <AccordionSummary expandIcon={<ExpandMore />}>
+                        <Typography variant="subtitle1" fontWeight="bold">
+                            Información de Contacto
+                        </Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                        <Grid container spacing={2}>
+                            <Grid item xs={12}>
+                                <TextField
+                                    fullWidth
+                                    label="Dirección de Servicio"
+                                    value={colaboradorForm.serviceAddress}
+                                    onChange={(e) => handleFormChange('serviceAddress', e.target.value)}
+                                    multiline
+                                    rows={2}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Zona o Sector"
+                                    value={colaboradorForm.zoneOrSector}
+                                    onChange={(e) => handleFormChange('zoneOrSector', e.target.value)}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Tipo de Ruta</InputLabel>
+                                    <Select
+                                        value={colaboradorForm.routeType}
+                                        label="Tipo de Ruta"
+                                        onChange={(e) => handleFormChange('routeType', e.target.value)}
+                                    >
+                                        <MenuItem value="Completa">Completa</MenuItem>
+                                        <MenuItem value="Media PM">Media PM</MenuItem>
+                                        <MenuItem value="Media AM">Media AM</MenuItem>
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Contacto de Emergencia"
+                                    value={colaboradorForm.emergencyContact}
+                                    onChange={(e) => handleFormChange('emergencyContact', e.target.value)}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Relación (Emergencia)"
+                                    value={colaboradorForm.emergencyRelationship}
+                                    onChange={(e) => handleFormChange('emergencyRelationship', e.target.value)}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Teléfono de Emergencia"
+                                    value={colaboradorForm.emergencyPhone}
+                                    onChange={(e) => handleFormChange('emergencyPhone', e.target.value)}
+                                />
+                            </Grid>
+                        </Grid>
+                    </AccordionDetails>
+                </StyledAccordion>
+            </Box>
+        </AppDialog>
     );
 
     const headerActions = [
@@ -1765,57 +1764,50 @@ const ColaboradoresPage = () => {
                 actions={headerActions}
             />
 
-            <Dialog open={openDownloadDialog} onClose={() => setOpenDownloadDialog(false)}>
-                <DialogTitle>Descargar Colaboradores</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>Selecciona qué deseas descargar:</DialogContentText>
-                    <FormControl fullWidth sx={{ mt: 2 }}>
-                        <InputLabel id="colab-download-select-label">Opción</InputLabel>
-                        <Select
-                            labelId="colab-download-select-label"
-                            value={downloadChoice}
-                            label="Opción"
-                            onChange={(e) => setDownloadChoice(e.target.value)}
-                        >
-                            <MenuItem value="all">Todos</MenuItem>
-                            <MenuItem value="new">Nuevos</MenuItem>
-                            
-                            <MenuItem value="ACTIVE">Activos</MenuItem>
-                            <MenuItem value="PAUSED">Pausados</MenuItem>
-                            <MenuItem value="SUSPENDED">Suspendidos</MenuItem>
-                            <MenuItem value="INACTIVE">Inactivos</MenuItem>
-                            <MenuItem value="report">Reporte de Paradas</MenuItem>
-                        </Select>
-                    </FormControl>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setOpenDownloadDialog(false)}>Cancelar</Button>
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        startIcon={<GetApp />}
-                        onClick={async () => {
-                            const upper = (downloadChoice || '').toString().toUpperCase();
-                            const serviceStates = ['ACTIVE', 'PAUSED', 'SUSPENDED', 'INACTIVE'];
-                            if (downloadChoice === 'new') {
-                                await handleDownloadNewColaboradores();
-                            }
-                            else if (downloadChoice === 'all') {
-                                await handleDownloadAllColaboradores();
-                            }
-                            else if (downloadChoice === 'report') {
-                                await handleDownloadRouteReport();
-                            }
-                            else if (serviceStates.includes(upper)) {
-                                await handleDownloadByServiceStatusColaboradores(upper);
-                            }
-                            setOpenDownloadDialog(false);
-                        }}
+            <AppDialog
+                open={openDownloadDialog}
+                onClose={() => setOpenDownloadDialog(false)}
+                title="Descargar colaboradores"
+                size="sm"
+                onSubmit={async () => {
+                    const upper = (downloadChoice || '').toString().toUpperCase();
+                    const serviceStates = ['ACTIVE', 'PAUSED', 'SUSPENDED', 'INACTIVE'];
+                    if (downloadChoice === 'new') {
+                        await handleDownloadNewColaboradores();
+                    }
+                    else if (downloadChoice === 'all') {
+                        await handleDownloadAllColaboradores();
+                    }
+                    else if (downloadChoice === 'report') {
+                        await handleDownloadRouteReport();
+                    }
+                    else if (serviceStates.includes(upper)) {
+                        await handleDownloadByServiceStatusColaboradores(upper);
+                    }
+                    setOpenDownloadDialog(false);
+                }}
+                submitLabel="Descargar"
+            >
+                <DialogContentText>Selecciona qué deseas descargar:</DialogContentText>
+                <FormControl fullWidth sx={{ mt: 2 }}>
+                    <InputLabel id="colab-download-select-label">Opción</InputLabel>
+                    <Select
+                        labelId="colab-download-select-label"
+                        value={downloadChoice}
+                        label="Opción"
+                        onChange={(e) => setDownloadChoice(e.target.value)}
                     >
-                        Descargar
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                        <MenuItem value="all">Todos</MenuItem>
+                        <MenuItem value="new">Nuevos</MenuItem>
+                            
+                        <MenuItem value="ACTIVE">Activos</MenuItem>
+                        <MenuItem value="PAUSED">Pausados</MenuItem>
+                        <MenuItem value="SUSPENDED">Suspendidos</MenuItem>
+                        <MenuItem value="INACTIVE">Inactivos</MenuItem>
+                        <MenuItem value="report">Reporte de Paradas</MenuItem>
+                    </Select>
+                </FormControl>
+            </AppDialog>
 
             {/* Filtros y búsqueda */}
             <FilterBar {...pageFilters.barProps} loading={loading} />
@@ -2087,51 +2079,39 @@ const ColaboradoresPage = () => {
             />
 
             {/* Diálogo de Enviar Circular */}
-            <Dialog open={openCircularDialog} onClose={() => setOpenCircularDialog(false)} maxWidth="md" fullWidth>
-                <DialogTitle>Enviar Circular a Colaboradores</DialogTitle>
-                <DialogContent>
-                    <Box sx={{ mt: 2 }}>
-                        <TextField
-                            fullWidth
-                            label="Asunto"
-                            value={circularSubject}
-                            onChange={(e) => setCircularSubject(e.target.value)}
-                            sx={{ mb: 2 }}
-                        />
-                        <TextField
-                            fullWidth
-                            label="Mensaje"
-                            value={circularMessage}
-                            onChange={(e) => setCircularMessage(e.target.value)}
-                            multiline
-                            rows={6}
-                            placeholder="Escriba el mensaje que desea enviar a todos los colaboradores del corporativo..."
-                        />
-                        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                            Esta circular se enviará a todos los colaboradores activos del corporativo: {currentCorporation?.name}
-                        </Typography>
-                    </Box>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => {
-                        setOpenCircularDialog(false);
-                        setCircularSubject('');
-                        setCircularMessage('');
-                    }}>
-                        Cancelar
-                    </Button>
-                    <PermissionGuard permission="mail-enviar-circular-colaboradores">
-                        <Button
-                            onClick={handleSendCircular}
-                            variant="contained"
-                            color="secondary"
-                            disabled={!circularSubject || !circularMessage || circularLoading}
-                        >
-                            {circularLoading ? <CircularProgress size={24} /> : 'Enviar'}
-                        </Button>
-                    </PermissionGuard>
-                </DialogActions>
-            </Dialog>
+            <AppDialog
+                open={openCircularDialog}
+                onClose={() => setOpenCircularDialog(false)}
+                title="Enviar circular a colaboradores"
+                size="md"
+                onSubmit={handleSendCircular}
+                submitLabel="Enviar"
+                submitDisabled={!circularSubject || !circularMessage}
+                submitting={circularLoading}
+                readOnly={!(hasPermission('mail-enviar-circular-colaboradores'))}
+            >
+                <Box sx={{ mt: 2 }}>
+                    <TextField
+                        fullWidth
+                        label="Asunto"
+                        value={circularSubject}
+                        onChange={(e) => setCircularSubject(e.target.value)}
+                        sx={{ mb: 2 }}
+                    />
+                    <TextField
+                        fullWidth
+                        label="Mensaje"
+                        value={circularMessage}
+                        onChange={(e) => setCircularMessage(e.target.value)}
+                        multiline
+                        rows={6}
+                        placeholder="Escriba el mensaje que desea enviar a todos los colaboradores del corporativo..."
+                    />
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                        Esta circular se enviará a todos los colaboradores activos del corporativo: {currentCorporation?.name}
+                    </Typography>
+                </Box>
+            </AppDialog>
 
             {/* Modal de estado del servicio */}
             <UserServiceStatusModal

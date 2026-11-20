@@ -21,11 +21,6 @@ import {
     CircularProgress,
     Card,
     CardContent,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Button,
     FormControl,
     InputLabel,
     Select,
@@ -60,7 +55,8 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import ClientSelector from '../components/ClientSelector';
 import { getClientSchoolId, getClientCorporationId } from '../utils/clientValue';
 import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
-import PermissionGuard from '../components/PermissionGuard';
+import usePermissions from '../hooks/usePermissions';
+import { validate, hasErrors, focusFirstError, clearError } from '../utils/validators';
 import useTableState from '../hooks/useTableState';
 import AppTablePagination from '../components/table/AppTablePagination';
 import SortableTableHead from '../components/table/SortableTableHead';
@@ -76,6 +72,7 @@ import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
 import { formatDateTime, formatDate } from '../utils/dateFormat';
 import { MECHANIC_STATUS, getStatusLabel, getStatusMeta, toStatusOptions } from '../constants/statuses';
+import AppDialog from '../components/dialogs/AppDialog';
 
 const StatsCard = styled(Card)`
     ${tw`h-full`}
@@ -95,8 +92,12 @@ const COLUMNS = [
     { id: 'acciones', label: 'Acciones', align: 'center' },
 ];
 
+// Campos obligatorios de una solicitud nueva.
+const CREATE_RULES = { busId: ['required'], solicitud: ['required'] };
+
 const MechanicRequestsPage = () => {
     const notify = useNotify();
+    const { hasPermission } = usePermissions();
     const confirm = useConfirm();
     // Estados para datos
     const [requests, setRequests] = useState([]);
@@ -169,6 +170,8 @@ const MechanicRequestsPage = () => {
     const [createLoadingPlates, setCreateLoadingPlates] = useState(false);
     const [createSubmitting, setCreateSubmitting] = useState(false);
     const [createError, setCreateError] = useState(null);
+    const [createErrors, setCreateErrors] = useState({});
+    const [statusSaving, setStatusSaving] = useState(false);
 
     // Cargar colegios y corporaciones
     useEffect(() => {
@@ -389,6 +392,7 @@ const MechanicRequestsPage = () => {
         if (!selectedRequest) {
             return;
         }
+        setStatusSaving(true);
         try {
             const updateData = {
                 estado: newStatus,
@@ -410,6 +414,8 @@ const MechanicRequestsPage = () => {
         } catch (error) {
             console.error('Error updating status:', error);
             notify.fromError(error, 'Error al actualizar el estado');
+        } finally {
+            setStatusSaving(false);
         }
     };
 
@@ -424,6 +430,7 @@ const MechanicRequestsPage = () => {
         setCreateSolicitud('');
         setCreateUrgente(false);
         setCreateError(null);
+        setCreateErrors({});
         setCreateModalOpen(true);
     };
 
@@ -459,12 +466,10 @@ const MechanicRequestsPage = () => {
 
     const handleConfirmCreate = async () => {
         setCreateError(null);
-        if (!createBusId) {
-            setCreateError('Seleccione un bus válido.');
-            return;
-        }
-        if (!createSolicitud || String(createSolicitud).trim() === '') {
-            setCreateError('La descripción de la solicitud es requerida.');
+        const found = validate({ busId: createBusId, solicitud: createSolicitud }, CREATE_RULES);
+        setCreateErrors(found);
+        if (hasErrors(found)) {
+            focusFirstError(found);
             return;
         }
         setCreateSubmitting(true);
@@ -698,305 +703,284 @@ const MechanicRequestsPage = () => {
             </AppTableContainer>
 
             {/* Modal de Crear Solicitud */}
-            <Dialog
+            <AppDialog
                 open={createModalOpen}
                 onClose={() => setCreateModalOpen(false)}
-                maxWidth="sm"
-                fullWidth
+                title="Nueva solicitud de mecánica"
+                icon={<BuildIcon />}
+                size="sm"
+                onSubmit={handleConfirmCreate}
+                submitLabel="Crear"
+                submitting={createSubmitting}
             >
-                <DialogTitle>
-                    <BuildIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Nueva Solicitud de Mecánica
-                </DialogTitle>
-                <DialogContent dividers>
-                    {createError && (
-                        <Alert severity="error" sx={{ mb: 2 }}>{createError}</Alert>
-                    )}
-                    <Grid container spacing={2}>
-                        <Grid item xs={12}>
-                            <ClientSelector
-                                schools={schools}
-                                corporations={corporations}
-                                value={createClient}
-                                onChange={(client) => { setCreateClient(client); setCreateBusId(''); }}
-                            />
-                        </Grid>
-
-                        <Grid item xs={12} sm={6}>
-                            <TextField
-                                select
-                                fullWidth
-                                size="small"
-                                label="Placa/Bus"
-                                value={createBusId}
-                                onChange={(e) => setCreateBusId(e.target.value)}
-                                disabled={(!createSchoolId && !createCorporationId) || createLoadingPlates}
-                            >
-                                <MenuItem value="">Seleccione</MenuItem>
-                                {createPlateOptions.map((p) => (
-                                    <MenuItem key={p.id} value={p.id}>{p.label}</MenuItem>
-                                ))}
-                            </TextField>
-                        </Grid>
-                        <Grid item xs={12} sm={6}>
-                            <TextField
-                                select
-                                fullWidth
-                                size="small"
-                                label="Tipo Trabajo"
-                                value={createTipoTrabajo}
-                                onChange={(e) => setCreateTipoTrabajo(e.target.value)}
-                            >
-                                {Object.entries(WORK_TYPES).map(([key, label]) => (
-                                    <MenuItem key={key} value={key}>{label}</MenuItem>
-                                ))}
-                            </TextField>
-                        </Grid>
-                        {createTipoTrabajo === 'otro' && (
-                            <Grid item xs={12}>
-                                <TextField
-                                    fullWidth
-                                    size="small"
-                                    label="Detalle de Otro Trabajo"
-                                    value={createOtroTrabajoDetalle}
-                                    onChange={(e) => setCreateOtroTrabajoDetalle(e.target.value)}
-                                />
-                            </Grid>
-                        )}
-                        <Grid item xs={12}>
-                            <TextField
-                                fullWidth
-                                multiline
-                                rows={4}
-                                label="Solicitud"
-                                value={createSolicitud}
-                                onChange={(e) => setCreateSolicitud(e.target.value)}
-                            />
-                        </Grid>
-                        <Grid item xs={12}>
-                            <FormControl fullWidth>
-                                <InputLabel>Urgente</InputLabel>
-                                <Select
-                                    value={createUrgente ? 'true' : 'false'}
-                                    onChange={(e) => setCreateUrgente(e.target.value === 'true')}
-                                    label="Urgente"
-                                >
-                                    <MenuItem value="false">No</MenuItem>
-                                    <MenuItem value="true">Sí</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Grid>
+                {createError && (
+                    <Alert severity="error" sx={{ mb: 2 }}>{createError}</Alert>
+                )}
+                <Grid container spacing={2}>
+                    <Grid item xs={12}>
+                        <ClientSelector
+                            schools={schools}
+                            corporations={corporations}
+                            value={createClient}
+                            onChange={(client) => { setCreateClient(client); setCreateBusId(''); }}
+                        />
                     </Grid>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setCreateModalOpen(false)} disabled={createSubmitting}>Cancelar</Button>
-                    <Button variant="contained" onClick={handleConfirmCreate} disabled={createSubmitting}>
-                        {createSubmitting ? 'Guardando...' : 'Crear'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
+
+                    <Grid item xs={12} sm={6}>
+                        <TextField
+                            select
+                            fullWidth
+                            size="small"
+                            label="Placa/bus"
+                            name="busId"
+                            required
+                            error={Boolean(createErrors.busId)}
+                            helperText={createErrors.busId}
+                            value={createBusId}
+                            onChange={(e) => { setCreateBusId(e.target.value); setCreateErrors((prev) => clearError(prev, 'busId')); }}
+                            disabled={(!createSchoolId && !createCorporationId) || createLoadingPlates}
+                        >
+                            <MenuItem value="">Seleccione</MenuItem>
+                            {createPlateOptions.map((p) => (
+                                <MenuItem key={p.id} value={p.id}>{p.label}</MenuItem>
+                            ))}
+                        </TextField>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                        <TextField
+                            select
+                            fullWidth
+                            size="small"
+                            label="Tipo de trabajo"
+                            value={createTipoTrabajo}
+                            onChange={(e) => setCreateTipoTrabajo(e.target.value)}
+                        >
+                            {Object.entries(WORK_TYPES).map(([key, label]) => (
+                                <MenuItem key={key} value={key}>{label}</MenuItem>
+                            ))}
+                        </TextField>
+                    </Grid>
+                    {createTipoTrabajo === 'otro' && (
+                        <Grid item xs={12}>
+                            <TextField
+                                fullWidth
+                                size="small"
+                                label="Detalle de otro trabajo"
+                                value={createOtroTrabajoDetalle}
+                                onChange={(e) => setCreateOtroTrabajoDetalle(e.target.value)}
+                            />
+                        </Grid>
+                    )}
+                    <Grid item xs={12}>
+                        <TextField
+                            fullWidth
+                            multiline
+                            rows={4}
+                            label="Solicitud"
+                            name="solicitud"
+                            required
+                            error={Boolean(createErrors.solicitud)}
+                            helperText={createErrors.solicitud}
+                            value={createSolicitud}
+                            onChange={(e) => { setCreateSolicitud(e.target.value); setCreateErrors((prev) => clearError(prev, 'solicitud')); }}
+                        />
+                    </Grid>
+                    <Grid item xs={12}>
+                        <FormControl fullWidth>
+                            <InputLabel>Urgente</InputLabel>
+                            <Select
+                                value={createUrgente ? 'true' : 'false'}
+                                onChange={(e) => setCreateUrgente(e.target.value === 'true')}
+                                label="Urgente"
+                            >
+                                <MenuItem value="false">No</MenuItem>
+                                <MenuItem value="true">Sí</MenuItem>
+                            </Select>
+                        </FormControl>
+                    </Grid>
+                </Grid>
+            </AppDialog>
 
             {/* Modal de Detalle */}
-            <Dialog
+            <AppDialog
                 open={detailModalOpen}
                 onClose={() => setDetailModalOpen(false)}
-                maxWidth="md"
-                fullWidth
+                title="Detalle de la solicitud de mecánica"
+                icon={<BuildIcon />}
+                size="md"
+                readOnly
             >
-                <DialogTitle>
-                    <BuildIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Detalle de Solicitud de Mecánica
-                </DialogTitle>
-                <DialogContent dividers>
-                    {selectedRequest && (
-                        <Grid container spacing={2}>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Fecha de Solicitud
-                                </Typography>
-                                <Typography>
-                                    {formatDateTime(selectedRequest.fechaSolicitud)}
-                                </Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Estado
-                                </Typography>
-                                <Chip
-                                    icon={getStatusIcon(selectedRequest.estado)}
-                                    label={getStatusLabel(MECHANIC_STATUS, selectedRequest.estado)}
-                                    color={getStatusMeta(MECHANIC_STATUS, selectedRequest.estado).color}
-                                />
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Tipo de Trabajo
-                                </Typography>
-                                <Typography>
-                                    {WORK_TYPES[selectedRequest.tipoTrabajo] || selectedRequest.tipoTrabajo}
-                                    {selectedRequest.tipoTrabajo === 'otro' && selectedRequest.otroTrabajoDetalle && (
-                                        <span> - {selectedRequest.otroTrabajoDetalle}</span>
-                                    )}
-                                </Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Urgente
-                                </Typography>
-                                {selectedRequest.urgente ? (
-                                    <Chip icon={<WarningIcon />} label="Sí" size="small" color="error" />
-                                ) : (
-                                    <Chip label="No" size="small" variant="outlined" />
-                                )}
-                            </Grid>
-                            <Grid item xs={12}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Solicitud
-                                </Typography>
-                                <Typography>{selectedRequest.solicitud}</Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Bus
-                                </Typography>
-                                <Typography>
-                                    {selectedRequest.bus?.plate || '-'}
-                                    {selectedRequest.bus?.description && ` - ${selectedRequest.bus.description}`}
-                                </Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Ruta
-                                </Typography>
-                                <Typography>
-                                    {selectedRequest.routeNumber || selectedRequest.bus?.routeNumber || '-'}
-                                </Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Colegio
-                                </Typography>
-                                <Typography>{selectedRequest.school?.name || '-'}</Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Corporación
-                                </Typography>
-                                <Typography>{selectedRequest.corporation?.name || '-'}</Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Piloto del Bus
-                                </Typography>
-                                <Typography>
-                                    {selectedRequest.pilot?.name || '-'}
-                                </Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Solicitante
-                                </Typography>
-                                <Typography>
-                                    {selectedRequest.supervisorId 
-                                        ? `${selectedRequest.supervisor?.name || '-'} (Supervisor)`
-                                        : `${selectedRequest.pilot?.name || '-'} (Piloto)`}
-                                </Typography>
-                            </Grid>
-                            {selectedRequest.fechaCompletado && (
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Fecha de Completado
-                                    </Typography>
-                                    <Typography>
-                                        {formatDate(selectedRequest.fechaCompletado)}
-                                    </Typography>
-                                </Grid>
-                            )}
-                            {selectedRequest.notas && (
-                                <Grid item xs={12}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Notas
-                                    </Typography>
-                                    <Typography>{selectedRequest.notas}</Typography>
-                                </Grid>
-                            )}
-                        </Grid>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setDetailModalOpen(false)}>Cerrar</Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Modal de Cambio de Estado */}
-            <Dialog
-                open={statusModalOpen}
-                onClose={() => setStatusModalOpen(false)}
-                maxWidth="sm"
-                fullWidth
-            >
-                <DialogTitle>
-                    <EditIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Cambiar Estado de Solicitud
-                </DialogTitle>
-                <DialogContent dividers>
+                {selectedRequest && (
                     <Grid container spacing={2}>
-                        <Grid item xs={12}>
-                            <FormControl fullWidth>
-                                <InputLabel>Estado</InputLabel>
-                                <Select
-                                        value={newStatus}
-                                        onChange={(e) => setNewStatus(e.target.value)}
-                                        label="Estado"
-                                        MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
-                                    >
-                                    {toStatusOptions(MECHANIC_STATUS).map(({ value: key, label }) => (
-                                        <MenuItem key={key} value={key}>
-                                            {label}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Fecha de Solicitud
+                            </Typography>
+                            <Typography>
+                                {formatDateTime(selectedRequest.fechaSolicitud)}
+                            </Typography>
                         </Grid>
-                        <Grid item xs={12}>
-                            <TextField
-                                fullWidth
-                                multiline
-                                rows={3}
-                                label="Notas"
-                                value={statusNotes}
-                                onChange={(e) => setStatusNotes(e.target.value)}
-                                placeholder="Agregar notas sobre el cambio de estado..."
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Estado
+                            </Typography>
+                            <Chip
+                                icon={getStatusIcon(selectedRequest.estado)}
+                                label={getStatusLabel(MECHANIC_STATUS, selectedRequest.estado)}
+                                color={getStatusMeta(MECHANIC_STATUS, selectedRequest.estado).color}
                             />
                         </Grid>
-                        {newStatus === 'completado' && (
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Tipo de Trabajo
+                            </Typography>
+                            <Typography>
+                                {WORK_TYPES[selectedRequest.tipoTrabajo] || selectedRequest.tipoTrabajo}
+                                {selectedRequest.tipoTrabajo === 'otro' && selectedRequest.otroTrabajoDetalle && (
+                                    <span> - {selectedRequest.otroTrabajoDetalle}</span>
+                                )}
+                            </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Urgente
+                            </Typography>
+                            {selectedRequest.urgente ? (
+                                <Chip icon={<WarningIcon />} label="Sí" size="small" color="error" />
+                            ) : (
+                                <Chip label="No" size="small" variant="outlined" />
+                            )}
+                        </Grid>
+                        <Grid item xs={12}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Solicitud
+                            </Typography>
+                            <Typography>{selectedRequest.solicitud}</Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Bus
+                            </Typography>
+                            <Typography>
+                                {selectedRequest.bus?.plate || '-'}
+                                {selectedRequest.bus?.description && ` - ${selectedRequest.bus.description}`}
+                            </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Ruta
+                            </Typography>
+                            <Typography>
+                                {selectedRequest.routeNumber || selectedRequest.bus?.routeNumber || '-'}
+                            </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Colegio
+                            </Typography>
+                            <Typography>{selectedRequest.school?.name || '-'}</Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Corporación
+                            </Typography>
+                            <Typography>{selectedRequest.corporation?.name || '-'}</Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Piloto del Bus
+                            </Typography>
+                            <Typography>
+                                {selectedRequest.pilot?.name || '-'}
+                            </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Solicitante
+                            </Typography>
+                            <Typography>
+                                {selectedRequest.supervisorId 
+                                    ? `${selectedRequest.supervisor?.name || '-'} (Supervisor)`
+                                    : `${selectedRequest.pilot?.name || '-'} (Piloto)`}
+                            </Typography>
+                        </Grid>
+                        {selectedRequest.fechaCompletado && (
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Fecha de Completado
+                                </Typography>
+                                <Typography>
+                                    {formatDate(selectedRequest.fechaCompletado)}
+                                </Typography>
+                            </Grid>
+                        )}
+                        {selectedRequest.notas && (
                             <Grid item xs={12}>
-                                <TextField
-                                    fullWidth
-                                    type="date"
-                                    label="Fecha de Completado"
-                                    value={fechaCompletado}
-                                    onChange={(e) => setFechaCompletado(e.target.value)}
-                                    InputLabelProps={{ shrink: true }}
-                                    required
-                                />
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Notas
+                                </Typography>
+                                <Typography>{selectedRequest.notas}</Typography>
                             </Grid>
                         )}
                     </Grid>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setStatusModalOpen(false)}>Cancelar</Button>
-                    <PermissionGuard permission="mecanica-actualizar-estado">
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            onClick={handleConfirmStatusChange}
-                        >
-                            Guardar
-                        </Button>
-                    </PermissionGuard>
-                </DialogActions>
-            </Dialog>
+                )}
+            </AppDialog>
+
+            {/* Modal de Cambio de Estado */}
+            <AppDialog
+                open={statusModalOpen}
+                onClose={() => setStatusModalOpen(false)}
+                title="Cambiar estado de la solicitud"
+                icon={<EditIcon />}
+                size="sm"
+                onSubmit={handleConfirmStatusChange}
+                submitting={statusSaving}
+                readOnly={!hasPermission('mecanica-actualizar-estado')}
+            >
+                <Grid container spacing={2}>
+                    <Grid item xs={12}>
+                        <FormControl fullWidth>
+                            <InputLabel>Estado</InputLabel>
+                            <Select
+                                    value={newStatus}
+                                    onChange={(e) => setNewStatus(e.target.value)}
+                                    label="Estado"
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
+                                >
+                                {toStatusOptions(MECHANIC_STATUS).map(({ value: key, label }) => (
+                                    <MenuItem key={key} value={key}>
+                                        {label}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    </Grid>
+                    <Grid item xs={12}>
+                        <TextField
+                            fullWidth
+                            multiline
+                            rows={3}
+                            label="Notas"
+                            value={statusNotes}
+                            onChange={(e) => setStatusNotes(e.target.value)}
+                            placeholder="Agregar notas sobre el cambio de estado..."
+                        />
+                    </Grid>
+                    {newStatus === 'completado' && (
+                        <Grid item xs={12}>
+                            <TextField
+                                fullWidth
+                                type="date"
+                                label="Fecha de completado"
+                                value={fechaCompletado}
+                                onChange={(e) => setFechaCompletado(e.target.value)}
+                                InputLabelProps={{ shrink: true }}
+                                required
+                            />
+                        </Grid>
+                    )}
+                </Grid>
+            </AppDialog>
         </PageContainer>
     );
 };

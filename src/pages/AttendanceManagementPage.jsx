@@ -14,11 +14,6 @@ import {
     Card,
     CardContent,
     Chip,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Button,
     List,
     ListItem,
     ListItemIcon,
@@ -48,6 +43,7 @@ import SortableTableHead from '../components/table/SortableTableHead';
 import AppTableContainer from '../components/table/AppTableContainer';
 import RowActions from '../components/table/RowActions';
 import { formatDate } from '../utils/dateFormat';
+import AppDialog from '../components/dialogs/AppDialog';
 
 // Columnas de la tabla de asistencias
 const COLUMNS = [
@@ -461,116 +457,103 @@ const AttendanceManagementPage = () => {
                 </Paper>
 
                 {/* Modal de Detalles de Asistencia */}
-                <Dialog 
-                    open={openModal} 
+                <AppDialog
+                    open={openModal}
                     onClose={handleCloseModal}
-                    maxWidth="md"
-                    fullWidth
+                    title="Lista de alumnos - asistencia"
+                    subtitle={selectedAttendance
+                        ? `${formatDate(selectedAttendance.fecha)} - ${getScheduleLabel(selectedAttendance.schedule)} - ${getDayLabel(selectedAttendance.day)}`
+                        : undefined}
+                    size="md"
+                    readOnly
                 >
-                    <DialogTitle>
-                        <Typography variant="h6">
-                            Lista de Alumnos - Asistencia
-                        </Typography>
-                        {selectedAttendance && (
-                            <Typography variant="body2" color="textSecondary">
-                                {formatDate(selectedAttendance.fecha)} - {getScheduleLabel(selectedAttendance.schedule)} - {getDayLabel(selectedAttendance.day)}
-                            </Typography>
-                        )}
-                    </DialogTitle>
-                    <DialogContent dividers>
-                        {loadingDetails ? (
-                            <Box display="flex" justifyContent="center" p={3}>
-                                <CircularProgress />
-                            </Box>
-                        ) : attendanceDetails ? (
-                            <Box>
-                                {/* Resumen */}
-                                <Box mb={3}>
-                                    <Grid container spacing={2}>
-                                        <Grid item xs={12} sm={6}>
-                                            <Card variant="outlined">
-                                                <CardContent>
-                                                    <Typography variant="h6" color="success.main">
-                                                        {attendanceDetails.students?.present?.length || 0}
-                                                    </Typography>
-                                                    <Typography variant="body2" color="textSecondary">
-                                                        Alumnos Presentes
-                                                    </Typography>
-                                                </CardContent>
-                                            </Card>
-                                        </Grid>
-                                        <Grid item xs={12} sm={6}>
-                                            <Card variant="outlined">
-                                                <CardContent>
-                                                    <Typography variant="h6" color="error.main">
-                                                        {attendanceDetails.students?.absent?.length || 0}
-                                                    </Typography>
-                                                    <Typography variant="body2" color="textSecondary">
-                                                        Alumnos Ausentes
-                                                    </Typography>
-                                                </CardContent>
-                                            </Card>
-                                        </Grid>
+                    {loadingDetails ? (
+                        <Box display="flex" justifyContent="center" p={3}>
+                            <CircularProgress />
+                        </Box>
+                    ) : attendanceDetails ? (
+                        <Box>
+                            {/* Resumen */}
+                            <Box mb={3}>
+                                <Grid container spacing={2}>
+                                    <Grid item xs={12} sm={6}>
+                                        <Card variant="outlined">
+                                            <CardContent>
+                                                <Typography variant="h6" color="success.main">
+                                                    {attendanceDetails.students?.present?.length || 0}
+                                                </Typography>
+                                                <Typography variant="body2" color="textSecondary">
+                                                    Alumnos Presentes
+                                                </Typography>
+                                            </CardContent>
+                                        </Card>
                                     </Grid>
-                                </Box>
-
-                                {/* Lista de Presentes */}
-                                {attendanceDetails.students?.present && attendanceDetails.students.present.length > 0 && (
-                                    <Box mb={3}>
-                                        <Typography variant="subtitle1" gutterBottom color="success.main" fontWeight="bold">
-                                            ✓ Presentes ({attendanceDetails.students.present.length})
-                                        </Typography>
-                                        <List dense>
-                                            {attendanceDetails.students.present.map((student) => (
-                                                <ListItem key={student.id}>
-                                                    <ListItemIcon>
-                                                        <CheckCircleIcon color="success" />
-                                                    </ListItemIcon>
-                                                    <ListItemText primary={student.fullName} />
-                                                </ListItem>
-                                            ))}
-                                        </List>
-                                        <Divider />
-                                    </Box>
-                                )}
-
-                                {/* Lista de Ausentes */}
-                                {attendanceDetails.students?.absent && attendanceDetails.students.absent.length > 0 && (
-                                    <Box>
-                                        <Typography variant="subtitle1" gutterBottom color="error.main" fontWeight="bold">
-                                            ✗ Ausentes ({attendanceDetails.students.absent.length})
-                                        </Typography>
-                                        <List dense>
-                                            {attendanceDetails.students.absent.map((student) => (
-                                                <ListItem key={student.id}>
-                                                    <ListItemIcon>
-                                                        <CancelIcon color="error" />
-                                                    </ListItemIcon>
-                                                    <ListItemText primary={student.fullName} />
-                                                </ListItem>
-                                            ))}
-                                        </List>
-                                    </Box>
-                                )}
-
-                                {(!attendanceDetails.students?.present?.length && !attendanceDetails.students?.absent?.length) && (
-                                    <Typography align="center" color="textSecondary">
-                                        No hay información de estudiantes para este registro
-                                    </Typography>
-                                )}
+                                    <Grid item xs={12} sm={6}>
+                                        <Card variant="outlined">
+                                            <CardContent>
+                                                <Typography variant="h6" color="error.main">
+                                                    {attendanceDetails.students?.absent?.length || 0}
+                                                </Typography>
+                                                <Typography variant="body2" color="textSecondary">
+                                                    Alumnos Ausentes
+                                                </Typography>
+                                            </CardContent>
+                                        </Card>
+                                    </Grid>
+                                </Grid>
                             </Box>
-                        ) : (
-                            <Typography align="center" color="textSecondary">
-                                No se pudieron cargar los detalles
-                            </Typography>
-                        )}
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCloseModal} color="primary">
-                            Cerrar
-                        </Button>
-                    </DialogActions>
-                </Dialog>
+
+                            {/* Lista de Presentes */}
+                            {attendanceDetails.students?.present && attendanceDetails.students.present.length > 0 && (
+                                <Box mb={3}>
+                                    <Typography variant="subtitle1" gutterBottom color="success.main" fontWeight="bold">
+                                        ✓ Presentes ({attendanceDetails.students.present.length})
+                                    </Typography>
+                                    <List dense>
+                                        {attendanceDetails.students.present.map((student) => (
+                                            <ListItem key={student.id}>
+                                                <ListItemIcon>
+                                                    <CheckCircleIcon color="success" />
+                                                </ListItemIcon>
+                                                <ListItemText primary={student.fullName} />
+                                            </ListItem>
+                                        ))}
+                                    </List>
+                                    <Divider />
+                                </Box>
+                            )}
+
+                            {/* Lista de Ausentes */}
+                            {attendanceDetails.students?.absent && attendanceDetails.students.absent.length > 0 && (
+                                <Box>
+                                    <Typography variant="subtitle1" gutterBottom color="error.main" fontWeight="bold">
+                                        ✗ Ausentes ({attendanceDetails.students.absent.length})
+                                    </Typography>
+                                    <List dense>
+                                        {attendanceDetails.students.absent.map((student) => (
+                                            <ListItem key={student.id}>
+                                                <ListItemIcon>
+                                                    <CancelIcon color="error" />
+                                                </ListItemIcon>
+                                                <ListItemText primary={student.fullName} />
+                                            </ListItem>
+                                        ))}
+                                    </List>
+                                </Box>
+                            )}
+
+                            {(!attendanceDetails.students?.present?.length && !attendanceDetails.students?.absent?.length) && (
+                                <Typography align="center" color="textSecondary">
+                                    No hay información de estudiantes para este registro
+                                </Typography>
+                            )}
+                        </Box>
+                    ) : (
+                        <Typography align="center" color="textSecondary">
+                            No se pudieron cargar los detalles
+                        </Typography>
+                    )}
+                </AppDialog>
             </PageContainer>
     );
 };
