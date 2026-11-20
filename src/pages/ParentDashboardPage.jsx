@@ -10,7 +10,6 @@ import {
   Button,
   CircularProgress,
   Grid,
-  Snackbar,
   Alert,
   Container,
   Chip,
@@ -60,6 +59,9 @@ import SignatureCanvas from 'react-signature-canvas';
 import parse from 'html-react-parser';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import useNotify from '../hooks/useNotify';
+import { formatClock, formatDate } from '../utils/dateFormat';
+import { formatQ } from '../utils/currency';
 
 // ---------- Estilos ----------
 const SectionCard = styled(Card)`width:100%;border-radius:10px;`;
@@ -109,28 +111,6 @@ const formatSchoolTime = (value) => {
 };
 
 // Formatea HH:mm -> h:mm AM/PM (si ya viene con AM/PM, lo deja)
-const formatTime12 = (timeStr) => {
-  if (!timeStr) {
-      return '';
-  }
-  const s = String(timeStr).trim();
-  if (/\b(am|pm)\b/i.test(s)) {
-      return s;
-  }
-  const m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-  if (!m) {
-      return s;
-  }
-  let h = Number.parseInt(m[1], 10);
-  const min = m[2];
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  h = h % 12;
-  if (h === 0) {
-      h = 12;
-  }
-  return `${h}:${min} ${ampm}`;
-};
-
 // Normaliza lo que devuelve /parents/:id/route-info (si existe)
 const normalizeParentInfo = (raw) => {
   const data = raw && typeof raw === 'object' ? raw : {};
@@ -278,7 +258,7 @@ const ParentDashboardPage = () => {
   }, [auth?.user?.serviceStatus]);
 
   const [loading, setLoading] = useState(true);
-  const [snackbar, setSnackbar] = useState({ open: false, sev: 'success', msg: '' });
+  const notify = useNotify();
 
   // Estado para firma de contratos
   const [contractsDialogOpen, setContractsDialogOpen] = useState(false);
@@ -397,7 +377,7 @@ const ParentDashboardPage = () => {
       if (!userId) {
         setParentInfo(normalizeParentInfo({}));
         setSlotsByStudent({});
-        setSnackbar({ open: true, sev: 'warning', msg: 'Sesión no encontrada. Inicia sesión nuevamente.' });
+        notify.warning('Sesión no encontrada. Inicia sesión nuevamente.');
         return;
       }
 
@@ -468,7 +448,7 @@ const ParentDashboardPage = () => {
       console.error('[ParentDashboard] loadAll error:', e);
       setParentInfo(normalizeParentInfo({}));
       setSlotsByStudent({});
-      setSnackbar({ open: true, sev: 'error', msg: 'No se pudo cargar la información.' });
+      notify.error('No se pudo cargar la información');
     } finally {
       setLoading(false);
     }
@@ -509,7 +489,7 @@ const ParentDashboardPage = () => {
     try {
       const email = auth?.user?.email;
       if (!email) {
-        setSnackbar({ open: true, sev: 'error', msg: 'No se encontró el correo del usuario.' });
+        notify.error('No se encontró el correo del usuario');
         return;
       }
       const res = await api.get(`/update-parent-info?email=${encodeURIComponent(email)}`);
@@ -517,7 +497,7 @@ const ParentDashboardPage = () => {
       setUpdateDialogOpen(true);
     } catch (e) {
       console.error('[ParentDashboard] Error fetching update data:', e);
-      setSnackbar({ open: true, sev: 'error', msg: 'No se pudo cargar la información para actualizar.' });
+      notify.error('No se pudo cargar la información para actualizar');
     }
   };
 
@@ -525,7 +505,7 @@ const ParentDashboardPage = () => {
   const handleOpenContractsDialog = async () => {
     const familyDetailId = parentInfo?.familyDetailId;
     if (!familyDetailId) {
-      setSnackbar({ open: true, sev: 'warning', msg: 'Sesión no encontrada. Inicia sesión nuevamente.' });
+      notify.warning('Sesión no encontrada. Inicia sesión nuevamente.');
       return;
     }
 
@@ -545,7 +525,7 @@ const ParentDashboardPage = () => {
       setContractsDialogOpen(true);
     } catch (e) {
       console.error('[ParentDashboard] Error fetching contracts:', e);
-      setSnackbar({ open: true, sev: 'error', msg: 'No se pudieron obtener los contratos disponibles.' });
+      notify.error('No se pudieron obtener los contratos disponibles');
     } finally {
       setContractsLoading(false);
     }
@@ -572,7 +552,7 @@ const ParentDashboardPage = () => {
       setSigningDialogOpen(true);
     } catch (err) {
       console.error('Error loading shared contract:', err);
-      setSnackbar({ open: true, sev: 'error', msg: 'No se pudo cargar el contrato para firmar.' });
+      notify.error('No se pudo cargar el contrato para firmar');
     }
   };
 
@@ -588,7 +568,7 @@ const ParentDashboardPage = () => {
       setViewFilledData(res.data);
     }).catch((err) => {
       console.error('Error loading filled contract:', err);
-      setSnackbar({ open: true, sev: 'error', msg: 'No se pudo cargar el contrato firmado.' });
+      notify.error('No se pudo cargar el contrato firmado');
       setViewFilledOpen(false);
     }).finally(() => setViewFilledLoading(false));
   };
@@ -805,10 +785,10 @@ const ParentDashboardPage = () => {
       }
 
       pdf.save(`${(filledContract.title || 'contrato').replace(/[^a-z0-9\-_. ]/gi, '')}.pdf`);
-      setSnackbar({ open: true, sev: 'success', msg: 'PDF generado exitosamente.' });
+      notify.success('PDF generado');
     } catch (error) {
       console.error('Error generando el PDF:', error);
-      setSnackbar({ open: true, sev: 'error', msg: 'Hubo un error al generar el PDF.' });
+      notify.error('Hubo un error al generar el PDF');
     }
 
     document.body.removeChild(tempDiv);
@@ -837,7 +817,7 @@ const ParentDashboardPage = () => {
     }
     if (newlyMissing.length > 0) {
       setMissingFields(newlyMissing);
-      setSnackbar({ open: true, sev: 'warning', msg: `Faltan campos: ${newlyMissing.slice(0,3).join(', ')}${newlyMissing.length>3? '...':''}` });
+      notify.warning(`Faltan campos: ${newlyMissing.slice(0,3).join(', ')}${newlyMissing.length>3? '...':''}`);
       const first = newlyMissing[0];
       setTimeout(() => { const el = fieldRefs.current[first]; if (el?.focus) {
           try { el.focus(); } catch(e){}
@@ -865,7 +845,7 @@ const ParentDashboardPage = () => {
     try {
       setSubmittingSignature(true);
       await api.post(`/contracts/share/${signingContract.uuid}`, payload);
-      setSnackbar({ open: true, sev: 'success', msg: 'Contrato firmado y guardado correctamente.' });
+      notify.success('Contrato firmado y guardado');
       // refresh lists: remove from contractsList and reload filledContractsList
       // simple approach: refetch dialog data
       const parentId = auth?.user?.id;
@@ -878,7 +858,7 @@ const ParentDashboardPage = () => {
       loadAll();
     } catch (err) {
       console.error('Error submitting filled contract:', err);
-      setSnackbar({ open: true, sev: 'error', msg: 'Ocurrió un error al enviar el contrato.' });
+      notify.error('Ocurrió un error al enviar el contrato');
     } finally {
       setSubmittingSignature(false);
     }
@@ -1149,7 +1129,7 @@ const ParentDashboardPage = () => {
                   <SectionCard elevation={3}>
                     <CardContent>
                       <Alert severity="info" onClick={() => navigate('/parent/payment')} sx={{ cursor: 'pointer' }}>
-                        Tienes un saldo de inscripción pendiente de Q{Number(pendingEnrollmentFee.amountDue || 0).toFixed(2)}.
+                        Tienes un saldo de inscripción pendiente de {formatQ(pendingEnrollmentFee.amountDue || 0)}.
                         Súbelo con tu boleta de pago habitual. Ver detalle en Información de Pagos.
                       </Alert>
                     </CardContent>
@@ -1357,7 +1337,7 @@ const ParentDashboardPage = () => {
                                               <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.2, fontSize: { xs: '0.95rem', md: '1rem' }, whiteSpace: { xs: 'normal', sm: 'nowrap' }, display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, gap: 0.5, flexWrap: 'wrap' }}>
                                                 <AccessTimeIcon fontSize="small" sx={{ color: 'text.secondary' }} />
                                                 <strong>Hora en parada:</strong>&nbsp;
-                                                <MuiBox component="span" sx={{ color: 'primary.main', fontWeight: 800, display: 'inline-block', whiteSpace: 'nowrap' }}>{formatTime12(slot.time) || safeStr(slot.time)}</MuiBox>
+                                                <MuiBox component="span" sx={{ color: 'primary.main', fontWeight: 800, display: 'inline-block', whiteSpace: 'nowrap' }}>{formatClock(slot.time) || safeStr(slot.time)}</MuiBox>
                                               </Typography>
                                             </MuiBox>
 
@@ -1432,7 +1412,7 @@ const ParentDashboardPage = () => {
                                                   <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.2, fontSize: { xs: '0.95rem', md: '1rem' }, whiteSpace: { xs: 'normal', sm: 'nowrap' }, display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, gap: 0.5, flexWrap: 'wrap' }}>
                                                     <AccessTimeIcon fontSize="small" sx={{ color: 'text.secondary' }} />
                                                     <strong>Hora en parada:</strong>&nbsp;
-                                                    <MuiBox component="span" sx={{ color: 'primary.main', fontWeight: 800, display: 'inline-block', whiteSpace: 'nowrap' }}>{formatTime12(slot.time) || safeStr(slot.time)}</MuiBox>
+                                                    <MuiBox component="span" sx={{ color: 'primary.main', fontWeight: 800, display: 'inline-block', whiteSpace: 'nowrap' }}>{formatClock(slot.time) || safeStr(slot.time)}</MuiBox>
                                                   </Typography>
                                               </MuiBox>
 
@@ -1586,7 +1566,7 @@ const ParentDashboardPage = () => {
                                   </div>
                                   <div style={{ flex: 1 }}>
                                     <div style={{ fontWeight: 700 }}>{c.title || 'Sin título'}</div>
-                                    <div style={{ fontSize: 12, color: 'rgba(0,0,0,0.6)' }}>{c.createdAt ? `Creado el ${new Date(c.createdAt).toLocaleDateString()}` : ''}</div>
+                                    <div style={{ fontSize: 12, color: 'rgba(0,0,0,0.6)' }}>{c.createdAt ? `Creado el ${formatDate(c.createdAt)}` : ''}</div>
                                   </div>
                                   <div>
                                     <Button size="small" variant="contained" onClick={() => handleOpenContractShare(c)} disabled={!schoolOperational} sx={{ backgroundColor: '#0288d1' }}>Firmar</Button>
@@ -1619,7 +1599,7 @@ const ParentDashboardPage = () => {
                                   </div>
                                   <div style={{ flex: 1 }}>
                                     <div style={{ fontWeight: 700 }}>{f.title || f.contract?.title || 'Contrato firmado'}</div>
-                                    <div style={{ fontSize: 12, color: 'rgba(0,0,0,0.6)' }}>{f.createdAt ? `Firmado el ${new Date(f.createdAt).toLocaleDateString()}` : ''}</div>
+                                    <div style={{ fontSize: 12, color: 'rgba(0,0,0,0.6)' }}>{f.createdAt ? `Firmado el ${formatDate(f.createdAt)}` : ''}</div>
                                   </div>
                                   <div>
                                     <Button size="small" variant="outlined" onClick={() => handleOpenFilledView(f)} sx={{ borderColor: '#2e7d32', color: '#2e7d32' }}>Ver</Button>
@@ -1687,20 +1667,6 @@ const ParentDashboardPage = () => {
         </DialogActions>
       </Dialog>
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
-          severity={snackbar.sev}
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          sx={{ width: '100%' }}
-        >
-          {snackbar.msg}
-        </Alert>
-      </Snackbar>
 
       {/* Diálogo para actualizar datos de familia */}
       <UpdateParentInfoDialog
@@ -1709,7 +1675,7 @@ const ParentDashboardPage = () => {
         initialData={updateDialogData}
         onSaved={() => {
           loadAll();
-          setSnackbar({ open: true, sev: 'success', msg: '¡Datos actualizados correctamente!' });
+          notify.success('¡Datos actualizados correctamente!');
         }}
       />
     </>

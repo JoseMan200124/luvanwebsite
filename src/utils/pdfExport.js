@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { DEFAULT_SCHEDULE_CODES } from './scheduleConfig';
+import { formatDateTime } from './dateFormat';
 
 /**
  * Generate a PDF from route occupancy data and trigger download.
@@ -18,7 +19,7 @@ export function generateRouteOccupancyPDF(data = [], meta = {}) {
   const generatedAt = meta.generatedAt ? new Date(meta.generatedAt) : new Date();
   const scheduleCodes = meta.scheduleCodes || DEFAULT_SCHEDULE_CODES;
 
-  const timestamp = generatedAt.toLocaleString();
+  const timestamp = formatDateTime(generatedAt);
   const title = `Resumen de Ocupación por Ruta`;
 
   // helper to build a table for a single day; always prints header and starts on fresh page
@@ -32,7 +33,7 @@ export function generateRouteOccupancyPDF(data = [], meta = {}) {
     doc.text(schoolName || ' ', 14, 14);
     doc.setFontSize(10);
     doc.text(`Ciclo: ${cycleLabel}`, 14, 20);
-    doc.text(`Generado: ${generatedAt.toLocaleString()}`, 14, 26);
+    doc.text(`Generado: ${timestamp}`, 14, 26);
 
     doc.setFontSize(12);
     doc.text(`${title} ${dayLabel ? `- ${dayLabel}` : ''}`, 14, 36);
@@ -106,7 +107,7 @@ export function generateCorporateRouteOccupancyPDF(data = [], meta = {}) {
   const generatedAt = meta.generatedAt ? new Date(meta.generatedAt) : new Date();
   const schedules = meta.schedules || [];
 
-  const timestamp = generatedAt.toLocaleString();
+  const timestamp = formatDateTime(generatedAt);
   const title = `Resumen de Ocupación por Ruta y Horario`;
 
   // Helper to build a table for a single day

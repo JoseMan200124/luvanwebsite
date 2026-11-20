@@ -3,9 +3,11 @@
 // marca las que muestra la búsqueda.
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    Alert, Box, Button, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
+    Alert, Box, Button, Checkbox, CircularProgress,
     List, ListItem, ListItemButton, ListItemIcon, ListItemText, TextField, Typography,
 } from '@mui/material';
+import { Groups } from '@mui/icons-material';
+import AppDialog from '../dialogs/AppDialog';
 import paradasService, { mensajeError } from '../../services/paradasService';
 import { sinTildes as normalizar } from './paradasModel';
 
@@ -55,41 +57,46 @@ export default function SeleccionFamiliasDialog({
     };
 
     return (
-        <Dialog open={open} onClose={onCancelar} maxWidth="sm" fullWidth>
-            <DialogTitle>{titulo}</DialogTitle>
-            <DialogContent dividers>
-                {descripcion && <Typography variant="body2" sx={{ mb: 2 }}>{descripcion}</Typography>}
-                {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-                <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap' }}>
-                    <TextField size="small" label="Buscar por apellido" value={busqueda} onChange={e => setBusqueda(e.target.value)} sx={{ flex: 1 }} />
-                </Box>
-                <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-                    <Button size="small" onClick={seleccionarVisibles} disabled={!visibles.length}>Seleccionar todas las que se muestran ({visibles.length})</Button>
-                    <Button size="small" onClick={() => { setSeleccion(new Set()); setTodasDelFiltro(false); }} disabled={!seleccion.size}>Quitar selección</Button>
-                </Box>
-                {cargando ? <Box sx={{ textAlign: 'center', py: 4 }}><CircularProgress /></Box> : (
-                    <List dense sx={{ maxHeight: 360, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                        {visibles.map(f => (
-                            <ListItem key={f.familyDetailId} disablePadding>
-                                <ListItemButton onClick={() => alternar(f.familyDetailId)}>
-                                    <ListItemIcon><Checkbox edge="start" checked={seleccion.has(f.familyDetailId)} tabIndex={-1} disableRipple /></ListItemIcon>
-                                    <ListItemText primary={`Familia ${f.familyLastName}`} secondary={`${f.numEstudiantes} estudiante(s)`} />
-                                </ListItemButton>
-                            </ListItem>
-                        ))}
-                        {!visibles.length && <ListItem><ListItemText secondary="No hay familias para mostrar." /></ListItem>}
-                    </List>
-                )}
-                <Typography variant="body2" sx={{ mt: 1 }}><strong>{seleccion.size}</strong> familia(s), <strong>{estudiantes}</strong> estudiante(s) seleccionados.</Typography>
-            </DialogContent>
-            <DialogActions>
-                {accionesExtra}
-                <Box sx={{ flex: 1 }} />
-                <Button onClick={onCancelar}>Cancelar</Button>
-                <Button variant="contained" disabled={!seleccion.size} onClick={() => onConfirmar({ familyIds: [...seleccion], todasDelFiltro })}>
-                    {textoConfirmar}
-                </Button>
-            </DialogActions>
-        </Dialog>
+        <AppDialog
+            open={open}
+            onClose={onCancelar}
+            title={titulo}
+            icon={<Groups />}
+            size="sm"
+            onSubmit={() => onConfirmar({ familyIds: [...seleccion], todasDelFiltro })}
+            submitLabel={textoConfirmar}
+            submitDisabled={!seleccion.size}
+            extraActions={accionesExtra ? (
+                <>
+                    {accionesExtra}
+                    <Box sx={{ flex: 1 }} />
+                </>
+            ) : null}
+        >
+            {descripcion && <Typography variant="body2" sx={{ mb: 2 }}>{descripcion}</Typography>}
+            {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+            <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+                {/* Enter en la búsqueda no confirma la selección. */}
+                <TextField size="small" label="Buscar por apellido" value={busqueda} onChange={e => setBusqueda(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); } }} sx={{ flex: 1 }} />
+            </Box>
+            <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                <Button size="small" onClick={seleccionarVisibles} disabled={!visibles.length}>Seleccionar todas las que se muestran ({visibles.length})</Button>
+                <Button size="small" onClick={() => { setSeleccion(new Set()); setTodasDelFiltro(false); }} disabled={!seleccion.size}>Quitar selección</Button>
+            </Box>
+            {cargando ? <Box sx={{ textAlign: 'center', py: 4 }}><CircularProgress /></Box> : (
+                <List dense sx={{ maxHeight: 360, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                    {visibles.map(f => (
+                        <ListItem key={f.familyDetailId} disablePadding>
+                            <ListItemButton onClick={() => alternar(f.familyDetailId)}>
+                                <ListItemIcon><Checkbox edge="start" checked={seleccion.has(f.familyDetailId)} tabIndex={-1} disableRipple /></ListItemIcon>
+                                <ListItemText primary={`Familia ${f.familyLastName}`} secondary={`${f.numEstudiantes} estudiante(s)`} />
+                            </ListItemButton>
+                        </ListItem>
+                    ))}
+                    {!visibles.length && <ListItem><ListItemText secondary="No hay familias para mostrar." /></ListItem>}
+                </List>
+            )}
+            <Typography variant="body2" sx={{ mt: 1 }}><strong>{seleccion.size}</strong> familia(s), <strong>{estudiantes}</strong> estudiante(s) seleccionados.</Typography>
+        </AppDialog>
     );
 }

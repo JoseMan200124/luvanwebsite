@@ -1,9 +1,33 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import useScheduleSlots from '../../hooks/useScheduleSlots';
+import useNotify from '../../hooks/useNotify';
+import useConfirm from '../../hooks/useConfirm';
 
 // Minimal modal + weekly editor for student's schedule slots
 export default function StudentScheduleModal({ studentId, students, schoolId, open, onClose }) {
+  const notify = useNotify();
+  const confirm = useConfirm();
+
+  const confirmRemoveSlot = (slotId, day, targetStudentId) => confirm({
+    title: 'Eliminar parada',
+    message: 'Se eliminará esta parada. Esta acción no se puede deshacer.',
+    confirmLabel: 'Eliminar',
+    tone: 'danger',
+    onConfirm: () => removeSlotForDay(slotId, day, targetStudentId),
+  });
+
+  const confirmRemoveAll = (targetStudentId) => {
+    const st = (Array.isArray(students) ? students : []).find(x => x.id === targetStudentId);
+    const name = st?.fullName ? st.fullName : `Alumno ${targetStudentId || ''}`;
+    return confirm({
+      title: 'Eliminar todas las paradas',
+      message: `Se eliminarán todas las paradas de ${name}. Esta acción no se puede deshacer.`,
+      confirmLabel: 'Eliminar todo',
+      tone: 'danger',
+      onConfirm: () => removeAllSlotsForStudent(targetStudentId),
+    });
+  };
   const getIsMobileViewport = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 600px)').matches;
   const [isMobileViewport, setIsMobileViewport] = useState(getIsMobileViewport);
   // slotsMap: { [studentId]: [slots...] }
@@ -15,13 +39,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
   const { fetchSlots: loadSlots, fetchSchoolSchedules: loadSchoolSchedules, fetchRoutesByTime: loadRoutesByTime, createSlot: createRemoteSlot, deleteSlot: deleteRemoteSlot, updateSlot: updateRemoteSlot, fetchSchoolRouteNumbers: loadSchoolRouteNumbers } = useScheduleSlots();
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignTargetStudentId, setAssignTargetStudentId] = useState(null); // current student for the assign popup
-  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const [confirmTarget, setConfirmTarget] = useState({ slotId: null, day: null, studentId: null });
-  const [confirmLoading, setConfirmLoading] = useState(false);
   // Confirm delete-all for a student
-  const [confirmDeleteAllOpen, setConfirmDeleteAllOpen] = useState(false);
-  const [confirmDeleteAllLoading, setConfirmDeleteAllLoading] = useState(false);
-  const [confirmDeleteAllStudentId, setConfirmDeleteAllStudentId] = useState(null);
 
   // Assign Route form state (separate popup)
   const [assignForm, setAssignForm] = useState({ schoolSchedule: '', routeId: '', paradaTime: '', note: '', days: [] });
@@ -305,17 +323,17 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
   const resolvedStudent = (assignEditing?.studentId) || assignTargetStudentId || studentId || (students?.[0]?.id);
   console.log('[StudentScheduleModal] saveAssignedRoute called. resolvedStudent=', resolvedStudent, 'assignEditing=', assignEditing, 'assignForm=', assignForm);
     if (!resolvedStudent) {
-        return alert('Selecciona o proporciona un alumno antes de guardar');
+        return notify.warning('Selecciona o proporciona un alumno antes de guardar');
     }
     // validate
   const { schoolSchedule, routeId, paradaTime, note: noteText, days } = assignForm;
     if (!schoolSchedule || !paradaTime || !days || days.length === 0) {
-        return alert('Completa todos los campos');
+        return notify.warning('Completa todos los campos');
     }
   // validate time format and conflicts
   const validation = validateAssign({ time: paradaTime, days }, assignEditing);
   if (!validation.ok) {
-      return alert(validation.message);
+      return notify.warning(validation.message);
   }
     // Build schoolSchedule string including selected dynamic code when possible
     const selectedSchedule = parseScheduleSelectValue(schoolSchedule);
@@ -383,7 +401,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
       setAssignEditing(null);
     } catch (err) {
       console.error(err);
-      alert('Error guardando la parada');
+      notify.fromError(err, 'Error al guardar la parada');
     }
   }
 
@@ -533,7 +551,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                         <button type="button" onClick={()=>openAssignPopup(st)} style={{ background: '#0ea5a4', color: '#fff', padding: '6px 10px', borderRadius: 6 }}>Asignar Ruta</button>
                         <button
                           type="button"
-                          onClick={() => { setConfirmDeleteAllStudentId(st.id); setConfirmDeleteAllOpen(true); }}
+                          onClick={() => confirmRemoveAll(st.id)}
                           style={{ background: '#ffffff', color: '#DC2626', padding: '6px 10px', borderRadius: 6, border: '1px solid #fecaca' }}
                           disabled={!slotsMap[st.id] || slotsMap[st.id].length === 0}
                           title={(!slotsMap[st.id] || slotsMap[st.id].length === 0) ? 'Sin paradas para eliminar' : 'Eliminar todas las paradas'}
@@ -571,7 +589,7 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                             <div style={{ fontSize: 15, fontWeight: 700 }}>{s.time}</div>
                             <div style={{ display: 'flex', gap: 8 }}>
-                                    <button type="button" onClick={()=>{ setConfirmTarget({ slotId: s.id, day, studentId: st.id }); setConfirmDeleteOpen(true); }} style={{ background: 'transparent', border: 'none', color: '#DC2626', cursor: 'pointer' }} title="Eliminar">🗑</button>
+                                    <button type="button" onClick={() => confirmRemoveSlot(s.id, day, st.id)} style={{ background: 'transparent', border: 'none', color: '#DC2626', cursor: 'pointer' }} title="Eliminar">🗑</button>
                               <button type="button" onClick={()=>{ openAssignPopup(s, day, st.id); }} style={{ background: 'transparent', border: 'none', color: '#2563EB', cursor: 'pointer' }} title="Editar">✏️</button>
                             </div>
                           </div>
@@ -696,88 +714,6 @@ export default function StudentScheduleModal({ studentId, students, schoolId, op
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
                   <button type='button' onClick={()=>setAssignOpen(false)} style={{ padding: '8px 12px', borderRadius: 6 }}>Cancelar</button>
                   <button type='button' onClick={saveAssignedRoute} style={{ padding: '8px 12px', borderRadius: 6, background: '#059669', color: '#fff' }}>Guardar</button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Confirm delete popup */}
-          {confirmDeleteOpen && (
-            <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 32000 }}>
-              <div style={{ background: '#fff', padding: 20, borderRadius: 8, width: 'min(520px, 95vw)', boxShadow: '0 6px 24px rgba(0,0,0,0.2)' }}>
-                <h3 style={{ marginTop: 0 }}>Confirmar eliminación</h3>
-                <div style={{ marginTop: 8 }}>¿Estás seguro que deseas eliminar esta parada?</div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-                  <button type='button' onClick={() => { if (confirmLoading) {
-                      return;
-                  } setConfirmDeleteOpen(false); setConfirmTarget({ slotId: null, day: null, studentId: null }); }} style={{ padding: '8px 12px', borderRadius: 6 }}>Cancelar</button>
-                  <button type='button' onClick={async () => {
-                    if (confirmLoading) {
-                        return;
-                    }
-                    setConfirmLoading(true);
-                    try {
-                      await removeSlotForDay(confirmTarget.slotId, confirmTarget.day, confirmTarget.studentId);
-                      setConfirmDeleteOpen(false);
-                      setConfirmTarget({ slotId: null, day: null, studentId: null });
-                    } catch (err) {
-                      console.error('[confirmDelete] Error deleting slot:', err);
-                    } finally {
-                      setConfirmLoading(false);
-                    }
-                  }} style={{ padding: '8px 12px', borderRadius: 6, background: '#DC2626', color: '#fff' }}>
-                    {confirmLoading ? 'Eliminando...' : 'Eliminar'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Confirm delete-all popup */}
-          {confirmDeleteAllOpen && (
-            <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 32000 }}>
-              <div style={{ background: '#fff', padding: 20, borderRadius: 8, width: 'min(520px, 95vw)', boxShadow: '0 6px 24px rgba(0,0,0,0.2)' }}>
-                <h3 style={{ marginTop: 0 }}>Eliminar todas las paradas</h3>
-                <div style={{ marginTop: 8 }}>
-                  {(() => {
-                    const st = (Array.isArray(students) ? students : []).find(x => x.id === confirmDeleteAllStudentId);
-                    const name = st?.fullName ? st.fullName : `Alumno ${confirmDeleteAllStudentId || ''}`;
-                    return `¿Seguro que deseas eliminar todas las paradas de ${name}?`;
-                  })()}
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-                  <button
-                    type='button'
-                    onClick={() => { if (confirmDeleteAllLoading) {
-                        return;
-                    } setConfirmDeleteAllOpen(false); setConfirmDeleteAllStudentId(null); }}
-                    style={{ padding: '8px 12px', borderRadius: 6 }}
-                    disabled={confirmDeleteAllLoading}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type='button'
-                    onClick={async () => {
-                      if (confirmDeleteAllLoading) {
-                          return;
-                      }
-                      setConfirmDeleteAllLoading(true);
-                      try {
-                        await removeAllSlotsForStudent(confirmDeleteAllStudentId);
-                        setConfirmDeleteAllOpen(false);
-                        setConfirmDeleteAllStudentId(null);
-                      } catch (err) {
-                        console.error('[confirmDeleteAll] Error deleting all slots:', err);
-                      } finally {
-                        setConfirmDeleteAllLoading(false);
-                      }
-                    }}
-                    style={{ padding: '8px 12px', borderRadius: 6, background: '#DC2626', color: '#fff' }}
-                    disabled={confirmDeleteAllLoading}
-                  >
-                    {confirmDeleteAllLoading ? 'Eliminando...' : 'Eliminar todo'}
-                  </button>
                 </div>
               </div>
             </div>

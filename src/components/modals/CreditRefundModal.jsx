@@ -1,16 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     Button,
     Box,
     TextField,
     Typography,
-    Divider,
     Alert,
-    IconButton,
     Checkbox,
     Table,
     TableHead,
@@ -20,11 +14,7 @@ import {
     TableContainer,
     Paper,
     CircularProgress,
-    InputAdornment,
-    useMediaQuery,
-    useTheme
 } from '@mui/material';
-import CloseIcon from '@mui/icons-material/Close';
 import ReplyIcon from '@mui/icons-material/Reply';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
@@ -32,8 +22,9 @@ import moment from 'moment';
 import api from '../../utils/axiosConfig';
 import { ServiceStatusChip } from '../PaymentTable';
 import { useCurrentDate } from '../../hooks/useCurrentDate';
-
-const formatMoney = (value) => `Q ${Number(value || 0).toFixed(2)}`;
+import { formatQ } from '../../utils/currency';
+import AppDialog from '../dialogs/AppDialog';
+import MoneyField from '../form/MoneyField';
 
 const emptyDetail = (creditBalance, todayStr) => ({
     refundDate: todayStr,
@@ -73,8 +64,6 @@ function validateDetail(detail, creditBalance, todayMoment) {
 }
 
 const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPaymentParams, onApplied }) => {
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const { format: formatCurrentDate, moment: currentDateMoment } = useCurrentDate();
 
     const [step, setStep] = useState('form'); // 'form' | 'confirm' | 'result'
@@ -263,7 +252,7 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
     const handleFinish = () => {
         const processed = results?.processed || 0;
         const message = processed > 0
-            ? `Se reintegraron ${processed} crédito${processed === 1 ? '' : 's'} a favor por ${formatMoney(results?.totalRefunded)}`
+            ? `Se reintegraron ${processed} crédito${processed === 1 ? '' : 's'} a favor por ${formatQ(results?.totalRefunded || 0)}`
             : null;
         reset();
         onClose?.();
@@ -277,323 +266,293 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
     const someFilteredSelected = filteredFamilies.some((f) => selected.has(f.paymentId));
 
     return (
-        <Dialog
+        <AppDialog
             open={open}
-            onClose={submitting ? undefined : handleClose}
-            fullWidth
-            maxWidth="sm"
-            fullScreen={isMobile}
-            PaperProps={{ sx: { borderRadius: { xs: 0, sm: 2 } } }}
+            onClose={handleClose}
+            title="Reintegrar crédito a favor"
+            subtitle={cicloEscolar ? (cicloEscolar.label || cicloEscolar.nombre) : undefined}
+            icon={<ReplyIcon />}
+            size="sm"
+            submitting={submitting}
+            contentSx={{ p: { xs: 2, sm: 3 } }}
+            actions={(
+                <>
+                    {step === 'form' && (loading || loadError || families.length === 0) && (
+                        <Button onClick={handleClose}>Cerrar</Button>
+                    )}
+                    {step === 'form' && !loading && !loadError && families.length > 0 && (
+                        <>
+                            <Button onClick={handleClose}>Cancelar</Button>
+                            <Button
+                                variant="contained"
+                                color="primary"
+                                disabled={!canSubmit}
+                                onClick={() => setStep('confirm')}
+                            >
+                                Reintegrar crédito
+                            </Button>
+                        </>
+                    )}
+                    {step === 'confirm' && (
+                        <>
+                            <Button onClick={() => setStep('form')} disabled={submitting}>Cancelar</Button>
+                            <Button
+                                variant="contained"
+                                color="primary"
+                                onClick={handleSubmit}
+                                disabled={submitting}
+                            >
+                                {submitting
+                                    ? <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><CircularProgress size={18} color="inherit" /><span>Procesando…</span></Box>
+                                    : 'Confirmar reintegro'}
+                            </Button>
+                        </>
+                    )}
+                    {step === 'result' && (
+                        <Button variant="contained" color="primary" onClick={handleFinish}>Cerrar</Button>
+                    )}
+                </>
+            )}
         >
-            <DialogTitle sx={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: 1,
-                backgroundColor: 'primary.main',
-                color: 'white',
-                py: 2
-            }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-                    <ReplyIcon />
-                    <Box>
-                        <Typography variant="h6" component="div">
-                            Reintegrar crédito a favor
-                        </Typography>
-                        {cicloEscolar && (
-                            <Typography variant="body2" sx={{ opacity: 0.95 }}>
-                                {cicloEscolar.label || cicloEscolar.nombre}
+            {step === 'form' && (
+                <>
+                    {loading && (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                            <CircularProgress size={28} />
+                        </Box>
+                    )}
+
+                    {!loading && loadError && (
+                        <Alert severity="error" sx={{ mt: 1 }}>{loadError}</Alert>
+                    )}
+
+                    {!loading && !loadError && families.length === 0 && (
+                        <Alert severity="info" sx={{ mt: 1 }}>
+                            Ninguna familia de este ciclo tiene crédito a favor.
+                        </Alert>
+                    )}
+
+                    {!loading && !loadError && families.length > 0 && (
+                        <>
+                            {cicloEscolar?.activo && (
+                                <Alert severity="info" sx={{ mb: 2 }}>
+                                    El ciclo escolar está activo. El crédito que se devuelva ya no se aplicará a los cargos de los meses siguientes.
+                                </Alert>
+                            )}
+
+                            <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                                1. Seleccionar familias
                             </Typography>
-                        )}
-                    </Box>
-                </Box>
-                <IconButton onClick={handleClose} sx={{ color: 'white' }} size="small" disabled={submitting}>
-                    <CloseIcon />
-                </IconButton>
-            </DialogTitle>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                {families.length} familia{families.length === 1 ? '' : 's'} con crédito a favor · Total disponible {formatQ(totalCreditBalance || 0)}
+                            </Typography>
+                            <TextField
+                                placeholder="Buscar familia…"
+                                size="small"
+                                fullWidth
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                sx={{ mb: 2, maxWidth: { sm: 320 } }}
+                            />
 
-            <DialogContent sx={{ p: { xs: 2, sm: 3 } }}>
-                {step === 'form' && (
-                    <>
-                        {loading && (
-                            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                                <CircularProgress size={28} />
-                            </Box>
-                        )}
-
-                        {!loading && loadError && (
-                            <Alert severity="error" sx={{ mt: 1 }}>{loadError}</Alert>
-                        )}
-
-                        {!loading && !loadError && families.length === 0 && (
-                            <Alert severity="info" sx={{ mt: 1 }}>
-                                Ninguna familia de este ciclo tiene crédito a favor.
-                            </Alert>
-                        )}
-
-                        {!loading && !loadError && families.length > 0 && (
-                            <>
-                                {cicloEscolar?.activo && (
-                                    <Alert severity="info" sx={{ mb: 2 }}>
-                                        El ciclo escolar está activo. El crédito que se devuelva ya no se aplicará a los cargos de los meses siguientes.
-                                    </Alert>
-                                )}
-
-                                <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                                    1. Seleccionar familias
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                                    {families.length} familia{families.length === 1 ? '' : 's'} con crédito a favor · Total disponible {formatMoney(totalCreditBalance)}
-                                </Typography>
-                                <TextField
-                                    placeholder="Buscar familia…"
-                                    size="small"
-                                    fullWidth
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    sx={{ mb: 2, maxWidth: { sm: 320 } }}
-                                />
-
-                                <TableContainer component={Paper} variant="outlined" sx={{ mb: 3, maxHeight: 320 }}>
-                                    <Table size="small" stickyHeader>
-                                        <TableHead>
-                                            <TableRow>
-                                                <TableCell padding="checkbox">
-                                                    <Checkbox
-                                                        checked={allFilteredSelected}
-                                                        indeterminate={!allFilteredSelected && someFilteredSelected}
-                                                        onChange={toggleAll}
-                                                    />
-                                                </TableCell>
-                                                <TableCell>Familia</TableCell>
-                                                <TableCell>Estado del servicio</TableCell>
-                                                <TableCell align="right">Crédito a favor</TableCell>
-                                            </TableRow>
-                                        </TableHead>
-                                        <TableBody>
-                                            {filteredFamilies.map((family) => (
-                                                <TableRow
-                                                    key={family.paymentId}
-                                                    hover
-                                                    selected={selected.has(family.paymentId)}
-                                                    onClick={() => toggleFamily(family)}
-                                                    sx={{ cursor: 'pointer' }}
-                                                >
-                                                    <TableCell padding="checkbox">
-                                                        <Checkbox checked={selected.has(family.paymentId)} onChange={() => toggleFamily(family)} onClick={(e) => e.stopPropagation()} />
-                                                    </TableCell>
-                                                    <TableCell>{family.familyLastName || '-'}</TableCell>
-                                                    <TableCell>
-                                                        <ServiceStatusChip serviceStatus={family.serviceStatus} isDeleted={false} />
-                                                    </TableCell>
-                                                    <TableCell align="right">{formatMoney(family.creditBalance)}</TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </TableContainer>
-
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                                    <Typography variant="subtitle1" fontWeight="bold">
-                                        2. Detalles del reintegro
-                                    </Typography>
-                                    <Typography variant="body2" color="text.secondary">
-                                        {validSelectedFamilies.length} familia{validSelectedFamilies.length === 1 ? '' : 's'} · {formatMoney(validTotal)}
-                                    </Typography>
-                                </Box>
-
-                                {selectedFamilies.length === 0 && (
-                                    <Alert severity="info">Selecciona al menos una familia para capturar los datos del reintegro.</Alert>
-                                )}
-
-                                <Box sx={{ display: 'grid', gap: 2 }}>
-                                    {selectedFamilies.map((family) => {
-                                        const detail = details[family.paymentId] || emptyDetail(family.creditBalance, todayStr);
-                                        const errors = detailErrorsById.get(family.paymentId) || {};
-                                        const hasErrors = Object.keys(errors).length > 0;
-                                        const amountNum = Number.parseFloat(detail.amount);
-                                        const isPartial = !Number.isNaN(amountNum) && amountNum > 0 && amountNum < Number(family.creditBalance || 0) - 0.001;
-                                        const remaining = Number(family.creditBalance || 0) - (Number.isNaN(amountNum) ? 0 : amountNum);
-
-                                        return (
-                                            <Paper
+                            <TableContainer component={Paper} variant="outlined" sx={{ mb: 3, maxHeight: 320 }}>
+                                <Table size="small" stickyHeader>
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell padding="checkbox">
+                                                <Checkbox
+                                                    checked={allFilteredSelected}
+                                                    indeterminate={!allFilteredSelected && someFilteredSelected}
+                                                    onChange={toggleAll}
+                                                />
+                                            </TableCell>
+                                            <TableCell>Familia</TableCell>
+                                            <TableCell>Estado del servicio</TableCell>
+                                            <TableCell align="right">Crédito a favor</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {filteredFamilies.map((family) => (
+                                            <TableRow
                                                 key={family.paymentId}
-                                                variant="outlined"
-                                                sx={{
-                                                    p: 2,
-                                                    borderColor: hasErrors ? 'error.main' : undefined,
-                                                    borderWidth: hasErrors ? 2 : 1
-                                                }}
+                                                hover
+                                                selected={selected.has(family.paymentId)}
+                                                onClick={() => toggleFamily(family)}
+                                                sx={{ cursor: 'pointer' }}
                                             >
-                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
-                                                    <Typography variant="subtitle2" fontWeight="bold">{family.familyLastName || '-'}</Typography>
-                                                    <Typography variant="body2" color="text.secondary">Crédito {formatMoney(family.creditBalance)}</Typography>
-                                                </Box>
-                                                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
-                                                    <TextField
-                                                        label="Fecha del reintegro"
-                                                        type="date"
-                                                        size="small"
-                                                        fullWidth
-                                                        InputLabelProps={{ shrink: true }}
-                                                        value={detail.refundDate}
-                                                        onChange={(e) => updateDetail(family.paymentId, 'refundDate', e.target.value)}
-                                                        error={!!errors.refundDate}
-                                                        helperText={errors.refundDate || ' '}
-                                                    />
-                                                    <TextField
-                                                        label="No. de referencia"
-                                                        size="small"
-                                                        fullWidth
-                                                        value={detail.referenceNumber}
-                                                        onChange={(e) => updateDetail(family.paymentId, 'referenceNumber', e.target.value)}
-                                                        error={!!errors.referenceNumber}
-                                                        helperText={errors.referenceNumber || ' '}
-                                                    />
-                                                    <TextField
-                                                        label="Monto a reintegrar"
-                                                        type="number"
-                                                        size="small"
-                                                        fullWidth
-                                                        inputProps={{ step: '0.01', min: 0 }}
-                                                        InputProps={{ startAdornment: <InputAdornment position="start">Q</InputAdornment> }}
-                                                        value={detail.amount}
-                                                        onChange={(e) => updateDetail(family.paymentId, 'amount', e.target.value)}
-                                                        error={!!errors.amount}
-                                                        helperText={errors.amount || ' '}
-                                                    />
-                                                </Box>
+                                                <TableCell padding="checkbox">
+                                                    <Checkbox checked={selected.has(family.paymentId)} onChange={() => toggleFamily(family)} onClick={(e) => e.stopPropagation()} />
+                                                </TableCell>
+                                                <TableCell>{family.familyLastName || '-'}</TableCell>
+                                                <TableCell>
+                                                    <ServiceStatusChip serviceStatus={family.serviceStatus} isDeleted={false} />
+                                                </TableCell>
+                                                <TableCell align="right">{formatQ(family.creditBalance || 0)}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                <Typography variant="subtitle1" fontWeight="bold">
+                                    2. Detalles del reintegro
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    {validSelectedFamilies.length} familia{validSelectedFamilies.length === 1 ? '' : 's'} · {formatQ(validTotal || 0)}
+                                </Typography>
+                            </Box>
+
+                            {selectedFamilies.length === 0 && (
+                                <Alert severity="info">Selecciona al menos una familia para capturar los datos del reintegro.</Alert>
+                            )}
+
+                            <Box sx={{ display: 'grid', gap: 2 }}>
+                                {selectedFamilies.map((family) => {
+                                    const detail = details[family.paymentId] || emptyDetail(family.creditBalance, todayStr);
+                                    const errors = detailErrorsById.get(family.paymentId) || {};
+                                    const hasErrors = Object.keys(errors).length > 0;
+                                    const amountNum = Number.parseFloat(detail.amount);
+                                    const isPartial = !Number.isNaN(amountNum) && amountNum > 0 && amountNum < Number(family.creditBalance || 0) - 0.001;
+                                    const remaining = Number(family.creditBalance || 0) - (Number.isNaN(amountNum) ? 0 : amountNum);
+
+                                    return (
+                                        <Paper
+                                            key={family.paymentId}
+                                            variant="outlined"
+                                            sx={{
+                                                p: 2,
+                                                borderColor: hasErrors ? 'error.main' : undefined,
+                                                borderWidth: hasErrors ? 2 : 1
+                                            }}
+                                        >
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
+                                                <Typography variant="subtitle2" fontWeight="bold">{family.familyLastName || '-'}</Typography>
+                                                <Typography variant="body2" color="text.secondary">Crédito {formatQ(family.creditBalance || 0)}</Typography>
+                                            </Box>
+                                            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
                                                 <TextField
-                                                    label="Nota (opcional)"
+                                                    label="Fecha del reintegro"
+                                                    type="date"
                                                     size="small"
                                                     fullWidth
-                                                    multiline
-                                                    minRows={1}
-                                                    sx={{ mt: 1 }}
-                                                    value={detail.notes}
-                                                    onChange={(e) => updateDetail(family.paymentId, 'notes', e.target.value)}
+                                                    InputLabelProps={{ shrink: true }}
+                                                    value={detail.refundDate}
+                                                    onChange={(e) => updateDetail(family.paymentId, 'refundDate', e.target.value)}
+                                                    error={!!errors.refundDate}
+                                                    helperText={errors.refundDate || ' '}
                                                 />
-                                                {isPartial && (
-                                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                                                        ⓘ Reintegro parcial · queda {formatMoney(remaining)} a favor
-                                                    </Typography>
-                                                )}
-                                            </Paper>
-                                        );
-                                    })}
-                                </Box>
-                            </>
-                        )}
-                    </>
-                )}
+                                                <TextField
+                                                    label="No. de referencia"
+                                                    size="small"
+                                                    fullWidth
+                                                    value={detail.referenceNumber}
+                                                    onChange={(e) => updateDetail(family.paymentId, 'referenceNumber', e.target.value)}
+                                                    error={!!errors.referenceNumber}
+                                                    helperText={errors.referenceNumber || ' '}
+                                                />
+                                                <MoneyField
+                                                    label="Monto a reintegrar"
+                                                    size="small"
+                                                    fullWidth
+                                                    inputProps={{ step: '0.01', min: 0 }}
+                                                    value={detail.amount}
+                                                    onChange={(e) => updateDetail(family.paymentId, 'amount', e.target.value)}
+                                                    error={!!errors.amount}
+                                                    helperText={errors.amount || ' '}
+                                                />
+                                            </Box>
+                                            <TextField
+                                                label="Nota (opcional)"
+                                                size="small"
+                                                fullWidth
+                                                multiline
+                                                minRows={1}
+                                                sx={{ mt: 1 }}
+                                                value={detail.notes}
+                                                onChange={(e) => updateDetail(family.paymentId, 'notes', e.target.value)}
+                                            />
+                                            {isPartial && (
+                                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                                                    ⓘ Reintegro parcial · queda {formatQ(remaining || 0)} a favor
+                                                </Typography>
+                                            )}
+                                        </Paper>
+                                    );
+                                })}
+                            </Box>
+                        </>
+                    )}
+                </>
+            )}
 
-                {step === 'confirm' && (
-                    <Box>
-                        <TableContainer component={Paper} variant="outlined" sx={{ mt: 2, mb: 2 }}>
-                            <Table size="small">
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell>Familia</TableCell>
-                                        <TableCell align="right">Monto</TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {validSelectedFamilies.map((family) => {
-                                        const detail = details[family.paymentId] || {};
-                                        const amount = Number.parseFloat(detail.amount) || 0;
-                                        return (
-                                            <TableRow key={family.paymentId}>
-                                                <TableCell>{family.familyLastName || '-'}</TableCell>
-                                                <TableCell align="right">{formatMoney(amount)}</TableCell>
-                                            </TableRow>
-                                        );
-                                    })}
-                                    <TableRow sx={{ fontWeight: 'bold', backgroundColor: 'action.hover' }}>
-                                        <TableCell>Total ({validSelectedFamilies.length} reintegro{validSelectedFamilies.length === 1 ? '' : 's'})</TableCell>
-                                        <TableCell align="right">{formatMoney(validTotal)}</TableCell>
-                                    </TableRow>
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-                        {submitError && <Alert severity="error" sx={{ mt: 2 }}>{submitError}</Alert>}
-                    </Box>
-                )}
-
-                {step === 'result' && results && (
-                    <Box>
-                        <Alert severity={results.failed > 0 ? 'warning' : 'success'} sx={{ mb: 2 }}>
-                            {results.processed} reintegro{results.processed === 1 ? '' : 's'} registrado{results.processed === 1 ? '' : 's'} por {formatMoney(results.totalRefunded)}
-                            {results.failed > 0 ? ` · ${results.failed} con error` : ''}
-                        </Alert>
-                        <TableContainer component={Paper} variant="outlined">
-                            <Table size="small">
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell></TableCell>
-                                        <TableCell>Familia</TableCell>
-                                        <TableCell align="right">Monto / Motivo</TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {(results.results || []).map((r) => (
-                                        <TableRow key={r.paymentId}>
-                                            <TableCell>
-                                                {r.ok
-                                                    ? <CheckCircleIcon fontSize="small" color="success" />
-                                                    : <CancelIcon fontSize="small" color="error" />}
-                                            </TableCell>
-                                            <TableCell>{r.familyLastName || `Pago #${r.paymentId}`}</TableCell>
-                                            <TableCell align="right">
-                                                {r.ok ? formatMoney(r.amount) : r.error}
-                                            </TableCell>
+            {step === 'confirm' && (
+                <Box>
+                    <TableContainer component={Paper} variant="outlined" sx={{ mt: 2, mb: 2 }}>
+                        <Table size="small">
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell>Familia</TableCell>
+                                    <TableCell align="right">Monto</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {validSelectedFamilies.map((family) => {
+                                    const detail = details[family.paymentId] || {};
+                                    const amount = Number.parseFloat(detail.amount) || 0;
+                                    return (
+                                        <TableRow key={family.paymentId}>
+                                            <TableCell>{family.familyLastName || '-'}</TableCell>
+                                            <TableCell align="right">{formatQ(amount || 0)}</TableCell>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-                    </Box>
-                )}
-            </DialogContent>
+                                    );
+                                })}
+                                <TableRow sx={{ fontWeight: 'bold', backgroundColor: 'action.hover' }}>
+                                    <TableCell>Total ({validSelectedFamilies.length} reintegro{validSelectedFamilies.length === 1 ? '' : 's'})</TableCell>
+                                    <TableCell align="right">{formatQ(validTotal || 0)}</TableCell>
+                                </TableRow>
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                    {submitError && <Alert severity="error" sx={{ mt: 2 }}>{submitError}</Alert>}
+                </Box>
+            )}
 
-            <Divider />
-
-            <DialogActions sx={{ px: 3, py: 2 }}>
-                {step === 'form' && (loading || loadError || families.length === 0) && (
-                    <Button onClick={handleClose}>Cerrar</Button>
-                )}
-                {step === 'form' && !loading && !loadError && families.length > 0 && (
-                    <>
-                        <Button onClick={handleClose}>Cancelar</Button>
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            disabled={!canSubmit}
-                            onClick={() => setStep('confirm')}
-                        >
-                            Reintegrar crédito
-                        </Button>
-                    </>
-                )}
-                {step === 'confirm' && (
-                    <>
-                        <Button onClick={() => setStep('form')} disabled={submitting}>Cancelar</Button>
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            onClick={handleSubmit}
-                            disabled={submitting}
-                        >
-                            {submitting
-                                ? <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><CircularProgress size={18} color="inherit" /><span>Procesando…</span></Box>
-                                : 'Confirmar reintegro'}
-                        </Button>
-                    </>
-                )}
-                {step === 'result' && (
-                    <Button variant="contained" color="primary" onClick={handleFinish}>Cerrar</Button>
-                )}
-            </DialogActions>
-        </Dialog>
+            {step === 'result' && results && (
+                <Box>
+                    <Alert severity={results.failed > 0 ? 'warning' : 'success'} sx={{ mb: 2 }}>
+                        {results.processed} reintegro{results.processed === 1 ? '' : 's'} registrado{results.processed === 1 ? '' : 's'} por {formatQ(results.totalRefunded || 0)}
+                        {results.failed > 0 ? ` · ${results.failed} con error` : ''}
+                    </Alert>
+                    <TableContainer component={Paper} variant="outlined">
+                        <Table size="small">
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell></TableCell>
+                                    <TableCell>Familia</TableCell>
+                                    <TableCell align="right">Monto / Motivo</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {(results.results || []).map((r) => (
+                                    <TableRow key={r.paymentId}>
+                                        <TableCell>
+                                            {r.ok
+                                                ? <CheckCircleIcon fontSize="small" color="success" />
+                                                : <CancelIcon fontSize="small" color="error" />}
+                                        </TableCell>
+                                        <TableCell>{r.familyLastName || `Pago #${r.paymentId}`}</TableCell>
+                                        <TableCell align="right">
+                                            {r.ok ? formatQ(r.amount || 0) : r.error}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                </Box>
+            )}
+        </AppDialog>
     );
 };
 

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Paper,
   Alert,
   Box,
   Button,
@@ -7,20 +8,10 @@ import {
   CardContent,
   CircularProgress,
   Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Grid,
-  IconButton,
-  Paper,
-  Snackbar,
   Table,
   TableBody,
   TableCell,
-  TableContainer,
-  TableHead,
-  TablePagination,
   TableRow,
   TextField,
   Tooltip,
@@ -28,13 +19,12 @@ import {
   Stack,
 } from '@mui/material';
 import {
-  Close as CloseIcon,
   GetApp as DownloadIcon,
   ExpandMore as ExpandMoreIcon,
   Replay as ReplayIcon,
   Visibility as VisibilityIcon,
+  MailOutline as MailOutlineIcon,
 } from '@mui/icons-material';
-import TableSortLabel from '@mui/material/TableSortLabel';
 import moment from 'moment-timezone';
 import parse from 'html-react-parser';
 
@@ -50,8 +40,16 @@ import { F } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
-
-moment.tz.setDefault('America/Guatemala');
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import RowActions from '../components/table/RowActions';
+import { formatDateTime } from '../utils/dateFormat';
+import { EMAIL_STATUS } from '../constants/statuses';
+import AppDialog from '../components/dialogs/AppDialog';
 
 const safeStr = (v) => (v == null ? '' : String(v)).trim();
 
@@ -60,12 +58,6 @@ const ALL_CLIENTS_VALUE = 'all';
 const MAX_VISIBLE_SCHOOL_NAMES = 2;
 
 // Resultado de la entrega por correo. Sin dato (null): circulares anteriores o enviadas sin correo.
-const EMAIL_STATUS_CHIP = {
-  sent: { label: 'Enviado', color: 'success' },
-  partial: { label: 'Parcial', color: 'warning' },
-  sending: { label: 'Reenviando', color: 'info' },
-};
-
 const emailDeliveryText = (item) => {
   const sent = Number(item?.emailSentCount) || 0;
   const failed = Number(item?.emailFailedCount) || 0;
@@ -82,7 +74,7 @@ const emailDeliveryText = (item) => {
 const isResendInProgress = (item) => item?.emailStatus === 'sending' && !item?.canResend;
 
 const renderEmailStatus = (item) => {
-  const chip = EMAIL_STATUS_CHIP[item?.emailStatus];
+  const chip = EMAIL_STATUS[item?.emailStatus];
   if (!chip) {
     return '—';
   }
@@ -165,23 +157,6 @@ const withPdfViewerParams = (url) => {
   return `${u}#toolbar=0&navpanes=0&scrollbar=0`;
 };
 
-const formatDateTime = (dateString) => {
-  if (!dateString) {
-      return '';
-  }
-  try {
-    return new Date(dateString).toLocaleString('es-ES', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return String(dateString);
-  }
-};
-
 const getRecipientLabel = (recipient) => {
   const name = safeStr(recipient?.name) || `Usuario ${recipient?.id}`;
   const email = safeStr(recipient?.email) || 'Sin correo';
@@ -196,6 +171,16 @@ const getRecipientRoleLabel = (role) => {
   return safeStr(role) || 'Sin rol';
 };
 
+// Columnas de la tabla
+const COLUMNS = [
+  { id: 'sentAt', label: 'Enviada', sortable: true },
+  { id: 'subject', label: 'Asunto', sortable: true },
+  { id: 'audiencia', label: 'Audiencia' },
+  { id: 'correo', label: 'Correo' },
+  { id: 'archivo_adjunto', label: 'Archivo adjunto', align: 'center' },
+  { id: 'acciones', label: 'Acciones', align: 'right' },
+];
+
 const CircularHistoryPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -203,8 +188,9 @@ const CircularHistoryPage = () => {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
 
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(25);
+  // Paginación y orden (en el servidor)
+  const table = useTableState({ defaultOrderBy: 'sentAt', defaultOrder: 'desc' });
+  const { page, rowsPerPage, orderBy: sortBy, order: sortDirection } = table;
 
   const [schools, setSchools] = useState([]);
 
@@ -215,12 +201,10 @@ const CircularHistoryPage = () => {
       F.search('q', { placeholder: 'Asunto o contenido' }),
       F.dateRange('dates'),
     ],
-    onApplied: () => setPage(0),
+    onApplied: table.resetPage,
   });
   const { cycle: selectedCicloEscolar, client: selectedClient, q, dates } = pageFilters.applied;
   const draftCycle = pageFilters.draft.cycle;
-  const [sortBy, setSortBy] = useState('sentAt');
-  const [sortDirection, setSortDirection] = useState('desc');
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -228,9 +212,8 @@ const CircularHistoryPage = () => {
   const [detail, setDetail] = useState(null);
   const [recipientSearch, setRecipientSearch] = useState('');
   const [recipientsOpen, setRecipientsOpen] = useState(false);
-  const [toResend, setToResend] = useState(null);
-  const [resending, setResending] = useState(false);
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const notify = useNotify();
+  const confirm = useConfirm();
 
   const listParams = useMemo(() => {
     const params = {
@@ -305,13 +288,6 @@ const CircularHistoryPage = () => {
     fetchSchools();
   }, [fetchSchools]);
 
-  const handleRequestSort = (property) => {
-    const isAsc = sortBy === property && sortDirection === 'asc';
-    setSortDirection(isAsc ? 'desc' : 'asc');
-    setSortBy(property);
-    setPage(0);
-  };
-
   const filteredRecipientGroups = useMemo(() => {
     const groups = Array.isArray(detail?.recipientGroups) ? detail.recipientGroups : [];
     const query = safeStr(recipientSearch).toLowerCase();
@@ -345,21 +321,26 @@ const CircularHistoryPage = () => {
     }
   }, []);
 
-  const confirmResend = async () => {
-    setResending(true);
-    try {
-      const { uuid } = toResend;
-      const res = await api.post(`/circulars/admin/${uuid}/resend-failed`);
-      setSnackbar({ open: true, severity: 'success', message: res?.data?.message || 'Reenviando el correo a los destinatarios fallidos.' });
-      setToResend(null);
-      fetchRows();
-      if (detail?.uuid === uuid) {
-        refreshDetail(uuid);
-      }
-    } catch (e) {
-      setSnackbar({ open: true, severity: 'error', message: e?.response?.data?.message || 'No se pudo reenviar a los destinatarios fallidos.' });
-    } finally {
-      setResending(false);
+  const handleResend = async (item) => {
+    const { uuid } = item;
+    let res = null;
+    const ok = await confirm({
+      title: 'Reenviar a fallidos',
+      message: `Se enviará el correo únicamente a los ${item?.emailPendingCount ?? item?.emailFailedCount ?? 0} destinatarios que no lo recibieron. La circular y la notificación ya están publicadas en el sistema y no se duplican.`,
+      confirmLabel: 'Reenviar',
+      cancelLabel: 'Volver',
+      onConfirm: async () => {
+        res = await api.post(`/circulars/admin/${uuid}/resend-failed`);
+      },
+      errorMessage: 'No se pudo reenviar a los destinatarios fallidos',
+    });
+    if (!ok) {
+      return;
+    }
+    notify.success(res?.data?.message || 'Reenviando el correo a los destinatarios fallidos');
+    fetchRows();
+    if (detail?.uuid === uuid) {
+      refreshDetail(uuid);
     }
   };
 
@@ -503,34 +484,9 @@ const CircularHistoryPage = () => {
       <FilterBar {...pageFilters.barProps} loading={loading} />
 
       <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
-        <TableContainer>
+        <AppTableContainer>
           <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 800 }} sortDirection={sortBy === 'sentAt' ? sortDirection : false}>
-                  <TableSortLabel
-                    active={sortBy === 'sentAt'}
-                    direction={sortBy === 'sentAt' ? sortDirection : 'desc'}
-                    onClick={() => handleRequestSort('sentAt')}
-                  >
-                    Enviada
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 800 }} sortDirection={sortBy === 'subject' ? sortDirection : false}>
-                  <TableSortLabel
-                    active={sortBy === 'subject'}
-                    direction={sortBy === 'subject' ? sortDirection : 'asc'}
-                    onClick={() => handleRequestSort('subject')}
-                  >
-                    Asunto
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 800 }}>Audiencia</TableCell>
-                <TableCell sx={{ fontWeight: 800 }}>Correo</TableCell>
-                <TableCell sx={{ fontWeight: 800 }} align="center">Archivo adjunto</TableCell>
-                <TableCell sx={{ fontWeight: 800 }} align="right">Acciones</TableCell>
-              </TableRow>
-            </TableHead>
+            <SortableTableHead columns={COLUMNS} cellSx={{ fontWeight: 800 }} {...table.sortProps} />
 
             <TableBody>
               {loading ? (
@@ -565,315 +521,240 @@ const CircularHistoryPage = () => {
                     <TableCell>{renderEmailStatus(r)}</TableCell>
                     <TableCell align="center">{r.hasAttachment ? 'Sí' : 'No'}</TableCell>
                     <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
-                      {r.canResend && (
-                        <PermissionGuard permission="mail-enviar-circular">
-                          <Tooltip title="Reenviar el correo solo a quienes no lo recibieron">
-                            <IconButton
-                              onClick={() => setToResend(r)}
-                              size="small"
-                              color="warning"
-                              sx={{ mr: 1 }}
-                              aria-label="Reenviar a fallidos"
-                            >
-                              <ReplayIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </PermissionGuard>
-                      )}
-                      <Tooltip title="Ver detalle">
-                        <span>
-                          <IconButton
-                            onClick={() => openDetail(r.uuid)}
-                            size="small"
-                            sx={{
-                              color: 'primary.main',
-                              backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                              transition: 'all 200ms ease-in-out',
-                              '&:hover': {
-                                backgroundColor: 'rgba(25, 118, 210, 0.16)',
-                                color: 'primary.dark',
-                                transform: 'scale(1.1)',
-                              },
-                            }}
-                          >
-                            <VisibilityIcon fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
+                      <RowActions
+                        actions={[
+                          { key: 'view', kind: 'view', label: 'Ver detalle', icon: <VisibilityIcon fontSize="small" />, onClick: () => openDetail(r.uuid) },
+                          r.canResend && { key: 'resend', kind: 'other', color: 'warning', label: 'Reenviar a fallidos', tooltip: 'Reenviar el correo solo a quienes no lo recibieron', icon: <ReplayIcon fontSize="small" />, permission: 'mail-enviar-circular', onClick: () => handleResend(r) },
+                        ]}
+                      />
                     </TableCell>
                   </TableRow>
                 ))
               )}
             </TableBody>
           </Table>
-        </TableContainer>
+        </AppTableContainer>
 
-        <TablePagination
-          component="div"
-          count={total}
-          page={page}
-          onPageChange={(_, newPage) => setPage(newPage)}
-          rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={(e) => {
-            setRowsPerPage(Number.parseInt(e.target.value, 10));
-            setPage(0);
-          }}
-          rowsPerPageOptions={[10, 25, 50, 100]}
-        />
+        <AppTablePagination count={total} {...table.paginationProps} />
       </Paper>
 
-      <Dialog open={detailOpen} onClose={closeDetail} fullWidth maxWidth="md">
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box sx={{ pr: 2, minWidth: 0 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-              <Typography variant="h6" sx={{ fontWeight: 800 }} noWrap>
-                {safeStr(detail?.subject) || 'Circular'}
-              </Typography>
-              {detail?.isScheduled && <ScheduledOriginChip />}
-            </Box>
-            <Typography variant="body2" color="text.secondary">
-              Enviada: {formatDateTime(detail?.sentAt) || '—'}
-            </Typography>
+      <AppDialog
+        open={detailOpen}
+        onClose={closeDetail}
+        title={safeStr(detail?.subject) || 'Circular'}
+        subtitle={`Enviada: ${formatDateTime(detail?.sentAt)}`}
+        icon={<MailOutlineIcon />}
+        size="md"
+        readOnly
+      >
+        {detail?.isScheduled && (
+          <Box sx={{ mb: 2 }}>
+            <ScheduledOriginChip />
           </Box>
-          <IconButton onClick={closeDetail} aria-label="Cerrar">
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
+        )}
+        {detailLoading ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : detailError ? (
+          <Alert severity="error">{detailError}</Alert>
+        ) : (
+          <>
+            {EMAIL_STATUS[detail?.emailStatus] && detail.emailStatus !== 'sent' && (
+              <Alert
+                severity={detail.emailStatus === 'sending' ? 'info' : 'warning'}
+                sx={{ mb: 2 }}
+                action={detail.canResend ? (
+                  <PermissionGuard permission="mail-enviar-circular">
+                    <Button color="inherit" size="small" startIcon={<ReplayIcon />} onClick={() => handleResend(detail)}>
+                      Reenviar a fallidos
+                    </Button>
+                  </PermissionGuard>
+                ) : undefined}
+              >
+                {detail.emailStatus === 'sending'
+                  ? 'Reenviando el correo a los destinatarios que no lo recibieron…'
+                  : `${emailDeliveryText(detail) || 'El correo no se pudo entregar a algunos destinatarios'}. La circular sí está publicada en el sistema.`}
+              </Alert>
+            )}
+            <Box sx={{ mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 1 }}>
+                <Typography variant="subtitle2" sx={{ color: '#1976d2', fontWeight: 800 }}>
+                  Destinatarios
+                </Typography>
 
-        <DialogContent dividers>
-          {detailLoading ? (
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4 }}>
-              <CircularProgress />
-            </Box>
-          ) : detailError ? (
-            <Alert severity="error">{detailError}</Alert>
-          ) : (
-            <>
-              {EMAIL_STATUS_CHIP[detail?.emailStatus] && detail.emailStatus !== 'sent' && (
-                <Alert
-                  severity={detail.emailStatus === 'sending' ? 'info' : 'warning'}
-                  sx={{ mb: 2 }}
-                  action={detail.canResend ? (
-                    <PermissionGuard permission="mail-enviar-circular">
-                      <Button color="inherit" size="small" startIcon={<ReplayIcon />} onClick={() => setToResend(detail)}>
-                        Reenviar a fallidos
-                      </Button>
-                    </PermissionGuard>
-                  ) : undefined}
-                >
-                  {detail.emailStatus === 'sending'
-                    ? 'Reenviando el correo a los destinatarios que no lo recibieron…'
-                    : `${emailDeliveryText(detail) || 'El correo no se pudo entregar a algunos destinatarios'}. La circular sí está publicada en el sistema.`}
-                </Alert>
-              )}
-              <Box sx={{ mb: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 1 }}>
-                  <Typography variant="subtitle2" sx={{ color: '#1976d2', fontWeight: 800 }}>
-                    Destinatarios
-                  </Typography>
-
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="primary"
-                    onClick={() => setRecipientsOpen((value) => !value)}
-                    endIcon={
-                      <ExpandMoreIcon
-                        sx={{
-                          transform: recipientsOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                          transition: 'transform 200ms',
-                        }}
-                      />
-                    }
-                    sx={{
-                      textTransform: 'none',
-                      fontWeight: 700,
-                      backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                      borderColor: 'rgba(25, 118, 210, 0.24)',
-                      '&:hover': {
-                        backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                        borderColor: 'primary.main',
-                      },
-                      whiteSpace: 'nowrap',
-                    }}
-                    aria-label={recipientsOpen ? 'Ocultar destinatarios' : 'Mostrar destinatarios'}
-                  >
-                    {recipientsOpen ? 'Ocultar' : 'Mostrar'}
-                  </Button>
-                </Box>
-
-                {recipientsOpen && (
-                  <>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      label="Buscar destinatario"
-                      value={recipientSearch}
-                      onChange={(e) => setRecipientSearch(e.target.value)}
-                      placeholder="Nombre, correo, rol o colegio"
-                      sx={{ mb: 1.5 }}
-                    />
-
-                    <Box
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="primary"
+                  onClick={() => setRecipientsOpen((value) => !value)}
+                  endIcon={
+                    <ExpandMoreIcon
                       sx={{
-                        maxHeight: 360,
-                        overflowY: 'auto',
-                        pr: 1,
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        borderRadius: 2,
-                        p: 1.5,
-                        backgroundColor: 'background.paper',
+                        transform: recipientsOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 200ms',
                       }}
-                    >
-                      {filteredRecipientGroups.length > 0 ? (
-                        <Stack spacing={2}>
-                          {filteredRecipientGroups.map((group) => (
-                            <Box key={String(group.schoolId || group.schoolName)}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, mb: 1 }}>
-                                <Chip
-                                  label={group.schoolName || 'Sin colegio'}
-                                  size="small"
-                                  color="primary"
-                                  variant="outlined"
-                                  sx={{ fontWeight: 700 }}
-                                />
-                                <Typography variant="caption" color="text.secondary">
-                                  {group.users.length} usuario{group.users.length === 1 ? '' : 's'}
-                                </Typography>
-                              </Box>
+                    />
+                  }
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 700,
+                    backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                    borderColor: 'rgba(25, 118, 210, 0.24)',
+                    '&:hover': {
+                      backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                      borderColor: 'primary.main',
+                    },
+                    whiteSpace: 'nowrap',
+                  }}
+                  aria-label={recipientsOpen ? 'Ocultar destinatarios' : 'Mostrar destinatarios'}
+                >
+                  {recipientsOpen ? 'Ocultar' : 'Mostrar'}
+                </Button>
+              </Box>
 
-                              <Stack spacing={1}>
-                                {group.users.map((recipient) => (
-                                  <Box
-                                    key={recipient.id}
-                                    sx={{
-                                      display: 'flex',
-                                      alignItems: 'flex-start',
-                                      justifyContent: 'space-between',
-                                      gap: 2,
-                                      p: 1.25,
-                                      border: '1px solid',
-                                      borderColor: 'divider',
-                                      borderRadius: 2,
-                                      flexWrap: 'wrap',
-                                    }}
-                                  >
-                                    <Box sx={{ minWidth: 0, flex: 1 }}>
-                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                                          {getRecipientLabel(recipient)}
-                                        </Typography>
-                                        <Chip
-                                          size="small"
-                                          label={getRecipientRoleLabel(recipient.role)}
-                                          variant="filled"
-                                          color="default"
-                                          sx={{ fontWeight: 700 }}
-                                        />
-                                      </Box>
+              {recipientsOpen && (
+                <>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Buscar destinatario"
+                    value={recipientSearch}
+                    onChange={(e) => setRecipientSearch(e.target.value)}
+                    placeholder="Nombre, correo, rol o colegio"
+                    sx={{ mb: 1.5 }}
+                  />
+
+                  <Box
+                    sx={{
+                      maxHeight: 360,
+                      overflowY: 'auto',
+                      pr: 1,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: 2,
+                      p: 1.5,
+                      backgroundColor: 'background.paper',
+                    }}
+                  >
+                    {filteredRecipientGroups.length > 0 ? (
+                      <Stack spacing={2}>
+                        {filteredRecipientGroups.map((group) => (
+                          <Box key={String(group.schoolId || group.schoolName)}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, mb: 1 }}>
+                              <Chip
+                                label={group.schoolName || 'Sin colegio'}
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                                sx={{ fontWeight: 700 }}
+                              />
+                              <Typography variant="caption" color="text.secondary">
+                                {group.users.length} usuario{group.users.length === 1 ? '' : 's'}
+                              </Typography>
+                            </Box>
+
+                            <Stack spacing={1}>
+                              {group.users.map((recipient) => (
+                                <Box
+                                  key={recipient.id}
+                                  sx={{
+                                    display: 'flex',
+                                    alignItems: 'flex-start',
+                                    justifyContent: 'space-between',
+                                    gap: 2,
+                                    p: 1.25,
+                                    border: '1px solid',
+                                    borderColor: 'divider',
+                                    borderRadius: 2,
+                                    flexWrap: 'wrap',
+                                  }}
+                                >
+                                  <Box sx={{ minWidth: 0, flex: 1 }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                        {getRecipientLabel(recipient)}
+                                      </Typography>
+                                      <Chip
+                                        size="small"
+                                        label={getRecipientRoleLabel(recipient.role)}
+                                        variant="filled"
+                                        color="default"
+                                        sx={{ fontWeight: 700 }}
+                                      />
                                     </Box>
                                   </Box>
-                                ))}
-                              </Stack>
-                            </Box>
-                          ))}
-                        </Stack>
-                      ) : (
-                        <Typography variant="body2" color="text.secondary">
-                          No hay destinatarios que coincidan con la búsqueda.
-                        </Typography>
-                      )}
-                    </Box>
-                  </>
-                )}
+                                </Box>
+                              ))}
+                            </Stack>
+                          </Box>
+                        ))}
+                      </Stack>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        No hay destinatarios que coincidan con la búsqueda.
+                      </Typography>
+                    )}
+                  </Box>
+                </>
+              )}
+            </Box>
+
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1, color: '#1976d2', fontWeight: 800 }}>
+                Mensaje
+              </Typography>
+              <Box sx={{ '& p': { marginTop: 0 } }}>
+                {safeStr(detail?.body) ? parse(String(detail.body)) : <Typography variant="body2">—</Typography>}
               </Box>
+            </Box>
 
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ mb: 1, color: '#1976d2', fontWeight: 800 }}>
-                  Mensaje
-                </Typography>
-                <Box sx={{ '& p': { marginTop: 0 } }}>
-                  {safeStr(detail?.body) ? parse(String(detail.body)) : <Typography variant="body2">—</Typography>}
-                </Box>
-              </Box>
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1, color: '#1976d2', fontWeight: 800 }}>
+                Archivo adjunto
+              </Typography>
 
-              <Box>
-                <Typography variant="subtitle2" sx={{ mb: 1, color: '#1976d2', fontWeight: 800 }}>
-                  Archivo adjunto
-                </Typography>
-
-                {Array.isArray(detail?.attachments) && detail.attachments.length > 0 ? (
-                  <Grid container spacing={1}>
-                    {detail.attachments.map((a) => (
-                      <Grid item xs={12} key={a.uuid}>
-                        <Card variant="outlined" sx={{ borderRadius: 2 }}>
-                          <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-                              <Box sx={{ minWidth: 0 }}>
-                                <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
-                                  {safeStr(a.originalName) || 'Adjunto'}
-                                </Typography>
-                                {safeStr(a.mimeType) && (
-                                  <Typography variant="caption" color="text.secondary">{a.mimeType}</Typography>
-                                )}
-                              </Box>
-
-                              <Button
-                                variant="contained"
-                                startIcon={<DownloadIcon />}
-                                onClick={() => downloadAttachment(a.uuid)}
-                                sx={{ whiteSpace: 'nowrap' }}
-                              >
-                                Descargar
-                              </Button>
+              {Array.isArray(detail?.attachments) && detail.attachments.length > 0 ? (
+                <Grid container spacing={1}>
+                  {detail.attachments.map((a) => (
+                    <Grid item xs={12} key={a.uuid}>
+                      <Card variant="outlined" sx={{ borderRadius: 2 }}>
+                        <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
+                                {safeStr(a.originalName) || 'Adjunto'}
+                              </Typography>
+                              {safeStr(a.mimeType) && (
+                                <Typography variant="caption" color="text.secondary">{a.mimeType}</Typography>
+                              )}
                             </Box>
 
-                            {renderAttachmentPreview(a)}
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    ))}
-                  </Grid>
-                ) : (
-                  <Typography variant="body2">No hay adjuntos.</Typography>
-                )}
-              </Box>
-            </>
-          )}
-        </DialogContent>
+                            <Button
+                              variant="contained"
+                              startIcon={<DownloadIcon />}
+                              onClick={() => downloadAttachment(a.uuid)}
+                              sx={{ whiteSpace: 'nowrap' }}
+                            >
+                              Descargar
+                            </Button>
+                          </Box>
 
-        <DialogActions>
-          <Button onClick={closeDetail}>Cerrar</Button>
-        </DialogActions>
-      </Dialog>
+                          {renderAttachmentPreview(a)}
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  ))}
+                </Grid>
+              ) : (
+                <Typography variant="body2">No hay adjuntos.</Typography>
+              )}
+            </Box>
+          </>
+        )}
+      </AppDialog>
 
-      <Dialog open={!!toResend} onClose={() => !resending && setToResend(null)}>
-        <DialogTitle>Reenviar a fallidos</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">
-            Se enviará el correo únicamente a los {toResend?.emailPendingCount ?? toResend?.emailFailedCount ?? 0} destinatarios que no lo recibieron.
-            La circular y la notificación ya están publicadas en el sistema y no se duplican.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setToResend(null)} disabled={resending}>Volver</Button>
-          <Button variant="contained" onClick={confirmResend} disabled={resending}>
-            {resending ? 'Reenviando…' : 'Reenviar'}
-          </Button>
-        </DialogActions>
-      </Dialog>
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))} severity={snackbar.severity} sx={{ width: '100%' }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </PageContainer>
   );
 };

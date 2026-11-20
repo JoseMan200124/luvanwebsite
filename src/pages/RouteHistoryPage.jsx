@@ -27,7 +27,6 @@ import {
     TableCell,
     TableContainer,
     useTheme,
-    useMediaQuery,
     MobileStepper,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
@@ -57,6 +56,8 @@ import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, Cell, LabelList, CartesianGrid } from 'recharts';
 import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
+import useIsMobile from '../hooks/useIsMobile';
+import { formatTime, formatDateLong, formatDate } from '../utils/dateFormat';
 
 const RouteHistoryPage = () => {
     const [loading, setLoading] = useState(false);
@@ -422,14 +423,6 @@ const RouteHistoryPage = () => {
         loadStatsRoutes();
     }, [statsDraftCycle, statsDraftClientType, statsDraftClientId]);
 
-    const formatTime = (dateTime) => {
-        if (!dateTime) {
-            return 'N/A';
-        }
-        const date = new Date(dateTime);
-        return date.toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' });
-    };
-
     const formatDuration = (startTime, endTime) => {
         if (!startTime || !endTime) {
             return 'En progreso';
@@ -444,7 +437,7 @@ const RouteHistoryPage = () => {
 
     const contentMinHeight = 320;
     const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
     const chartPrimary = theme.palette.primary.main;
     const chartPrimaryLight = theme.palette.primary.light;
 
@@ -1319,7 +1312,7 @@ const RouteHistoryPage = () => {
                                                         </Box>
 
                                                         <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-                                                            <Typography variant="caption" color="textSecondary">Registrado el {new Date(route.createdAt).toLocaleDateString('es-GT', { year: 'numeric', month: 'long', day: 'numeric' })}</Typography>
+                                                            <Typography variant="caption" color="textSecondary">Registrado el {formatDateLong(route.createdAt)}</Typography>
                                                         </Box>
                                                     </CardContent>
                                                 </Card>
@@ -1347,7 +1340,7 @@ const RouteHistoryPage = () => {
                                             <TableBody>
                                                 {routes.map((route, idx) => (
                                                     <TableRow key={route.id || idx} hover>
-                                                        <TableCell>{new Date(route.createdAt).toLocaleDateString('es-GT', { year: 'numeric', month: '2-digit', day: '2-digit' })}</TableCell>
+                                                        <TableCell>{formatDate(route.createdAt)}</TableCell>
                                                         <TableCell align="center">{route.routeNumber || route.number || '—'}</TableCell>
                                                         <TableCell>
                                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

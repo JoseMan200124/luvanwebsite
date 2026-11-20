@@ -9,7 +9,6 @@ import {
     Select,
     MenuItem,
     Button,
-    Snackbar,
     Alert,
     CircularProgress,
     Divider,
@@ -20,11 +19,7 @@ import {
     Grid,
     Checkbox,
     Tooltip,
-    Dialog,
-    DialogTitle,
-    DialogContent,
     DialogContentText,
-    DialogActions,
     ButtonGroup,
     Stack,
     Tabs,
@@ -47,6 +42,8 @@ import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
 
 /** Grupo que se muestra aparte: no aplica a quien solo usa el sistema web. */
 const GRUPO_MOVIL = 'app-movil';
@@ -243,12 +240,13 @@ const PermissionsManagementPage = () => {
     const [expandidos, setExpandidos] = useState({});
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-    const [confirmacion, setConfirmacion] = useState(null);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
+    const confirm = useConfirm();
 
+    // CatalogOrganizer recibe este mismo callback (onNotify) con la firma (mensaje, tipo).
     const showSnackbar = useCallback((message, severity = 'success') => {
-        setSnackbar({ open: true, message, severity });
-    }, []);
+        (notify[severity] || notify.info)(message);
+    }, [notify]);
 
     // ----------------------------------------------------------------- carga
     useEffect(() => {
@@ -424,7 +422,7 @@ const PermissionsManagementPage = () => {
      * vuelve a renderizar igual, así que no se pierde memoización por esto.
      */
     const pedirConfirmacion = useCallback(
-        (grupo) => {
+        async (grupo) => {
             const aConceder = grupo.permissions.filter(
                 (p) => p.level !== 'eliminar' && !permissions[p.key]
             );
@@ -433,18 +431,57 @@ const PermissionsManagementPage = () => {
                 return;
             }
             const destructivos = grupo.permissions.filter((p) => p.level === 'eliminar');
-            setConfirmacion({ grupo, aConceder, destructivos });
+            const rol = roles.find((r) => r.id === selectedRoleId);
+            const ok = await confirm({
+                title: 'Conceder acceso completo',
+                message: (
+                    <>
+                        <DialogContentText sx={{ mb: 2 }}>
+                            Se van a conceder <strong>{aConceder.length}</strong> permisos
+                            del grupo <strong>{grupo.label}</strong>
+                            {rol ? ` al rol ${rol.name}` : ''}:
+                        </DialogContentText>
+                        <Box
+                            sx={{
+                                maxHeight: 260,
+                                overflowY: 'auto',
+                                bgcolor: '#fafafa',
+                                borderRadius: 1,
+                                p: 1.5,
+                            }}
+                        >
+                            {aConceder.map((p) => (
+                                <Typography key={p.key} variant="body2" sx={{ py: 0.3 }}>
+                                    • {p.description}
+                                </Typography>
+                            ))}
+                        </Box>
+                        {!!destructivos.length && (
+                            <Alert severity="warning" sx={{ mt: 2 }}>
+                                {destructivos.length} permiso(s) de este grupo eliminan
+                                información y <strong>no</strong> se conceden aquí. Si hacen falta,
+                                actívalos uno por uno.
+                            </Alert>
+                        )}
+                    </>
+                ),
+                confirmLabel: 'Conceder',
+            });
+            if (ok) {
+                aplicarAGrupo(grupo, 'todo');
+            }
         },
-        [permissions, showSnackbar]
+        [permissions, showSnackbar, confirm, roles, selectedRoleId, aplicarAGrupo]
     );
 
-    const confirmarAccesoCompleto = useCallback(() => {
-        if (!confirmacion) {
-            return;
-        }
-        aplicarAGrupo(confirmacion.grupo, 'todo');
-        setConfirmacion(null);
-    }, [confirmacion, aplicarAGrupo]);
+    // Cambiar de pestaña o de rol con cambios sin guardar los descarta: se confirma antes.
+    const confirmarDescarte = (consecuencia) => confirm({
+        title: 'Descartar cambios',
+        message: `Hay cambios sin guardar. ${consecuencia}`,
+        confirmLabel: 'Descartar',
+        cancelLabel: 'Seguir editando',
+        tone: 'danger',
+    });
 
     const descartarCambios = useCallback(() => {
         setPermissions(originalPermissions);
@@ -505,13 +542,8 @@ const PermissionsManagementPage = () => {
                 {puedeOrganizar && (
                     <Tabs
                         value={pestana}
-                        onChange={(e, v) => {
-                            if (
-                                hayCambios &&
-                                !window.confirm(
-                                    'Hay cambios sin guardar. ¿Cambiar de pestaña y descartarlos?'
-                                )
-                            ) {
+                        onChange={async (e, v) => {
+                            if (hayCambios && !(await confirmarDescarte('Si cambia de pestaña, se descartarán.'))) {
                                 return;
                             }
                             if (hayCambios) {
@@ -540,16 +572,12 @@ const PermissionsManagementPage = () => {
                                             <InputLabel>Seleccionar Rol</InputLabel>
                                             <Select
                                                 value={selectedRoleId}
-                                                onChange={(e) => {
-                                                    if (
-                                                        hayCambios &&
-                                                        !window.confirm(
-                                                            'Hay cambios sin guardar. ¿Cambiar de rol y descartarlos?'
-                                                        )
-                                                    ) {
+                                                onChange={async (e) => {
+                                                    const nuevoRol = e.target.value;
+                                                    if (hayCambios && !(await confirmarDescarte('Si cambia de rol, se descartarán.'))) {
                                                         return;
                                                     }
-                                                    setSelectedRoleId(e.target.value);
+                                                    setSelectedRoleId(nuevoRol);
                                                 }}
                                                 label="Seleccionar Rol"
                                             >
@@ -716,65 +744,6 @@ const PermissionsManagementPage = () => {
                     </Box>
                 </Box>
             )}
-
-            <Dialog
-                open={!!confirmacion}
-                onClose={() => setConfirmacion(null)}
-                maxWidth="sm"
-                fullWidth
-            >
-                <DialogTitle>Conceder acceso completo</DialogTitle>
-                <DialogContent>
-                    <DialogContentText sx={{ mb: 2 }}>
-                        Se van a conceder <strong>{confirmacion?.aConceder.length}</strong> permisos
-                        del grupo <strong>{confirmacion?.grupo.label}</strong>
-                        {rolSeleccionado ? ` al rol ${rolSeleccionado.name}` : ''}:
-                    </DialogContentText>
-                    <Box
-                        sx={{
-                            maxHeight: 260,
-                            overflowY: 'auto',
-                            bgcolor: '#fafafa',
-                            borderRadius: 1,
-                            p: 1.5,
-                        }}
-                    >
-                        {confirmacion?.aConceder.map((p) => (
-                            <Typography key={p.key} variant="body2" sx={{ py: 0.3 }}>
-                                • {p.description}
-                            </Typography>
-                        ))}
-                    </Box>
-                    {!!confirmacion?.destructivos.length && (
-                        <Alert severity="warning" sx={{ mt: 2 }}>
-                            {confirmacion.destructivos.length} permiso(s) de este grupo eliminan
-                            información y <strong>no</strong> se conceden aquí. Si hacen falta,
-                            actívalos uno por uno.
-                        </Alert>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setConfirmacion(null)}>Cancelar</Button>
-                    <Button variant="contained" onClick={confirmarAccesoCompleto}>
-                        Conceder
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={4000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-            >
-                <Alert
-                    onClose={() => setSnackbar({ ...snackbar, open: false })}
-                    severity={snackbar.severity}
-                    sx={{ width: '100%' }}
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </PageContainer>
     );
 };

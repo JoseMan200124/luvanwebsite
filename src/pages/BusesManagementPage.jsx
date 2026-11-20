@@ -2,24 +2,20 @@
 
 import React, { useState, useEffect, useContext } from 'react';
 import {
+    Paper,
     Typography,
     Table,
     TableBody,
     TableCell,
-    TableHead,
     TableRow,
     Button,
     TextField,
     IconButton,
     Tooltip,
-    Paper,
-    TableContainer,
-    TablePagination,
     Dialog,
     DialogActions,
     DialogContent,
     DialogTitle,
-    Snackbar,
     Alert,
     CircularProgress,
     List,
@@ -28,10 +24,7 @@ import {
     Link,
     Box,
     FormControlLabel,
-    Switch,
-    useTheme,
-    useMediaQuery,
-    TableSortLabel
+    Switch
 } from '@mui/material';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import {
@@ -40,12 +33,12 @@ import {
     Add,
     InsertDriveFile,
     Image as ImageIcon,
-    FileUpload
+    FileUpload,
+    DirectionsBus as DirectionsBusIcon
 } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import { getCiclosEscolares } from '../services/cicloEscolarService';
-import styled from 'styled-components';
 import * as XLSX from 'xlsx';
 import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
@@ -56,6 +49,21 @@ import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { matchSearchTokens } from '../utils/clientFilter';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
+import { validate, hasErrors, focusFirstError, clearError } from '../utils/validators';
+import useTableState from '../hooks/useTableState';
+import useIsMobile from '../hooks/useIsMobile';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import { MobileCard, MobileField } from '../components/table/MobileCard';
+import RowActions from '../components/table/RowActions';
+import { sortRows } from '../utils/tableSort';
+import AppDialog from '../components/dialogs/AppDialog';
+
+// Campos obligatorios del formulario de bus.
+const BUS_RULES = { plate: ['required'] };
 
 const AVAILABILITY_OPTIONS = [
     { value: 'assigned', label: 'Asignados' },
@@ -81,94 +89,17 @@ const getFormattedDateTime = () => {
     return `${year}${month}${day}_${hours}${minutes}${seconds}`;
 };
 
-// ======== Estilos para vista desktop (tabla) ========
-
-const ResponsiveTableCell = styled(TableCell)`
-    @media (max-width: 600px) {
-        display: block;
-        text-align: right;
-        position: relative;
-        padding-left: 50%;
-        white-space: nowrap;
-        &:before {
-            content: attr(data-label);
-            position: absolute;
-            left: 0;
-            width: 45%;
-            padding-left: 15px;
-            font-weight: bold;
-            text-align: left;
-            white-space: nowrap;
-        }
-    }
-`;
-
-// ======== Estilos para vista móvil (tarjetas) ========
-const MobileCard = styled(Paper)`
-    padding: 16px;
-    margin-bottom: 16px;
-`;
-
-const MobileField = styled(Box)`
-    margin-bottom: 8px;
-    display: flex;
-    flex-direction: column;
-`;
-
-const MobileLabel = styled(Typography)`
-    font-weight: bold;
-    font-size: 0.875rem;
-    color: #555;
-`;
-
-const MobileValue = styled(Typography)`
-    font-size: 1rem;
-`;
-
-/* =================== Código para ordenamiento =================== */
-function descendingComparator(a, b, orderBy) {
-    const aValue = getFieldValue(a, orderBy);
-    const bValue = getFieldValue(b, orderBy);
-
-    if (aValue == null && bValue == null) {
-        return 0;
-    }
-    if (aValue == null) {
-        return 1;
-    }
-    if (bValue == null) {
-        return -1;
-    }
-
-    if (typeof aValue === 'string' && typeof bValue === 'string') {
-        return bValue.localeCompare(aValue);
-    }
-    if (bValue < aValue) {
-        return -1;
-    }
-    if (bValue > aValue) {
-        return 1;
-    }
-    return 0;
-}
-
-function getComparator(order, orderBy) {
-    return order === 'desc'
-        ? (a, b) => descendingComparator(a, b, orderBy)
-        : (a, b) => -descendingComparator(a, b, orderBy);
-}
-
-function stableSort(array, comparator) {
-    const stabilizedThis = array.map((el, index) => [el, index]);
-    stabilizedThis.sort((a, b) => {
-        const order = comparator(a[0], b[0]);
-        if (order !== 0) {
-            return order;
-        }
-        return a[1] - b[1];
-    });
-    return stabilizedThis.map((el) => el[0]);
-}
+// Columnas de la tabla de buses
+const COLUMNS = [
+    { id: 'plate', label: 'Placa', sortable: true },
+    { id: 'capacity', label: 'Capacidad', sortable: true },
+    { id: 'description', label: 'Descripción', sortable: true },
+    { id: 'totalDistanceTraveled', label: 'Km acumulados', sortable: true },
+    { id: 'assignment', label: 'Asignación' },
+    { id: 'status', label: 'Estado' },
+    { id: 'files', label: 'Archivos', width: 200 },
+    { id: 'actions', label: 'Acciones', align: 'center' },
+];
 
 function getFieldValue(bus, field) {
     switch (field) {
@@ -204,26 +135,23 @@ function getAssignmentText(bus) {
     }
     return `Ruta ${routeNumber}`;
 }
-/* =================== Fin código para ordenamiento =================== */
 
 const BusesManagementPage = () => {
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
     const { hasPermission } = usePermissions();
+    const notify = useNotify();
+    const confirm = useConfirm();
 
     const { auth } = useContext(AuthContext);
 
     const [buses, setBuses] = useState([]);
     const [selectedBus, setSelectedBus] = useState(null);
     const [openDialog, setOpenDialog] = useState(false);
+    const [busErrors, setBusErrors] = useState({});
+    const [savingBus, setSavingBus] = useState(false);
 
-    const [snackbar, setSnackbar] = useState({
-        open: false,
-        message: '',
-        severity: 'success'
-    });
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
+    // Paginación y ordenamiento
+    const table = useTableState();
     const [loading, setLoading] = useState(false);
 
     // Removed: Assignment-related state variables (pilots, monitors, schools, route numbers)
@@ -235,22 +163,7 @@ const BusesManagementPage = () => {
     const [bulkResults, setBulkResults] = useState(null);
     const [bulkLoading, setBulkLoading] = useState(false);
 
-    // Ordenamiento
-    const [order, setOrder] = useState('asc');
-    const [orderBy, setOrderBy] = useState('');
-    // Delete file dialog state
-    const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
-    const [deleteTarget, setDeleteTarget] = useState(null);
-    const [deleteTargetIndex, setDeleteTargetIndex] = useState(null);
-    const [deleteLoading, setDeleteLoading] = useState(false);
-    
-
     // =================== Efectos y funciones ===================
-    const handleRequestSort = (property) => {
-        const isAsc = orderBy === property && order === 'asc';
-        setOrder(isAsc ? 'desc' : 'asc');
-        setOrderBy(property);
-    };
 
     const fetchBuses = async () => {
         setLoading(true);
@@ -264,12 +177,7 @@ const BusesManagementPage = () => {
             setLoading(false);
         } catch (err) {
             console.error('Error fetching buses:', err);
-            const errorMessage = err.response?.data?.message || 'Error al obtener los buses';
-            setSnackbar({
-                open: true,
-                message: errorMessage,
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error al obtener los buses');
             setLoading(false);
         }
     };
@@ -297,6 +205,7 @@ const BusesManagementPage = () => {
             inWorkshop: false,
             decommissioned: false
         });
+        setBusErrors({});
         setOpenDialog(true);
     };
 
@@ -313,30 +222,24 @@ const BusesManagementPage = () => {
             corporation: bus.corporation || null,
             routeNumber: bus.routeNumber || bus.route || bus.route_num || ''
         });
+        setBusErrors({});
         setOpenDialog(true);
     };
 
-    const handleDeleteClick = async (busId) => {
-        if (window.confirm('¿Estás seguro de que deseas eliminar este bus?')) {
-            try {
-                await api.delete(`/buses/${busId}`, {
-                    headers: { Authorization: `Bearer ${auth.token}` }
-                });
-                setSnackbar({
-                    open: true,
-                    message: 'Bus eliminado exitosamente',
-                    severity: 'success'
-                });
-                fetchBuses();
-            } catch (err) {
-                console.error('Error deleting bus:', err);
-                const errorMessage = err.response?.data?.message || 'Error al eliminar el bus';
-                setSnackbar({
-                    open: true,
-                    message: errorMessage,
-                    severity: 'error'
-                });
-            }
+    const handleDeleteClick = async (bus) => {
+        const ok = await confirm({
+            title: 'Eliminar bus',
+            message: `Se eliminará el bus ${bus.plate}. Esta acción no se puede deshacer.`,
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: () => api.delete(`/buses/${bus.id}`, {
+                headers: { Authorization: `Bearer ${auth.token}` }
+            }),
+            errorMessage: 'Error al eliminar el bus',
+        });
+        if (ok) {
+            notify.success('Bus eliminado');
+            fetchBuses();
         }
     };
 
@@ -349,6 +252,7 @@ const BusesManagementPage = () => {
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
+        setBusErrors((prev) => clearError(prev, name));
         setSelectedBus((prev) => ({
             ...prev,
             [name]: value
@@ -363,11 +267,7 @@ const BusesManagementPage = () => {
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 if (file.size > maxSize) {
-                    setSnackbar({
-                        open: true,
-                        message: `El archivo ${file.name} supera los 5 MB, por favor selecciona uno más pequeño.`,
-                        severity: 'error'
-                    });
+                    notify.error(`El archivo ${file.name} supera los 5 MB, por favor selecciona uno más pequeño.`);
                     // reset input and stop
                     e.target.value = null;
                     return;
@@ -392,49 +292,41 @@ const BusesManagementPage = () => {
         e.target.value = null;
     };
 
-    // Open confirm dialog to remove a file (local or server). The actual deletion runs in confirmRemoveFile.
-    const handleRemoveFile = (file, index) => {
-        setDeleteTarget(file);
-        setDeleteTargetIndex(index);
-        setOpenDeleteDialog(true);
-    };
-
-    // Perform the actual removal after confirmation
-    const confirmRemoveFile = async () => {
-        const file = deleteTarget;
-        const index = deleteTargetIndex;
+    // Pide confirmación y quita un archivo del bus. Si ya está en el servidor, lo elimina primero de ahí.
+    const handleRemoveFile = async (file, index) => {
         if (!file) {
             return;
         }
-        setDeleteLoading(true);
-
-        // If file has an id, it's already on the server
-        if (file?.id) {
-            // backend expects a busId in the route: DELETE /buses/:busId/files/:fileId
-            if (!selectedBus?.id) {
-                setSnackbar({ open: true, message: 'No se pudo determinar el bus para eliminar el archivo.', severity: 'error' });
-                setDeleteLoading(false);
-                setOpenDeleteDialog(false);
-                setDeleteTarget(null);
-                setDeleteTargetIndex(null);
-                return;
-            }
-            try {
-                await api.delete(`/buses/${selectedBus.id}/files/${file.id}`, {
+        const onServer = Boolean(file.id);
+        if (onServer && !hasPermission('buses-eliminar-archivo')) {
+            notify.warning('No tiene permiso para eliminar archivos del bus');
+            return;
+        }
+        // backend expects a busId in the route: DELETE /buses/:busId/files/:fileId
+        if (onServer && !selectedBus?.id) {
+            notify.error('No se pudo determinar el bus para eliminar el archivo');
+            return;
+        }
+        const fileLabel = file.fileName ? file.fileName.split('/').pop() : file.name;
+        const ok = await confirm({
+            title: 'Eliminar archivo',
+            message: `Se eliminará el archivo ${fileLabel}.${onServer ? ' Esta acción no se puede deshacer.' : ''}`,
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: onServer
+                ? () => api.delete(`/buses/${selectedBus.id}/files/${file.id}`, {
                     headers: { Authorization: `Bearer ${auth.token}` }
-                });
-                setSnackbar({ open: true, message: 'Archivo eliminado', severity: 'success' });
-                // refresh the buses list so outer view stays in sync
-                fetchBuses();
-            } catch (err) {
-                console.error('Error deleting file on server:', err);
-                setSnackbar({ open: true, message: 'No se pudo eliminar el archivo en el servidor', severity: 'error' });
-                setDeleteLoading(false);
-                setOpenDeleteDialog(false);
-                setDeleteTarget(null);
-                setDeleteTargetIndex(null);
-                return;
-            }
+                })
+                : undefined,
+            errorMessage: 'No se pudo eliminar el archivo en el servidor',
+        });
+        if (!ok) {
+            return;
+        }
+        if (onServer) {
+            notify.success('Archivo eliminado');
+            // refresh the buses list so outer view stays in sync
+            fetchBuses();
         }
 
         // Remove locally (works for both existing and newly added files)
@@ -453,14 +345,16 @@ const BusesManagementPage = () => {
             }
             return { ...prev, files: filesArr };
         });
-
-        setDeleteLoading(false);
-        setOpenDeleteDialog(false);
-        setDeleteTarget(null);
-        setDeleteTargetIndex(null);
     };
 
     const handleSave = async () => {
+        const found = validate(selectedBus, BUS_RULES);
+        setBusErrors(found);
+        if (hasErrors(found)) {
+            focusFirstError(found);
+            return;
+        }
+        setSavingBus(true);
         try {
             const formData = new FormData();
             formData.append('plate', selectedBus.plate);
@@ -484,11 +378,7 @@ const BusesManagementPage = () => {
                         Authorization: `Bearer ${auth.token}`
                     }
                 });
-                setSnackbar({
-                    open: true,
-                    message: 'Bus actualizado exitosamente',
-                    severity: 'success'
-                });
+                notify.success('Bus actualizado');
             } else {
                 await api.post('/buses', formData, {
                     headers: {
@@ -496,31 +386,20 @@ const BusesManagementPage = () => {
                         Authorization: `Bearer ${auth.token}`
                     }
                 });
-                setSnackbar({
-                    open: true,
-                    message: 'Bus creado exitosamente',
-                    severity: 'success'
-                });
+                notify.success('Bus creado');
             }
 
             fetchBuses();
             handleDialogClose();
         } catch (err) {
             console.error('Error saving bus:', err);
-            const errorMessage = err.response?.data?.message || 'Ocurrió un error al guardar el bus';
-            setSnackbar({
-                open: true,
-                message: errorMessage,
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error al guardar el bus');
+        } finally {
+            setSavingBus(false);
         }
     };
 
     // file delete endpoint left intentionally out of UI for now (server API exists). Use bus file deletion via server routes if needed.
-
-    const handleSnackbarClose = () => {
-        setSnackbar({ ...snackbar, open: false });
-    };
 
     // =================== Búsqueda y filtros ===================
     const [clientSchools, setClientSchools] = useState([]);
@@ -565,7 +444,7 @@ const BusesManagementPage = () => {
             F.select('availability', { label: 'Disponibilidad', width: 'sm', options: AVAILABILITY_OPTIONS }),
             F.select('workshop', { label: 'Estado', width: 'sm', options: WORKSHOP_OPTIONS }),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const {
         search: searchQuery,
@@ -627,16 +506,6 @@ const BusesManagementPage = () => {
         return true;
     });
 
-    // =================== Paginación ===================
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
-
     // ============== CARGA MASIVA ==============
     const handleOpenBulkDialog = () => {
         setBulkFile(null);
@@ -652,11 +521,7 @@ const BusesManagementPage = () => {
         const maxSize = 5 * 1024 * 1024; // 5 MB
 
         if (file && file.size > maxSize) {
-            setSnackbar({
-                open: true,
-                message: `El archivo ${file.name} supera los 5 MB, por favor selecciona uno más pequeño.`,
-                severity: 'error'
-            });
+            notify.error(`El archivo ${file.name} supera los 5 MB, por favor selecciona uno más pequeño.`);
             e.target.value = null;
             return;
         }
@@ -685,12 +550,7 @@ const BusesManagementPage = () => {
             fetchBuses();
         } catch (error) {
             console.error('Error al subir buses masivamente:', error);
-            const errorMessage = error.response?.data?.message || 'Ocurrió un error al procesar la carga masiva';
-            setSnackbar({
-                open: true,
-                message: errorMessage,
-                severity: 'error'
-            });
+            notify.fromError(error, 'Error al procesar la carga masiva');
         }
         setBulkLoading(false);
     };
@@ -730,8 +590,15 @@ const BusesManagementPage = () => {
         URL.revokeObjectURL(url);
     };
 
-    // Aplicar ordenamiento
-    const sortedBuses = stableSort(filteredBuses, getComparator(order, orderBy));
+    // Aplicar ordenamiento y paginación
+    const sortedBuses = sortRows(filteredBuses, { orderBy: table.orderBy, order: table.order, getValue: getFieldValue });
+    const pageBuses = table.paginate(sortedBuses);
+
+    // Acciones por fila
+    const rowActions = (bus) => [
+        { key: 'edit', kind: 'edit', label: 'Editar', icon: <Edit fontSize="small" />, permission: 'buses-editar', onClick: () => handleEditClick(bus) },
+        { key: 'delete', kind: 'delete', label: 'Eliminar', icon: <Delete fontSize="small" />, permission: 'buses-eliminar', onClick: () => handleDeleteClick(bus) },
+    ];
 
     // =================== RENDER ===================
     const selectedBusHasAssignment = Boolean(
@@ -763,52 +630,90 @@ const BusesManagementPage = () => {
                 <>
                     {isMobile ? (
                         <>
-                            {sortedBuses
-                                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                .map((bus) => (
-                                    <MobileCard key={bus.id} elevation={3}>
-                                        <MobileField>
-                                            <MobileLabel>Placa</MobileLabel>
-                                            <MobileValue>{bus.plate}</MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Capacidad</MobileLabel>
-                                            <MobileValue>{bus.capacity}</MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Descripción</MobileLabel>
-                                            <MobileValue>{bus.description}</MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Asignación</MobileLabel>
-                                            <MobileValue>{getAssignmentText(bus)}</MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Estado</MobileLabel>
-                                            <MobileValue>
-                                                {bus.decommissioned ? (
-                                                    <Typography sx={{ color: 'black', fontWeight: 'bold' }}>
-                                                        DADO DE BAJA
-                                                    </Typography>
-                                                ) : bus.inWorkshop ? (
-                                                    <Typography sx={{ color: 'red', fontWeight: 'bold' }}>
-                                                        EN TALLER
-                                                    </Typography>
-                                                ) : (
-                                                    <Typography sx={{ color: 'green', fontWeight: 'bold' }}>
-                                                        DISPONIBLE
-                                                    </Typography>
-                                                )}
-                                            </MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Kilómetros acumulados</MobileLabel>
-                                            <MobileValue>{Number(bus.totalDistanceTraveled || 0).toFixed(3)} km</MobileValue>
-                                        </MobileField>
-                                        <MobileField>
-                                            <MobileLabel>Archivos</MobileLabel>
-                                            <MobileValue>
-                                                {bus.files && bus.files.length > 0 ? (
+                            {pageBuses.map((bus) => (
+                                <MobileCard key={bus.id} elevation={3} actions={<RowActions actions={rowActions(bus)} />}>
+                                    <MobileField label="Placa">{bus.plate}</MobileField>
+                                    <MobileField label="Capacidad">{bus.capacity}</MobileField>
+                                    <MobileField label="Descripción">{bus.description}</MobileField>
+                                    <MobileField label="Asignación">{getAssignmentText(bus)}</MobileField>
+                                    <MobileField label="Estado">
+                                        {bus.decommissioned ? (
+                                            <Typography sx={{ color: 'black', fontWeight: 'bold' }}>
+                                                DADO DE BAJA
+                                            </Typography>
+                                        ) : bus.inWorkshop ? (
+                                            <Typography sx={{ color: 'red', fontWeight: 'bold' }}>
+                                                EN TALLER
+                                            </Typography>
+                                        ) : (
+                                            <Typography sx={{ color: 'green', fontWeight: 'bold' }}>
+                                                DISPONIBLE
+                                            </Typography>
+                                        )}
+                                    </MobileField>
+                                    <MobileField label="Kilómetros acumulados">{Number(bus.totalDistanceTraveled || 0).toFixed(3)} km</MobileField>
+                                    <MobileField label="Archivos">
+                                        {bus.files && bus.files.length > 0 ? (
+                                            <List disablePadding>
+                                                {bus.files.map((file) => {
+                                                    const fileLabel = file.fileName.split('/').pop();
+                                                    return (
+                                                        <ListItem key={file.id} disableGutters sx={{ p: 0 }}>
+                                                            {file.fileType === 'application/pdf' ? (
+                                                                <InsertDriveFile sx={{ mr: 1 }} />
+                                                            ) : (
+                                                                <ImageIcon sx={{ mr: 1 }} />
+                                                            )}
+                                                            <Link
+                                                                href={file.fileUrl}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                underline="hover"
+                                                                variant="body2"
+                                                            >
+                                                                {fileLabel}
+                                                            </Link>
+                                                        </ListItem>
+                                                    );
+                                                })}
+                                            </List>
+                                        ) : (
+                                            'No hay archivos.'
+                                        )}
+                                    </MobileField>
+                                </MobileCard>
+                            ))}
+                            <AppTablePagination count={sortedBuses.length} {...table.paginationProps} />
+                        </>
+                    ) : (
+                        <Paper>
+                            <AppTableContainer>
+                                <Table stickyHeader sx={{ minWidth: 900 }}>
+                                    <SortableTableHead columns={COLUMNS} {...table.sortProps} showSortIcons />
+                                    <TableBody>
+                                        {pageBuses.map((bus) => (
+                                            <TableRow key={bus.id}>
+                                                <TableCell>{bus.plate}</TableCell>
+                                                <TableCell>{bus.capacity}</TableCell>
+                                                <TableCell>{bus.description}</TableCell>
+                                                <TableCell>{Number(bus.totalDistanceTraveled || 0).toFixed(3)} km</TableCell>
+                                                <TableCell>{getAssignmentText(bus)}</TableCell>
+                                                <TableCell>
+                                                    {bus.decommissioned ? (
+                                                        <Typography sx={{ color: 'black', fontWeight: 'bold' }}>
+                                                            DADO DE BAJA
+                                                        </Typography>
+                                                    ) : bus.inWorkshop ? (
+                                                        <Typography sx={{ color: 'red', fontWeight: 'bold' }}>
+                                                            EN TALLER
+                                                        </Typography>
+                                                    ) : (
+                                                        <Typography sx={{ color: 'green', fontWeight: 'bold' }}>
+                                                            DISPONIBLE
+                                                        </Typography>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell sx={{ maxWidth: 200, verticalAlign: 'top' }}>
                                                     <List disablePadding>
                                                         {bus.files.map((file) => {
                                                             const fileLabel = file.fileName.split('/').pop();
@@ -819,392 +724,208 @@ const BusesManagementPage = () => {
                                                                     ) : (
                                                                         <ImageIcon sx={{ mr: 1 }} />
                                                                     )}
-                                                                    <Link
-                                                                        href={file.fileUrl}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        underline="hover"
-                                                                        variant="body2"
-                                                                    >
-                                                                        {fileLabel}
-                                                                    </Link>
+                                                                    <Tooltip title={fileLabel}>
+                                                                        <ListItemText
+                                                                            primary={
+                                                                                <Link
+                                                                                    href={file.fileUrl}
+                                                                                    target="_blank"
+                                                                                    rel="noopener noreferrer"
+                                                                                >
+                                                                                    {fileLabel}
+                                                                                </Link>
+                                                                            }
+                                                                            primaryTypographyProps={{
+                                                                                noWrap: true,
+                                                                                sx: {
+                                                                                    overflow: 'hidden',
+                                                                                    textOverflow: 'ellipsis',
+                                                                                    maxWidth: '140px'
+                                                                                }
+                                                                            }}
+                                                                        />
+                                                                    </Tooltip>
                                                                 </ListItem>
                                                             );
                                                         })}
-                                                    </List>
-                                                ) : (
-                                                    'No hay archivos.'
-                                                )}
-                                            </MobileValue>
-                                        </MobileField>
-                                        <Box
-                                            sx={{
-                                                display: 'flex',
-                                                justifyContent: 'center',
-                                                gap: 1,
-                                                marginTop: 1
-                                            }}
-                                        >
-                                            <PermissionGuard permission="buses-editar">
-                                                <Tooltip title="Editar">
-                                                    <IconButton onClick={() => handleEditClick(bus)}>
-                                                        <Edit />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            </PermissionGuard>
-                                            <PermissionGuard permission="buses-eliminar">
-                                                <Tooltip title="Eliminar">
-                                                    <IconButton onClick={() => handleDeleteClick(bus.id)}>
-                                                        <Delete />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            </PermissionGuard>
-                                        </Box>
-                                    </MobileCard>
-                                ))}
-                            <TablePagination
-                                component="div"
-                                count={sortedBuses.length}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                rowsPerPageOptions={[5, 10, 25]}
-                                labelRowsPerPage="Filas por página"
-                            />
-                        </>
-                    ) : (
-                        <Paper>
-                            <TableContainer sx={{ overflowX: 'auto' }}>
-                                <Table stickyHeader sx={{ minWidth: 900 }}>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell sortDirection={orderBy === 'plate' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'plate'}
-                                                    direction={orderBy === 'plate' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('plate')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Placa
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'capacity' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'capacity'}
-                                                    direction={orderBy === 'capacity' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('capacity')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Capacidad
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'description' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'description'}
-                                                    direction={orderBy === 'description' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('description')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Descripción
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'totalDistanceTraveled' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'totalDistanceTraveled'}
-                                                    direction={orderBy === 'totalDistanceTraveled' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('totalDistanceTraveled')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Km acumulados
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>Asignación</TableCell>
-                                            <TableCell>Estado</TableCell>
-                                            <TableCell sx={{ maxWidth: 200 }}>Archivos</TableCell>
-                                            <TableCell align="center">Acciones</TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {sortedBuses
-                                            .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                            .map((bus) => (
-                                                <TableRow key={bus.id}>
-                                                    <ResponsiveTableCell data-label="Placa">
-                                                        {bus.plate}
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Capacidad">
-                                                        {bus.capacity}
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Descripción">
-                                                        {bus.description}
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Km acumulados">
-                                                        {Number(bus.totalDistanceTraveled || 0).toFixed(3)} km
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Asignación">
-                                                        {getAssignmentText(bus)}
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Estado">
-                                                        {bus.decommissioned ? (
-                                                            <Typography sx={{ color: 'black', fontWeight: 'bold' }}>
-                                                                DADO DE BAJA
-                                                            </Typography>
-                                                        ) : bus.inWorkshop ? (
-                                                            <Typography sx={{ color: 'red', fontWeight: 'bold' }}>
-                                                                EN TALLER
-                                                            </Typography>
-                                                        ) : (
-                                                            <Typography sx={{ color: 'green', fontWeight: 'bold' }}>
-                                                                DISPONIBLE
+                                                        {bus.files.length === 0 && (
+                                                            <Typography
+                                                                variant="body2"
+                                                                color="textSecondary"
+                                                                sx={{ fontStyle: 'italic' }}
+                                                            >
+                                                                No hay archivos.
                                                             </Typography>
                                                         )}
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell
-                                                        data-label="Archivos"
-                                                        sx={{ maxWidth: 200, verticalAlign: 'top' }}
-                                                    >
-                                                        <List disablePadding>
-                                                            {bus.files.map((file) => {
-                                                                const fileLabel = file.fileName.split('/').pop();
-                                                                return (
-                                                                    <ListItem key={file.id} disableGutters sx={{ p: 0 }}>
-                                                                        {file.fileType === 'application/pdf' ? (
-                                                                            <InsertDriveFile sx={{ mr: 1 }} />
-                                                                        ) : (
-                                                                            <ImageIcon sx={{ mr: 1 }} />
-                                                                        )}
-                                                                        <Tooltip title={fileLabel}>
-                                                                            <ListItemText
-                                                                                primary={
-                                                                                    <Link
-                                                                                        href={file.fileUrl}
-                                                                                        target="_blank"
-                                                                                        rel="noopener noreferrer"
-                                                                                    >
-                                                                                        {fileLabel}
-                                                                                    </Link>
-                                                                                }
-                                                                                primaryTypographyProps={{
-                                                                                    noWrap: true,
-                                                                                    sx: {
-                                                                                        overflow: 'hidden',
-                                                                                        textOverflow: 'ellipsis',
-                                                                                        maxWidth: '140px'
-                                                                                    }
-                                                                                }}
-                                                                            />
-                                                                        </Tooltip>
-                                                                    </ListItem>
-                                                                );
-                                                            })}
-                                                            {bus.files.length === 0 && (
-                                                                <Typography
-                                                                    variant="body2"
-                                                                    color="textSecondary"
-                                                                    sx={{ fontStyle: 'italic' }}
-                                                                >
-                                                                    No hay archivos.
-                                                                </Typography>
-                                                            )}
-                                                        </List>
-                                                    </ResponsiveTableCell>
-                                                    <ResponsiveTableCell data-label="Acciones" align="center">
-                                                        <PermissionGuard permission="buses-editar">
-                                                            <Tooltip title="Editar">
-                                                                <IconButton onClick={() => handleEditClick(bus)}>
-                                                                    <Edit />
-                                                                </IconButton>
-                                                            </Tooltip>
-                                                        </PermissionGuard>
-                                                        <PermissionGuard permission="buses-eliminar">
-                                                            <Tooltip title="Eliminar">
-                                                                <IconButton onClick={() => handleDeleteClick(bus.id)}>
-                                                                    <Delete />
-                                                                </IconButton>
-                                                            </Tooltip>
-                                                        </PermissionGuard>
-                                                    </ResponsiveTableCell>
-                                                </TableRow>
-                                            ))}
+                                                    </List>
+                                                </TableCell>
+                                                <TableCell align="center">
+                                                    <RowActions actions={rowActions(bus)} />
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
                                         {sortedBuses.length === 0 && (
                                             <TableRow>
-                                                <ResponsiveTableCell colSpan={6} align="center">
+                                                <TableCell colSpan={8} align="center">
                                                     No se encontraron buses.
-                                                </ResponsiveTableCell>
+                                                </TableCell>
                                             </TableRow>
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={sortedBuses.length}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                rowsPerPageOptions={[5, 10, 25]}
-                                labelRowsPerPage="Filas por página"
-                            />
+                            </AppTableContainer>
+                            <AppTablePagination count={sortedBuses.length} {...table.paginationProps} />
                         </Paper>
                     )}
                 </>
             )}
 
             {/* Diálogo para crear/editar un bus */}
-            <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="sm" fullWidth>
-                <DialogTitle>
-                    {selectedBus?.id ? 'Editar Bus' : 'Añadir Bus'}
-                </DialogTitle>
-                <DialogContent>
-                    <TextField
-                        autoFocus
-                        margin="dense"
-                        name="plate"
-                        label="Placa"
-                        type="text"
-                        fullWidth
-                        variant="outlined"
-                        value={selectedBus ? selectedBus.plate : ''}
-                        onChange={handleInputChange}
-                        required
-                    />
-                    <TextField
-                        margin="dense"
-                        name="capacity"
-                        label="Capacidad"
-                        type="number"
-                        fullWidth
-                        variant="outlined"
-                        value={selectedBus ? selectedBus.capacity : ''}
-                        onChange={handleInputChange}
-                    />
-                    <TextField
-                        margin="dense"
-                        name="description"
-                        label="Descripción"
-                        type="text"
-                        fullWidth
-                        variant="outlined"
-                        value={selectedBus ? selectedBus.description : ''}
-                        onChange={handleInputChange}
-                    />
+            <AppDialog
+                open={openDialog}
+                onClose={handleDialogClose}
+                title={selectedBus?.id ? 'Editar bus' : 'Nuevo bus'}
+                icon={<DirectionsBusIcon />}
+                size="sm"
+                onSubmit={handleSave}
+                submitLabel={selectedBus?.id ? 'Guardar cambios' : 'Crear bus'}
+                submitting={savingBus}
+                readOnly={!hasPermission(selectedBus?.id ? 'buses-editar' : 'buses-crear')}
+            >
+                <TextField
+                    autoFocus
+                    margin="dense"
+                    name="plate"
+                    label="Placa"
+                    type="text"
+                    fullWidth
+                    variant="outlined"
+                    value={selectedBus ? selectedBus.plate : ''}
+                    onChange={handleInputChange}
+                    required
+                    error={Boolean(busErrors.plate)}
+                    helperText={busErrors.plate}
+                />
+                <TextField
+                    margin="dense"
+                    name="capacity"
+                    label="Capacidad"
+                    type="number"
+                    fullWidth
+                    variant="outlined"
+                    value={selectedBus ? selectedBus.capacity : ''}
+                    onChange={handleInputChange}
+                />
+                <TextField
+                    margin="dense"
+                    name="description"
+                    label="Descripción"
+                    type="text"
+                    fullWidth
+                    variant="outlined"
+                    value={selectedBus ? selectedBus.description : ''}
+                    onChange={handleInputChange}
+                />
 
-                    {/* Switch para inWorkshop */}
-                    <FormControlLabel
-                        control={
-                            <Switch
-                                checked={selectedBus ? selectedBus.inWorkshop : false}
-                                onChange={(e) =>
-                                    setSelectedBus((prev) => ({
-                                        ...prev,
-                                        inWorkshop: e.target.checked,
-                                        decommissioned: e.target.checked ? false : prev.decommissioned
-                                    }))
-                                }
-                                color="primary"
-                            />
-                        }
-                        label="¿En taller?"
-                        sx={{ mt: 1 }}
-                    />
+                {/* Switch para inWorkshop */}
+                <FormControlLabel
+                    control={
+                        <Switch
+                            checked={selectedBus ? selectedBus.inWorkshop : false}
+                            onChange={(e) =>
+                                setSelectedBus((prev) => ({
+                                    ...prev,
+                                    inWorkshop: e.target.checked,
+                                    decommissioned: e.target.checked ? false : prev.decommissioned
+                                }))
+                            }
+                            color="primary"
+                        />
+                    }
+                    label="¿En taller?"
+                    sx={{ mt: 1 }}
+                />
 
-                    {/* Switch para dar de baja */}
-                    <FormControlLabel
-                        control={
-                            <Switch
-                                checked={selectedBus ? selectedBus.decommissioned : false}
-                                disabled={selectedBusHasAssignment}
-                                onChange={(e) =>
-                                    setSelectedBus((prev) => ({
-                                        ...prev,
-                                        decommissioned: e.target.checked,
-                                        inWorkshop: e.target.checked ? false : prev.inWorkshop
-                                    }))
-                                }
-                                color="error"
-                            />
-                        }
-                        label="Dar de baja"
-                        sx={{ mt: 1 }}
-                    />
-                    {selectedBusHasAssignment && (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                            Este bus tiene una asignación activa. Para darlo de baja no debe tener una asignación.
-                        </Typography>
-                    )}
+                {/* Switch para dar de baja */}
+                <FormControlLabel
+                    control={
+                        <Switch
+                            checked={selectedBus ? selectedBus.decommissioned : false}
+                            disabled={selectedBusHasAssignment}
+                            onChange={(e) =>
+                                setSelectedBus((prev) => ({
+                                    ...prev,
+                                    decommissioned: e.target.checked,
+                                    inWorkshop: e.target.checked ? false : prev.inWorkshop
+                                }))
+                            }
+                            color="error"
+                        />
+                    }
+                    label="Dar de baja"
+                    sx={{ mt: 1 }}
+                />
+                {selectedBusHasAssignment && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                        Este bus tiene una asignación activa. Para darlo de baja no debe tener una asignación.
+                    </Typography>
+                )}
 
-                    <input
-                        accept="application/pdf,image/jpeg,image/png"
-                        style={{ display: 'none' }}
-                        id="file-input"
-                        multiple
-                        type="file"
-                        onChange={handleFileChange}
-                    />
-                    <label htmlFor="file-input">
-                        <Button variant="outlined" color="primary" component="span" sx={{ mt: 2 }}>
-                            Subir Archivos
-                        </Button>
-                    </label>
-
-                    {selectedBus?.files && selectedBus.files.length > 0 && (
-                        <List sx={{ mt: 2 }}>
-                            {[...selectedBus.files].map((file, index) => {
-                                const isServerFile = !!file.id;
-                                const label = isServerFile ? file.fileName.split('/').pop() : file.name;
-                                return (
-                                    <ListItem key={isServerFile ? `sf-${file.id}` : `nf-${index}`} disableGutters sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                            {isServerFile && file.fileType === 'application/pdf' ? (
-                                                <InsertDriveFile />
-                                            ) : !isServerFile && file.type === 'application/pdf' ? (
-                                                <InsertDriveFile />
-                                            ) : (
-                                                <ImageIcon />
-                                            )}
-                                            {isServerFile ? (
-                                                <ListItemText>
-                                                    <Link href={file.fileUrl} target="_blank" rel="noopener noreferrer">
-                                                        {label}
-                                                    </Link>
-                                                </ListItemText>
-                                            ) : (
-                                                <ListItemText primary={label} />
-                                            )}
-                                        </Box>
-                                        <Box>
-                                            {/* Un archivo sin id todavía no está en el servidor: quitarlo es
-                                                local y no exige permiso. Borrar uno guardado hace
-                                                DELETE /buses/:id/files/:id. */}
-                                            {(!file?.id || hasPermission('buses-eliminar-archivo')) && (
-                                                <IconButton size="small" onClick={() => handleRemoveFile(file, index)} aria-label="Eliminar archivo">
-                                                    <Delete fontSize="small" />
-                                                </IconButton>
-                                            )}
-                                        </Box>
-                                    </ListItem>
-                                );
-                            })}
-                        </List>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleDialogClose} color="primary">
-                        Cancelar
+                <input
+                    accept="application/pdf,image/jpeg,image/png"
+                    style={{ display: 'none' }}
+                    id="file-input"
+                    multiple
+                    type="file"
+                    onChange={handleFileChange}
+                />
+                <label htmlFor="file-input">
+                    <Button variant="outlined" color="primary" component="span" sx={{ mt: 2 }}>
+                        Subir archivos
                     </Button>
-                    {hasPermission(selectedBus?.id ? 'buses-editar' : 'buses-crear') && (
-                        <Button onClick={handleSave} color="primary" variant="contained">
-                            {selectedBus?.id ? 'Guardar Cambios' : 'Crear Bus'}
-                        </Button>
-                    )}
-                </DialogActions>
-            </Dialog>
+                </label>
+
+                {selectedBus?.files && selectedBus.files.length > 0 && (
+                    <List sx={{ mt: 2 }}>
+                        {[...selectedBus.files].map((file, index) => {
+                            const isServerFile = !!file.id;
+                            const label = isServerFile ? file.fileName.split('/').pop() : file.name;
+                            return (
+                                <ListItem key={isServerFile ? `sf-${file.id}` : `nf-${index}`} disableGutters sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        {isServerFile && file.fileType === 'application/pdf' ? (
+                                            <InsertDriveFile />
+                                        ) : !isServerFile && file.type === 'application/pdf' ? (
+                                            <InsertDriveFile />
+                                        ) : (
+                                            <ImageIcon />
+                                        )}
+                                        {isServerFile ? (
+                                            <ListItemText>
+                                                <Link href={file.fileUrl} target="_blank" rel="noopener noreferrer">
+                                                    {label}
+                                                </Link>
+                                            </ListItemText>
+                                        ) : (
+                                            <ListItemText primary={label} />
+                                        )}
+                                    </Box>
+                                    <Box>
+                                        {/* Un archivo sin id todavía no está en el servidor: quitarlo es
+                                            local y no exige permiso. Borrar uno guardado hace
+                                            DELETE /buses/:id/files/:id. */}
+                                        {(!file?.id || hasPermission('buses-eliminar-archivo')) && (
+                                            <IconButton size="small" onClick={() => handleRemoveFile(file, index)} aria-label="Eliminar archivo">
+                                                <Delete fontSize="small" />
+                                            </IconButton>
+                                        )}
+                                    </Box>
+                                </ListItem>
+                            );
+                        })}
+                    </List>
+                )}
+            </AppDialog>
 
             {/* Diálogo para carga masiva */}
             <Dialog open={openBulkDialog} onClose={handleCloseBulkDialog} maxWidth="sm" fullWidth>
@@ -1287,41 +1008,6 @@ const BusesManagementPage = () => {
                 </DialogActions>
             </Dialog>
 
-            {/* Confirmar eliminación de archivo */}
-            <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)} maxWidth="xs" fullWidth>
-                <DialogTitle>Confirmar eliminación</DialogTitle>
-                <DialogContent>
-                    <Typography>
-                        ¿Estás seguro de que deseas eliminar este archivo? Esta acción no se puede deshacer.
-                    </Typography>
-                    {deleteTarget && (
-                        <Box sx={{ mt: 2 }}>
-                            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                                {deleteTarget.fileName ? deleteTarget.fileName.split('/').pop() : deleteTarget.name}
-                            </Typography>
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setOpenDeleteDialog(false)} disabled={deleteLoading}>Cancelar</Button>
-                    {(!deleteTarget?.id || hasPermission('buses-eliminar-archivo')) && (
-                        <Button onClick={confirmRemoveFile} variant="contained" color="error" disabled={deleteLoading}>
-                            {deleteLoading ? 'Eliminando...' : 'Eliminar'}
-                        </Button>
-                    )}
-                </DialogActions>
-            </Dialog>
-
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={handleSnackbarClose}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert onClose={handleSnackbarClose} severity={snackbar.severity} sx={{ width: '100%' }}>
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
             {/* RouteHistoryModal removed */}
         </PageContainer>
     );

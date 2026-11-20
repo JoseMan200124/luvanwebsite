@@ -1,7 +1,7 @@
 // Dashboard.jsx
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import tw from 'twin.macro';
-import { CircularProgress, Snackbar, Alert } from '@mui/material';
+import { CircularProgress } from '@mui/material';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -11,6 +11,7 @@ import TotalRoutesCompletedChart from '../components/dashboard/TotalRoutesComple
 import api from '../utils/axiosConfig';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
+import useNotify from '../hooks/useNotify';
 import { F } from '../components/filters/filterFields';
 import { getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
 import PageContainer from '../components/layout/PageContainer';
@@ -66,7 +67,7 @@ const Dashboard = () => {
 
     // Estados de carga y error
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const notify = useNotify();
 
     // Referencia para generar PDF
     const reportRef = useRef();
@@ -74,7 +75,6 @@ const Dashboard = () => {
     // Función para llamar a la API con los filtros aplicados
     const fetchData = useCallback(async () => {
         setLoading(true);
-        setError(null);
 
         try {
             const queryParams = new URLSearchParams(getCicloEscolarFilterParams(cycle));
@@ -107,20 +107,17 @@ const Dashboard = () => {
 
             // Si ninguno de los indicadores tiene datos, se notifica "No hay datos"
             if (trc === 0 && inc.length === 0) {
-                setError("No hay datos");
-            } else {
-                setError(null);
+                notify.info('No hay datos para los filtros aplicados');
             }
         } catch (err) {
             console.error('Error al obtener datos:', err);
-            // En caso de error, se limpian los datos y se notifica "No hay datos"
             setTotalRoutesCompleted(0);
             setIncidents([]);
-            setError("No hay datos");
+            notify.fromError(err, 'Error al obtener los datos del dashboard');
         } finally {
             setLoading(false);
         }
-    }, [cycle, colegio, mes, dates.from, dates.to]);
+    }, [cycle, colegio, mes, dates.from, dates.to, notify]);
 
     // Carga inicial y cada vez que se aplican o limpian los filtros
     useEffect(() => {
@@ -175,18 +172,6 @@ const Dashboard = () => {
                 </div>
             )}
 
-            {/* Notificación: Si ocurre algún error o no se obtuvieron datos, se muestra "No hay datos" */}
-            {error && (
-                <Snackbar
-                    open={Boolean(error)}
-                    autoHideDuration={6000}
-                    onClose={() => setError(null)}
-                >
-                    <Alert onClose={() => setError(null)} severity="info" sx={{ width: '100%' }}>
-                        {error}
-                    </Alert>
-                </Snackbar>
-            )}
         </PageContainer>
     );
 };

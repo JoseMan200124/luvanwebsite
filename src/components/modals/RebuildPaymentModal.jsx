@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
     Dialog, DialogTitle, DialogContent, DialogActions,
     Button, Box, Typography, Switch, FormControlLabel, TextField,
-    Divider, Chip, Snackbar, Alert, IconButton, Tooltip,
+    Divider, Chip, Alert, IconButton, Tooltip,
     Tabs, Tab, Table, TableHead, TableBody, TableRow, TableCell,
     CircularProgress, Card, CardContent, Grid
 } from '@mui/material';
@@ -13,6 +13,10 @@ import ReceiptIcon from '@mui/icons-material/Receipt';
 import RotateRightIcon from '@mui/icons-material/RotateRight';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import api from '../../utils/axiosConfig';
+import useNotify from '../../hooks/useNotify';
+import { formatDateTime } from '../../utils/dateFormat';
+import { formatQ } from '../../utils/currency';
+import AppDialog from '../dialogs/AppDialog';
 
 const ROUTE_TYPE_LABELS = { ALL: 'Todos', COMPLETA: 'Completa', 'MEDIA AM': 'Media AM', 'MEDIA PM': 'Media PM' };
 const TARIFF_MODE_LABELS  = { SET: 'Fijar', INCREMENT: 'Aumentar', DECREMENT: 'Disminuir' };
@@ -21,7 +25,7 @@ function tariffOverrideSummary(overrides = {}) {
         const [period, routeType = 'ALL'] = key.includes('|') ? key.split('|', 2) : [key, 'ALL'];
         const rt    = ROUTE_TYPE_LABELS[routeType]  || routeType;
         const mode  = TARIFF_MODE_LABELS[val?.mode] || 'Fijar';
-        return `${period} [${rt}]: ${mode} Q${Number(val?.valuePerStudent || 0).toFixed(2)}/alumno`;
+        return `${period} [${rt}]: ${mode} ${formatQ(val?.valuePerStudent || 0)}/alumno`;
     });
 }
 
@@ -223,7 +227,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
     const [applying, setApplying] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [appliedResult, setAppliedResult] = useState(null);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info', action: null });
+    const notify = useNotify();
     const [applyLedger, setApplyLedger] = useState(true);
     const [ledgerKeep, setLedgerKeep] = useState({});
     const [ledgerEditData, setLedgerEditData] = useState({});
@@ -353,7 +357,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions, lateStartDecisions, moraPaidAsTariffDecisions, manualTransactions, manualDeleteTransactionIds, tariffOverrides, noPenalty });
             const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
             if (!fresh) {
-                setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
+                notify.warning('No se encontró el pago en la nueva simulación');
             } else {
                 if (onReplaceRow) {
                     onReplaceRow(fresh);
@@ -361,10 +365,10 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 setEditPayment({});
                 setEditPeriods({});
                 setAppliedResult(null);
-                setSnackbar({ open: true, severity: 'success', message: 'Reconstrucción actualizada desde la base de datos.' });
+                notify.success('Reconstrucción actualizada desde la base de datos');
             }
         } catch (err) {
-            setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || err.message || 'Error al re-simular.' });
+            notify.error(err?.response?.data?.message || err.message || 'Error al re-simular.');
         } finally {
             setRefreshing(false);
         }
@@ -387,7 +391,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions: next, lateStartDecisions, moraPaidAsTariffDecisions, manualTransactions, manualDeleteTransactionIds, tariffOverrides, noPenalty });
             const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
             if (!fresh) {
-                setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
+                notify.warning('No se encontró el pago en la nueva simulación');
             } else {
                 if (onReplaceRow) {
                     onReplaceRow(fresh);
@@ -395,10 +399,10 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 setEditPayment({});
                 setEditPeriods({});
                 setAppliedResult(null);
-                setSnackbar({ open: true, severity: 'success', message: 'Reconstrucción recalculada con la decisión de crédito automático.' });
+                notify.success('Reconstrucción recalculada con la decisión de crédito automático');
             }
         } catch (err) {
-            setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || err.message || 'Error al recalcular.' });
+            notify.error(err?.response?.data?.message || err.message || 'Error al recalcular.');
         } finally {
             setRefreshing(false);
         }
@@ -418,7 +422,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions, lateStartDecisions: next, moraPaidAsTariffDecisions, manualTransactions, manualDeleteTransactionIds, tariffOverrides, noPenalty });
             const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
             if (!fresh) {
-                setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
+                notify.warning('No se encontró el pago en la nueva simulación');
             } else {
                 if (onReplaceRow) {
                     onReplaceRow(fresh);
@@ -426,10 +430,10 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 setEditPayment({});
                 setEditPeriods({});
                 setAppliedResult(null);
-                setSnackbar({ open: true, severity: 'success', message: 'Mora quitada/restaurada. Simulación actualizada.' });
+                notify.success('Mora quitada/restaurada. Simulación actualizada.');
             }
         } catch (err) {
-            setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || err.message || 'Error al recalcular.' });
+            notify.error(err?.response?.data?.message || err.message || 'Error al recalcular.');
         } finally {
             setRefreshing(false);
         }
@@ -452,7 +456,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             const { data } = await api.post('/payments/rebuild/simulate', { paymentId: payment.paymentId, creditAutoDecisions, lateStartDecisions, moraPaidAsTariffDecisions: next, manualTransactions, manualDeleteTransactionIds, tariffOverrides, noPenalty });
             const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
             if (!fresh) {
-                setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
+                notify.warning('No se encontró el pago en la nueva simulación');
             } else {
                 if (onReplaceRow) {
                     onReplaceRow(fresh);
@@ -460,10 +464,10 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 setEditPayment({});
                 setEditPeriods({});
                 setAppliedResult(null);
-                setSnackbar({ open: true, severity: 'success', message: 'Escenario aplicado/restaurado. Simulación actualizada.' });
+                notify.success('Escenario aplicado/restaurado. Simulación actualizada.');
             }
         } catch (err) {
-            setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || err.message || 'Error al recalcular.' });
+            notify.error(err?.response?.data?.message || err.message || 'Error al recalcular.');
         } finally {
             setRefreshing(false);
         }
@@ -485,7 +489,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             });
             const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
             if (!fresh) {
-                setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
+                notify.warning('No se encontró el pago en la nueva simulación');
             } else {
                 if (onReplaceRow) {
                     onReplaceRow(fresh);
@@ -493,10 +497,10 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 setEditPayment({});
                 setEditPeriods({});
                 setAppliedResult(null);
-                setSnackbar({ open: true, severity: 'success', message: successMessage });
+                notify.success(successMessage);
             }
         } catch (err) {
-            setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || err.message || 'Error al recalcular.' });
+            notify.error(err?.response?.data?.message || err.message || 'Error al recalcular.');
         } finally {
             setRefreshing(false);
         }
@@ -511,13 +515,13 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
         const extraordinaryDiscount = Number(manualTxForm.extraordinaryDiscount || 0);
         const type = String(manualTxForm.type || 'TARIFA').trim().toUpperCase();
         if (!manualTxForm.date || Number.isNaN(amount) || !['TARIFA', 'MORA'].includes(type)) {
-            setSnackbar({ open: true, severity: 'warning', message: 'Completa tipo (TARIFA/MORA), fecha y monto válido.' });
+            notify.warning('Completa tipo (TARIFA/MORA), fecha y monto válido');
             return;
         }
         // For MORA, amount=0 is valid when extraordinaryDiscount > 0 (full exoneration)
         const isMoraExoneration = type === 'MORA' && amount === 0 && extraordinaryDiscount > 0;
         if (!isMoraExoneration && amount <= 0) {
-            setSnackbar({ open: true, severity: 'warning', message: 'Completa tipo (TARIFA/MORA), fecha y monto válido.' });
+            notify.warning('Completa tipo (TARIFA/MORA), fecha y monto válido');
             return;
         }
         const tx = {
@@ -573,7 +577,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             });
             const fresh = (data?.payments || []).find(p => p.paymentId === payment.paymentId);
             if (!fresh) {
-                setSnackbar({ open: true, severity: 'warning', message: 'No se encontró el pago en la nueva simulación.' });
+                notify.warning('No se encontró el pago en la nueva simulación');
             } else {
                 if (onReplaceRow) {
                     onReplaceRow(fresh);
@@ -581,10 +585,10 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                 setEditPayment({});
                 setEditPeriods({});
                 setAppliedResult(null);
-                setSnackbar({ open: true, severity: 'success', message: shouldDelete ? 'Transacción marcada para eliminar.' : 'Transacción restaurada en la simulación.' });
+                notify.success(shouldDelete ? 'Transacción marcada para eliminar.' : 'Transacción restaurada en la simulación.');
             }
         } catch (err) {
-            setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || err.message || 'Error al recalcular.' });
+            notify.error(err?.response?.data?.message || err.message || 'Error al recalcular.');
         } finally {
             setRefreshing(false);
         }
@@ -646,7 +650,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
 
             const { data } = await api.post('/payments/rebuild/apply', body);
             setAppliedResult(data);
-            setSnackbar({ open: true, severity: 'success', message: 'Cambios aplicados correctamente.' });
+            notify.success('Cambios aplicados');
             if (onApplied) {
                 onApplied(payment.paymentId, data);
             }
@@ -654,20 +658,18 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             const status = err?.response?.status;
             const data = err?.response?.data;
             if (status === 409) {
-                setSnackbar({
-                    open: true,
-                    severity: 'warning',
-                    message: data?.message || 'Los datos cambiaron desde la simulación.',
+                notify.warning(data?.message || 'Los datos cambiaron desde la simulación', {
+                    duration: null,
                     action: (
-                        <Button color="inherit" size="small" onClick={() => { setSnackbar(s => ({ ...s, open: false })); if (onCtxChanged) {
+                        <Button color="inherit" size="small" onClick={() => { notify.dismiss(); if (onCtxChanged) {
                             onCtxChanged();
                         } }}>
                             Volver a simular
                         </Button>
-                    )
+                    ),
                 });
             } else {
-                setSnackbar({ open: true, severity: 'error', message: data?.message || err.message || 'Error al aplicar.' });
+                notify.error(data?.message || err.message || 'Error al aplicar.');
             }
         } finally {
             setApplying(false);
@@ -693,7 +695,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             const { data } = await api.get(`/parents/${payment.userId}/receipts`);
             setReceipts(data?.receipts || []);
         } catch (err) {
-            setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || 'No se pudieron cargar las boletas.' });
+            notify.fromError(err, 'No se pudieron cargar las boletas.');
         } finally {
             setReceiptsLoading(false);
         }
@@ -709,7 +711,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             const { data } = await api.get(`/schools/${payment.schoolId}`);
             setSchoolData(data?.school || null);
         } catch (err) {
-            setSnackbar({ open: true, severity: 'error', message: err?.response?.data?.message || 'No se pudo cargar el colegio.' });
+            notify.fromError(err, 'No se pudo cargar el colegio.');
         } finally {
             setSchoolLoading(false);
         }
@@ -803,7 +805,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                                                                         {p.period}
                                                                     </Typography>
                                                                     <Typography variant="caption" color="text.secondary">
-                                                                        billedAt: {p.billedAt} · desc. tarifa: Q{Number(p.extraordinaryTariffDiscount).toFixed(2)} · mora: Q{Number(p.penaltyAmount).toFixed(2)}
+                                                                        billedAt: {p.billedAt} · desc. tarifa: {formatQ(p.extraordinaryTariffDiscount)} · mora: {formatQ(p.penaltyAmount)}
                                                                     </Typography>
                                                                 </Box>
                                                                 <FormControlLabel
@@ -838,7 +840,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                                                                         {item.period}
                                                                     </Typography>
                                                                     <Typography variant="caption" color="text.secondary">
-                                                                        {item.createMora ? 'Crear MORA' : `MORA #${item.moraReceipt || item.moraTxId}`}: Q{Number(item.penaltyAmount).toFixed(2)} · TARIFA #{item.tariffReceipt || item.tariffTxId}: Q{Number(item.tariffOriginalAmount).toFixed(2)} → Q{Number(item.tariffAdjustedAmount).toFixed(2)}
+                                                                        {item.createMora ? 'Crear MORA' : `MORA #${item.moraReceipt || item.moraTxId}`}: {formatQ(item.penaltyAmount)} · TARIFA #{item.tariffReceipt || item.tariffTxId}: {formatQ(item.tariffOriginalAmount)} → {formatQ(item.tariffAdjustedAmount)}
                                                                     </Typography>
                                                                 </Box>
                                                                 <FormControlLabel
@@ -1243,122 +1245,109 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                             </Grid>
 
                             {/* Dialog de edición de ledger */}
-                            <Dialog
+                            <AppDialog
                                 open={ledgerEditDialogIndex !== null}
                                 onClose={() => setLedgerEditDialogIndex(null)}
-                                maxWidth="sm"
-                                fullWidth
+                                title={`Editar entrada de ledger #${ledgerEditDialogIndex !== null ? ledgerEditDialogIndex + 1 : ''}`}
+                                size="sm"
+                                onSubmit={() => {
+                                    if (ledgerEditDialogIndex !== null) {
+                                        const idx = ledgerEditDialogIndex;
+                                        // Asegurar que se mantenga (keep=true)
+                                        setLedgerKeep(prev => ({ ...prev, [idx]: true }));
+                                        // Guardar los datos editados
+                                        const clean = {};
+                                        Object.entries(ledgerEditDialogData).forEach(([k, v]) => {
+                                            if (v !== '' && v !== undefined) {
+                                                clean[k] = v;
+                                            }
+                                        });
+                                        setLedgerEditData(prev => ({ ...prev, [idx]: clean }));
+                                        setLedgerEditDialogIndex(null);
+                                    }
+                                }}
+                                submitLabel="Guardar"
                             >
-                                <DialogTitle>
-                                    Editar entrada de ledger #{ledgerEditDialogIndex !== null ? ledgerEditDialogIndex + 1 : ''}
-                                    <IconButton onClick={() => setLedgerEditDialogIndex(null)} sx={{ float: 'right' }}><CloseIcon /></IconButton>
-                                </DialogTitle>
-                                <DialogContent dividers>
-                                    {ledgerEditDialogIndex !== null && (
-                                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+                                {ledgerEditDialogIndex !== null && (
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+                                        <TextField
+                                            label="Fecha"
+                                            type="date"
+                                            size="small"
+                                            value={ledgerEditDialogData.date ? String(ledgerEditDialogData.date).slice(0, 10) : ''}
+                                            onChange={e => setLedgerEditDialogData(prev => ({ ...prev, date: e.target.value }))}
+                                            InputLabelProps={{ shrink: true }}
+                                            fullWidth
+                                        />
+                                        <TextField
+                                            label="Operación"
+                                            size="small"
+                                            value={ledgerEditDialogData.operation}
+                                            onChange={e => setLedgerEditDialogData(prev => ({ ...prev, operation: e.target.value }))}
+                                            fullWidth
+                                        />
+                                        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
                                             <TextField
-                                                label="Fecha"
-                                                type="date"
+                                                label="balanceDue Before"
+                                                type="number"
                                                 size="small"
-                                                value={ledgerEditDialogData.date ? String(ledgerEditDialogData.date).slice(0, 10) : ''}
-                                                onChange={e => setLedgerEditDialogData(prev => ({ ...prev, date: e.target.value }))}
-                                                InputLabelProps={{ shrink: true }}
-                                                fullWidth
+                                                value={ledgerEditDialogData.balanceDueBefore}
+                                                onChange={e => setLedgerEditDialogData(prev => ({ ...prev, balanceDueBefore: e.target.value === '' ? '' : Number(e.target.value) }))}
+                                                slotProps={{ htmlInput: { step: '0.01' } }}
                                             />
                                             <TextField
-                                                label="Operación"
+                                                label="balanceDue After"
+                                                type="number"
                                                 size="small"
-                                                value={ledgerEditDialogData.operation}
-                                                onChange={e => setLedgerEditDialogData(prev => ({ ...prev, operation: e.target.value }))}
-                                                fullWidth
+                                                value={ledgerEditDialogData.balanceDueAfter}
+                                                onChange={e => setLedgerEditDialogData(prev => ({ ...prev, balanceDueAfter: e.target.value === '' ? '' : Number(e.target.value) }))}
+                                                slotProps={{ htmlInput: { step: '0.01' } }}
                                             />
-                                            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-                                                <TextField
-                                                    label="balanceDue Before"
-                                                    type="number"
-                                                    size="small"
-                                                    value={ledgerEditDialogData.balanceDueBefore}
-                                                    onChange={e => setLedgerEditDialogData(prev => ({ ...prev, balanceDueBefore: e.target.value === '' ? '' : Number(e.target.value) }))}
-                                                    slotProps={{ htmlInput: { step: '0.01' } }}
-                                                />
-                                                <TextField
-                                                    label="balanceDue After"
-                                                    type="number"
-                                                    size="small"
-                                                    value={ledgerEditDialogData.balanceDueAfter}
-                                                    onChange={e => setLedgerEditDialogData(prev => ({ ...prev, balanceDueAfter: e.target.value === '' ? '' : Number(e.target.value) }))}
-                                                    slotProps={{ htmlInput: { step: '0.01' } }}
-                                                />
-                                                <TextField
-                                                    label="penaltyDue Before"
-                                                    type="number"
-                                                    size="small"
-                                                    value={ledgerEditDialogData.penaltyDueBefore}
-                                                    onChange={e => setLedgerEditDialogData(prev => ({ ...prev, penaltyDueBefore: e.target.value === '' ? '' : Number(e.target.value) }))}
-                                                    slotProps={{ htmlInput: { step: '0.01' } }}
-                                                />
-                                                <TextField
-                                                    label="penaltyDue After"
-                                                    type="number"
-                                                    size="small"
-                                                    value={ledgerEditDialogData.penaltyDueAfter}
-                                                    onChange={e => setLedgerEditDialogData(prev => ({ ...prev, penaltyDueAfter: e.target.value === '' ? '' : Number(e.target.value) }))}
-                                                    slotProps={{ htmlInput: { step: '0.01' } }}
-                                                />
-                                                <TextField
-                                                    label="creditBalance Before"
-                                                    type="number"
-                                                    size="small"
-                                                    value={ledgerEditDialogData.creditBalanceBefore}
-                                                    onChange={e => setLedgerEditDialogData(prev => ({ ...prev, creditBalanceBefore: e.target.value === '' ? '' : Number(e.target.value) }))}
-                                                    slotProps={{ htmlInput: { step: '0.01' } }}
-                                                />
-                                                <TextField
-                                                    label="creditBalance After"
-                                                    type="number"
-                                                    size="small"
-                                                    value={ledgerEditDialogData.creditBalanceAfter}
-                                                    onChange={e => setLedgerEditDialogData(prev => ({ ...prev, creditBalanceAfter: e.target.value === '' ? '' : Number(e.target.value) }))}
-                                                    slotProps={{ htmlInput: { step: '0.01' } }}
-                                                />
-                                            </Box>
                                             <TextField
-                                                label="Descripción"
+                                                label="penaltyDue Before"
+                                                type="number"
                                                 size="small"
-                                                value={ledgerEditDialogData.description}
-                                                onChange={e => setLedgerEditDialogData(prev => ({ ...prev, description: e.target.value }))}
-                                                multiline
-                                                rows={2}
-                                                fullWidth
+                                                value={ledgerEditDialogData.penaltyDueBefore}
+                                                onChange={e => setLedgerEditDialogData(prev => ({ ...prev, penaltyDueBefore: e.target.value === '' ? '' : Number(e.target.value) }))}
+                                                slotProps={{ htmlInput: { step: '0.01' } }}
+                                            />
+                                            <TextField
+                                                label="penaltyDue After"
+                                                type="number"
+                                                size="small"
+                                                value={ledgerEditDialogData.penaltyDueAfter}
+                                                onChange={e => setLedgerEditDialogData(prev => ({ ...prev, penaltyDueAfter: e.target.value === '' ? '' : Number(e.target.value) }))}
+                                                slotProps={{ htmlInput: { step: '0.01' } }}
+                                            />
+                                            <TextField
+                                                label="creditBalance Before"
+                                                type="number"
+                                                size="small"
+                                                value={ledgerEditDialogData.creditBalanceBefore}
+                                                onChange={e => setLedgerEditDialogData(prev => ({ ...prev, creditBalanceBefore: e.target.value === '' ? '' : Number(e.target.value) }))}
+                                                slotProps={{ htmlInput: { step: '0.01' } }}
+                                            />
+                                            <TextField
+                                                label="creditBalance After"
+                                                type="number"
+                                                size="small"
+                                                value={ledgerEditDialogData.creditBalanceAfter}
+                                                onChange={e => setLedgerEditDialogData(prev => ({ ...prev, creditBalanceAfter: e.target.value === '' ? '' : Number(e.target.value) }))}
+                                                slotProps={{ htmlInput: { step: '0.01' } }}
                                             />
                                         </Box>
-                                    )}
-                                </DialogContent>
-                                <DialogActions>
-                                    <Button onClick={() => setLedgerEditDialogIndex(null)}>Cancelar</Button>
-                                    <Button
-                                        variant="contained"
-                                        onClick={() => {
-                                            if (ledgerEditDialogIndex !== null) {
-                                                const idx = ledgerEditDialogIndex;
-                                                // Asegurar que se mantenga (keep=true)
-                                                setLedgerKeep(prev => ({ ...prev, [idx]: true }));
-                                                // Guardar los datos editados
-                                                const clean = {};
-                                                Object.entries(ledgerEditDialogData).forEach(([k, v]) => {
-                                                    if (v !== '' && v !== undefined) {
-                                                        clean[k] = v;
-                                                    }
-                                                });
-                                                setLedgerEditData(prev => ({ ...prev, [idx]: clean }));
-                                                setLedgerEditDialogIndex(null);
-                                            }
-                                        }}
-                                    >
-                                        Guardar
-                                    </Button>
-                                </DialogActions>
-                            </Dialog>
+                                        <TextField
+                                            label="Descripción"
+                                            size="small"
+                                            value={ledgerEditDialogData.description}
+                                            onChange={e => setLedgerEditDialogData(prev => ({ ...prev, description: e.target.value }))}
+                                            multiline
+                                            rows={2}
+                                            fullWidth
+                                        />
+                                    </Box>
+                                )}
+                            </AppDialog>
                         </Box>
                     )}
 
@@ -1383,7 +1372,7 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
                         <Box sx={{ mt: 2, p: 2, border: '2px solid #2e7d32', borderRadius: 1, bgcolor: '#e8f5e9' }}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <Typography variant="h6" color="success.main">
-                                    ✓ Aplicado a las {new Date(appliedResult.appliedAt).toLocaleString()}
+                                    ✓ Aplicado a las {formatDateTime(appliedResult.appliedAt)}
                                 </Typography>
                                 <Button startIcon={<DownloadIcon />} onClick={handleDownloadResult} variant="outlined">
                                     Descargar JSON
@@ -1430,174 +1419,161 @@ export default function RebuildPaymentModal({ open, onClose, payment, onApplied,
             </Dialog>
 
             {/* Boletas dialog */}
-            <Dialog open={receiptsOpen} onClose={() => { setReceiptsOpen(false); setSelectedReceipt(null); }} maxWidth="md" fullWidth>
-                <DialogTitle>
-                    Boletas de {payment.userName}
-                    <IconButton onClick={() => { setReceiptsOpen(false); setSelectedReceipt(null); }} sx={{ float: 'right' }}><CloseIcon /></IconButton>
-                </DialogTitle>
-                <DialogContent dividers>
-                    {receiptsLoading && <Box sx={{ textAlign: 'center', p: 3 }}><CircularProgress /></Box>}
-                    {!receiptsLoading && receipts.length === 0 && <Alert severity="info">Sin boletas subidas.</Alert>}
-                    {!receiptsLoading && receipts.length > 0 && !selectedReceipt && (
-                        <Table size="small">
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell>Fecha</TableCell>
-                                    <TableCell>Archivo</TableCell>
-                                    <TableCell>Monto</TableCell>
-                                    <TableCell>Notas</TableCell>
-                                    <TableCell>Acción</TableCell>
+            <AppDialog
+                open={receiptsOpen}
+                onClose={() => { setReceiptsOpen(false); setSelectedReceipt(null); }}
+                title={`Boletas de ${payment.userName}`}
+                icon={<ReceiptIcon />}
+                size="md"
+                readOnly
+            >
+                {receiptsLoading && <Box sx={{ textAlign: 'center', p: 3 }}><CircularProgress /></Box>}
+                {!receiptsLoading && receipts.length === 0 && <Alert severity="info">Sin boletas subidas.</Alert>}
+                {!receiptsLoading && receipts.length > 0 && !selectedReceipt && (
+                    <Table size="small">
+                        <TableHead>
+                            <TableRow>
+                                <TableCell>Fecha</TableCell>
+                                <TableCell>Archivo</TableCell>
+                                <TableCell>Monto</TableCell>
+                                <TableCell>Notas</TableCell>
+                                <TableCell>Acción</TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {receipts.map(r => (
+                                <TableRow key={r.id || r.fileUrl}>
+                                    <TableCell>{formatDateTime(r.uploadedAt || r.createdAt)}</TableCell>
+                                    <TableCell sx={{ wordBreak: 'break-all', fontSize: 11 }}>{r.fileName || r.fileUrl}</TableCell>
+                                    <TableCell>{r.amount ?? '—'}</TableCell>
+                                    <TableCell sx={{ fontSize: 11, maxWidth: 200 }}>{r.notes || '—'}</TableCell>
+                                    <TableCell>
+                                        <Button size="small" onClick={() => { setSelectedReceipt(r); setReceiptRotation(0); }}>Ver</Button>
+                                        {r.fileUrl && <Button size="small" href={r.fileUrl} target="_blank" rel="noopener noreferrer">Abrir</Button>}
+                                    </TableCell>
                                 </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {receipts.map(r => (
-                                    <TableRow key={r.id || r.fileUrl}>
-                                        <TableCell>{(r.uploadedAt || r.createdAt) ? new Date(r.uploadedAt || r.createdAt).toLocaleString() : '—'}</TableCell>
-                                        <TableCell sx={{ wordBreak: 'break-all', fontSize: 11 }}>{r.fileName || r.fileUrl}</TableCell>
-                                        <TableCell>{r.amount ?? '—'}</TableCell>
-                                        <TableCell sx={{ fontSize: 11, maxWidth: 200 }}>{r.notes || '—'}</TableCell>
-                                        <TableCell>
-                                            <Button size="small" onClick={() => { setSelectedReceipt(r); setReceiptRotation(0); }}>Ver</Button>
-                                            {r.fileUrl && <Button size="small" href={r.fileUrl} target="_blank" rel="noopener noreferrer">Abrir</Button>}
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    )}
-                    {selectedReceipt && (
-                        <Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                                <Button size="small" onClick={() => setSelectedReceipt(null)}>← Volver al listado</Button>
-                                {selectedReceipt.fileUrl && /\.(png|jpe?g|gif|webp)$/i.test(selectedReceipt.fileUrl) && (
-                                    <IconButton
-                                        size="small"
-                                        onClick={() => setReceiptRotation(r => (r + 90) % 360)}
-                                        aria-label="rotar boleta"
-                                        color="primary"
-                                    >
-                                        <RotateRightIcon fontSize="small" />
-                                    </IconButton>
-                                )}
-                            </Box>
-                            <Box sx={{ textAlign: 'center' }}>
-                                {selectedReceipt.fileUrl && /\.(png|jpe?g|gif|webp)$/i.test(selectedReceipt.fileUrl) ? (
-                                    <img src={selectedReceipt.fileUrl} alt={selectedReceipt.fileName || 'Boleta'} style={{ maxWidth: '100%', maxHeight: 600, transform: `rotate(${receiptRotation}deg)` }} />
-                                ) : selectedReceipt.fileUrl ? (
-                                    <iframe title="boleta" src={selectedReceipt.fileUrl} style={{ width: '100%', height: 600, border: 0 }} />
-                                ) : (
-                                    <Alert severity="warning">Sin URL disponible.</Alert>
-                                )}
-                            </Box>
-                        </Box>
-                    )}
-                </DialogContent>
-            </Dialog>
-
-            {/* Colegio dialog */}
-            <Dialog open={schoolOpen} onClose={() => setSchoolOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>
-                    Detalles del colegio
-                    <IconButton onClick={() => setSchoolOpen(false)} sx={{ float: 'right' }}><CloseIcon /></IconButton>
-                </DialogTitle>
-                <DialogContent dividers>
-                    {schoolLoading && <Box sx={{ textAlign: 'center', p: 3 }}><CircularProgress /></Box>}
-                    {!schoolLoading && !schoolData && <Alert severity="warning">No se encontraron datos del colegio.</Alert>}
-                    {!schoolLoading && schoolData && (
-                        <Box>
-                            <Typography variant="h6" gutterBottom>{schoolData.name}</Typography>
-                            <Divider sx={{ mb: 2 }} />
-
-                            <Typography variant="subtitle2" color="text.secondary" gutterBottom>Contacto</Typography>
-                            <Table size="small" sx={{ mb: 2 }}>
-                                <TableBody>
-                                    {[
-                                        ['Dirección',   schoolData.address],
-                                        ['Ciudad',      schoolData.city],
-                                        ['Responsable', schoolData.contactPerson],
-                                        ['Email',       schoolData.contactEmail],
-                                        ['Teléfono',    schoolData.contactPhone],
-                                        ['WhatsApp',    schoolData.whatsappLink],
-                                    ].map(([label, val]) => val ? (
-                                        <TableRow key={label}>
-                                            <TableCell sx={{ fontWeight: 600, width: 140, fontSize: 13 }}>{label}</TableCell>
-                                            <TableCell sx={{ fontSize: 13 }}>{val}</TableCell>
-                                        </TableRow>
-                                    ) : null)}
-                                </TableBody>
-                            </Table>
-
-                            <Typography variant="subtitle2" color="text.secondary" gutterBottom>Tarifas y mora</Typography>
-                            <Table size="small" sx={{ mb: 2 }}>
-                                <TableBody>
-                                    {[
-                                        ['Tarifa completa (mensual)',  schoolData.transportFeeComplete != null ? `Q ${Number(schoolData.transportFeeComplete).toFixed(2)}` : null],
-                                        ['Tarifa media (mensual)',     schoolData.transportFeeHalf     != null ? `Q ${Number(schoolData.transportFeeHalf).toFixed(2)}`     : null],
-                                        ['Mora diaria',               schoolData.dailyPenalty          != null ? `Q ${Number(schoolData.dailyPenalty).toFixed(2)}`          : null],
-                                        ['Mora pausada',              schoolData.penaltyPaused != null  ? (schoolData.penaltyPaused ? 'Sí' : 'No')                         : null],
-                                        ['Día límite de pago',        schoolData.duePaymentDay != null  ? `Día ${schoolData.duePaymentDay} de cada mes`                    : null],
-                                    ].map(([label, val]) => val != null ? (
-                                        <TableRow key={label}>
-                                            <TableCell sx={{ fontWeight: 600, width: 200, fontSize: 13 }}>{label}</TableCell>
-                                            <TableCell sx={{ fontSize: 13 }}>{val}</TableCell>
-                                        </TableRow>
-                                    ) : null)}
-                                </TableBody>
-                            </Table>
-
-                            <Typography variant="subtitle2" color="text.secondary" gutterBottom>Año escolar</Typography>
-                            <Table size="small" sx={{ mb: 2 }}>
-                                <TableBody>
-                                    {[
-                                        ['Inicio año escolar', schoolData.schoolYearStart],
-                                        ['Fin año escolar',    schoolData.schoolYearEnd],
-                                    ].map(([label, val]) => val ? (
-                                        <TableRow key={label}>
-                                            <TableCell sx={{ fontWeight: 600, width: 200, fontSize: 13 }}>{label}</TableCell>
-                                            <TableCell sx={{ fontSize: 13 }}>{val}</TableCell>
-                                        </TableRow>
-                                    ) : null)}
-                                </TableBody>
-                            </Table>
-
-                            {(schoolData.bankName || schoolData.bankAccount) && (
-                                <>
-                                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>Datos bancarios</Typography>
-                                    <Table size="small" sx={{ mb: 2 }}>
-                                        <TableBody>
-                                            {[
-                                                ['Banco',   schoolData.bankName],
-                                                ['Cuenta',  schoolData.bankAccount],
-                                            ].map(([label, val]) => val ? (
-                                                <TableRow key={label}>
-                                                    <TableCell sx={{ fontWeight: 600, width: 140, fontSize: 13 }}>{label}</TableCell>
-                                                    <TableCell sx={{ fontSize: 13 }}>{val}</TableCell>
-                                                </TableRow>
-                                            ) : null)}
-                                        </TableBody>
-                                    </Table>
-                                </>
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
+                {selectedReceipt && (
+                    <Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                            <Button size="small" onClick={() => setSelectedReceipt(null)}>← Volver al listado</Button>
+                            {selectedReceipt.fileUrl && /\.(png|jpe?g|gif|webp)$/i.test(selectedReceipt.fileUrl) && (
+                                <IconButton
+                                    size="small"
+                                    onClick={() => setReceiptRotation(r => (r + 90) % 360)}
+                                    aria-label="rotar boleta"
+                                    color="primary"
+                                >
+                                    <RotateRightIcon fontSize="small" />
+                                </IconButton>
                             )}
                         </Box>
-                    )}
-                </DialogContent>
-            </Dialog>
+                        <Box sx={{ textAlign: 'center' }}>
+                            {selectedReceipt.fileUrl && /\.(png|jpe?g|gif|webp)$/i.test(selectedReceipt.fileUrl) ? (
+                                <img src={selectedReceipt.fileUrl} alt={selectedReceipt.fileName || 'Boleta'} style={{ maxWidth: '100%', maxHeight: 600, transform: `rotate(${receiptRotation}deg)` }} />
+                            ) : selectedReceipt.fileUrl ? (
+                                <iframe title="boleta" src={selectedReceipt.fileUrl} style={{ width: '100%', height: 600, border: 0 }} />
+                            ) : (
+                                <Alert severity="warning">Sin URL disponible.</Alert>
+                            )}
+                        </Box>
+                    </Box>
+                )}
+            </AppDialog>
 
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={snackbar.severity === 'warning' ? null : 5000}
-                onClose={() => setSnackbar(s => ({ ...s, open: false }))}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            {/* Colegio dialog */}
+            <AppDialog
+                open={schoolOpen}
+                onClose={() => setSchoolOpen(false)}
+                title="Detalles del colegio"
+                icon={<AccountBalanceIcon />}
+                size="sm"
+                readOnly
             >
-                <Alert
-                    onClose={() => setSnackbar(s => ({ ...s, open: false }))}
-                    severity={snackbar.severity}
-                    action={snackbar.action}
-                    variant="filled"
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
+                {schoolLoading && <Box sx={{ textAlign: 'center', p: 3 }}><CircularProgress /></Box>}
+                {!schoolLoading && !schoolData && <Alert severity="warning">No se encontraron datos del colegio.</Alert>}
+                {!schoolLoading && schoolData && (
+                    <Box>
+                        <Typography variant="h6" gutterBottom>{schoolData.name}</Typography>
+                        <Divider sx={{ mb: 2 }} />
+
+                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>Contacto</Typography>
+                        <Table size="small" sx={{ mb: 2 }}>
+                            <TableBody>
+                                {[
+                                    ['Dirección',   schoolData.address],
+                                    ['Ciudad',      schoolData.city],
+                                    ['Responsable', schoolData.contactPerson],
+                                    ['Email',       schoolData.contactEmail],
+                                    ['Teléfono',    schoolData.contactPhone],
+                                    ['WhatsApp',    schoolData.whatsappLink],
+                                ].map(([label, val]) => val ? (
+                                    <TableRow key={label}>
+                                        <TableCell sx={{ fontWeight: 600, width: 140, fontSize: 13 }}>{label}</TableCell>
+                                        <TableCell sx={{ fontSize: 13 }}>{val}</TableCell>
+                                    </TableRow>
+                                ) : null)}
+                            </TableBody>
+                        </Table>
+
+                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>Tarifas y mora</Typography>
+                        <Table size="small" sx={{ mb: 2 }}>
+                            <TableBody>
+                                {[
+                                    ['Tarifa completa (mensual)',  schoolData.transportFeeComplete != null ? formatQ(schoolData.transportFeeComplete) : null],
+                                    ['Tarifa media (mensual)',     schoolData.transportFeeHalf     != null ? formatQ(schoolData.transportFeeHalf)     : null],
+                                    ['Mora diaria',               schoolData.dailyPenalty          != null ? formatQ(schoolData.dailyPenalty)          : null],
+                                    ['Mora pausada',              schoolData.penaltyPaused != null  ? (schoolData.penaltyPaused ? 'Sí' : 'No')                         : null],
+                                    ['Día límite de pago',        schoolData.duePaymentDay != null  ? `Día ${schoolData.duePaymentDay} de cada mes`                    : null],
+                                ].map(([label, val]) => val != null ? (
+                                    <TableRow key={label}>
+                                        <TableCell sx={{ fontWeight: 600, width: 200, fontSize: 13 }}>{label}</TableCell>
+                                        <TableCell sx={{ fontSize: 13 }}>{val}</TableCell>
+                                    </TableRow>
+                                ) : null)}
+                            </TableBody>
+                        </Table>
+
+                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>Año escolar</Typography>
+                        <Table size="small" sx={{ mb: 2 }}>
+                            <TableBody>
+                                {[
+                                    ['Inicio año escolar', schoolData.schoolYearStart],
+                                    ['Fin año escolar',    schoolData.schoolYearEnd],
+                                ].map(([label, val]) => val ? (
+                                    <TableRow key={label}>
+                                        <TableCell sx={{ fontWeight: 600, width: 200, fontSize: 13 }}>{label}</TableCell>
+                                        <TableCell sx={{ fontSize: 13 }}>{val}</TableCell>
+                                    </TableRow>
+                                ) : null)}
+                            </TableBody>
+                        </Table>
+
+                        {(schoolData.bankName || schoolData.bankAccount) && (
+                            <>
+                                <Typography variant="subtitle2" color="text.secondary" gutterBottom>Datos bancarios</Typography>
+                                <Table size="small" sx={{ mb: 2 }}>
+                                    <TableBody>
+                                        {[
+                                            ['Banco',   schoolData.bankName],
+                                            ['Cuenta',  schoolData.bankAccount],
+                                        ].map(([label, val]) => val ? (
+                                            <TableRow key={label}>
+                                                <TableCell sx={{ fontWeight: 600, width: 140, fontSize: 13 }}>{label}</TableCell>
+                                                <TableCell sx={{ fontSize: 13 }}>{val}</TableCell>
+                                            </TableRow>
+                                        ) : null)}
+                                    </TableBody>
+                                </Table>
+                            </>
+                        )}
+                    </Box>
+                )}
+            </AppDialog>
+
         </>
     );
 }

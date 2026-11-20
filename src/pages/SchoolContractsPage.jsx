@@ -5,22 +5,14 @@ import {
     List,
     ListItem,
     ListItemText,
-    Dialog,
-    DialogTitle,
-    DialogContent,
     Typography,
     IconButton,
-    Snackbar,
-    Alert,
     Divider,
     TextField,
     Grid,
     Pagination,
     CircularProgress,
     Box,
-    DialogActions,
-    useTheme,
-    useMediaQuery,
     Chip
 } from '@mui/material';
 import {
@@ -29,7 +21,8 @@ import {
     CloudUpload as CloudUploadIcon,
     ContentCopy as ContentCopyIcon,
     Visibility as VisibilityIcon,
-    Add as AddIcon
+    Add as AddIcon,
+    Description as DescriptionIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import FilterBar from '../components/filters/FilterBar';
@@ -51,47 +44,35 @@ import parse from 'html-react-parser';
 import SignatureCanvas from 'react-signature-canvas';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import styled from 'styled-components';
+import useNotify from '../hooks/useNotify';
+import { MESSAGES, focusFirstError } from '../utils/validators';
+import useConfirm from '../hooks/useConfirm';
+import useIsMobile from '../hooks/useIsMobile';
+import { MobileCard } from '../components/table/MobileCard';
+import { formatDateTime } from '../utils/dateFormat';
+import AppDialog from '../components/dialogs/AppDialog';
 
-// Mobile view: Tarjeta para contrato (contratos originales)
-const MobileContractCard = styled(Box)`
-    padding: 16px;
-    margin-bottom: 12px;
-    background-color: #fff;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-`;
-
-// Mobile view: Tarjeta para contrato llenado
-const MobileFilledContractCard = styled(Box)`
-    padding: 16px;
-    margin-bottom: 12px;
-    background-color: #fff;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-`;
+// Tarjeta móvil de contratos: borde gris fino sin sombra, como antes del bloque B
+const CONTRACT_CARD_SX = { p: 2, mb: 1.5, backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: '8px' };
 
 const SchoolContractsPage = () => {
     const { hasPermission } = usePermissions();
     const puedeVerLlenados = hasPermission('contratos-ver-llenados');
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
     const navigate = useNavigate();
     const { cicloEscolarId: routeCicloEscolarId, schoolId } = useParams();
     const location = useLocation();
 
     // Estados para contratos (originales)
     const [contracts, setContracts] = useState([]);
-    const [snackbar, setSnackbar] = useState({
-        open: false,
-        message: '',
-        severity: 'success'
-    });
+    const notify = useNotify();
+    const confirm = useConfirm();
 
     // Estados para crear/editar contrato
     const [openEditor, setOpenEditor] = useState(false);
     const [currentContract, setCurrentContract] = useState(null);
     const [contractTitle, setContractTitle] = useState('');
+    const [titleError, setTitleError] = useState('');
     const [editorData, setEditorData] = useState('');
 
     // Para placeholders y firmas
@@ -136,8 +117,6 @@ const SchoolContractsPage = () => {
     const selectedContractUuid = pageFilters.applied.contract || null;
 
     // Diálogo de confirmación para eliminar contrato llenado
-    const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
-    const [filledContractToDelete, setFilledContractToDelete] = useState(null);
 
     // Estados para información del colegio
     const [schoolData, setSchoolData] = useState(null);
@@ -161,16 +140,12 @@ const SchoolContractsPage = () => {
                 setContracts(response.data);
             } catch (error) {
                 console.error('Error al obtener los contratos:', error);
-                setSnackbar({
-                    open: true,
-                    message: 'Error al obtener los contratos.',
-                    severity: 'error'
-                });
+                notify.error('Error al obtener los contratos');
             }
         };
         
         fetchContracts();
-    }, [schoolId]);
+    }, [schoolId, notify]);
 
     const { applyValues } = pageFilters;
     useEffect(() => {
@@ -320,7 +295,7 @@ const SchoolContractsPage = () => {
                     console.error('Error al obtener familias no firmadas:', error);
                     const serverMsg = error?.response?.data?.message || error?.message || 'Error desconocido';
                     const status = error?.response?.status;
-                    setSnackbar({ open: true, message: `Error ${status || ''}: ${serverMsg}`, severity: 'error' });
+                    notify.error(`Error ${status || ''}: ${serverMsg}`);
                 } finally {
                     const elapsed = Date.now() - start;
                     const wait = Math.max(0, MIN_LOADING_MS - elapsed);
@@ -359,7 +334,7 @@ const SchoolContractsPage = () => {
                 console.error('Error al obtener los contratos firmados:', error);
                 const serverMsg = error?.response?.data?.message || error?.message || 'Error desconocido';
                 const status = error?.response?.status;
-                setSnackbar({ open: true, message: `Error ${status || ''}: ${serverMsg}`, severity: 'error' });
+                notify.error(`Error ${status || ''}: ${serverMsg}`);
             } finally {
                 const elapsed = Date.now() - start;
                 const wait = Math.max(0, MIN_LOADING_MS - elapsed);
@@ -367,7 +342,7 @@ const SchoolContractsPage = () => {
             }
         };
         fetchItems();
-    }, [filledContractsPage, filledContractsLimit, schoolId, filledContractsSearch, onlyUnfilled, selectedContractUuid, showInactive, puedeVerLlenados, routeCicloEscolarId]);
+    }, [filledContractsPage, filledContractsLimit, schoolId, filledContractsSearch, onlyUnfilled, selectedContractUuid, showInactive, puedeVerLlenados, routeCicloEscolarId, notify]);
 
     // ---------------------------
     // Función para subir archivo Word y convertirlo a HTML (igual que ContractsManagementPage)
@@ -381,18 +356,10 @@ const SchoolContractsPage = () => {
                 setEditorData(result.value);
             } catch (error) {
                 console.error('Error convirtiendo documento Word:', error);
-                setSnackbar({
-                    open: true,
-                    message: 'Error al convertir el documento de Word.',
-                    severity: 'error'
-                });
+                notify.error('Error al convertir el documento de Word');
             }
         } else {
-            setSnackbar({
-                open: true,
-                message: 'Por favor, sube un archivo de Word (.docx).',
-                severity: 'warning'
-            });
+            notify.warning('Por favor, sube un archivo de Word (.docx)');
         }
         event.target.value = null;
     };
@@ -402,11 +369,8 @@ const SchoolContractsPage = () => {
     // ---------------------------
     const handleSaveOrUpdate = async () => {
         if (!contractTitle.trim()) {
-            setSnackbar({
-                open: true,
-                message: 'Por favor, ingresa un título para el contrato.',
-                severity: 'warning'
-            });
+            setTitleError(MESSAGES.required);
+            focusFirstError({ contractTitle: MESSAGES.required });
             return;
         }
         try {
@@ -442,28 +406,16 @@ const SchoolContractsPage = () => {
                 setContracts((prev) =>
                     prev.map((c) => (c.id === currentContract.id ? savedContract : c))
                 );
-                setSnackbar({
-                    open: true,
-                    message: 'Contrato actualizado exitosamente.',
-                    severity: 'success'
-                });
+                notify.success('Contrato actualizado');
             } else {
                 setContracts((prev) => [...prev, savedContract]);
-                setSnackbar({
-                    open: true,
-                    message: 'Contrato guardado exitosamente.',
-                    severity: 'success'
-                });
+                notify.success('Contrato guardado');
             }
 
             handleCloseEditor();
         } catch (error) {
             console.error('Error al guardar/actualizar contrato:', error);
-            setSnackbar({
-                open: true,
-                message: 'Error al guardar/actualizar el contrato.',
-                severity: 'error'
-            });
+            notify.error('Error al guardar/actualizar el contrato');
         }
     };
 
@@ -478,42 +430,28 @@ const SchoolContractsPage = () => {
     };
 
     const handleDelete = async (uuid) => {
-        if (!window.confirm('¿Está seguro de que desea eliminar este contrato?')) {
-            return;
-        }
-        try {
-            await api.delete(`/contracts/${uuid}`);
+        const contract = contracts.find((c) => c.uuid === uuid);
+        const ok = await confirm({
+            title: 'Eliminar contrato',
+            message: `Se eliminará el contrato${contract?.title ? ` "${contract.title}"` : ''}. Esta acción no se puede deshacer.`,
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: () => api.delete(`/contracts/${uuid}`),
+            errorMessage: 'Error al eliminar el contrato',
+        });
+        if (ok) {
             setContracts((prev) => prev.filter((c) => c.uuid !== uuid));
-            setSnackbar({
-                open: true,
-                message: 'Contrato eliminado exitosamente.',
-                severity: 'info'
-            });
-        } catch (error) {
-            console.error('Error al eliminar el contrato:', error);
-            setSnackbar({
-                open: true,
-                message: 'Error al eliminar el contrato.',
-                severity: 'error'
-            });
+            notify.success('Contrato eliminado');
         }
     };
 
     const handleCopyLink = async (url) => {
         try {
             await navigator.clipboard.writeText(url);
-            setSnackbar({
-                open: true,
-                message: 'Enlace copiado al portapapeles.',
-                severity: 'success'
-            });
+            notify.success('Enlace copiado al portapapeles');
         } catch (error) {
             console.error('Error al copiar enlace:', error);
-            setSnackbar({
-                open: true,
-                message: 'Error al copiar enlace.',
-                severity: 'error'
-            });
+            notify.error('Error al copiar enlace');
         }
     };
 
@@ -635,39 +573,18 @@ const SchoolContractsPage = () => {
     // ---------------------------
     // Funciones para eliminar contrato llenado
     // ---------------------------
-    const handleOpenDeleteDialog = (filledContract) => {
-        setFilledContractToDelete(filledContract);
-        setOpenDeleteDialog(true);
-    };
-
-    const handleCloseDeleteDialog = () => {
-        setFilledContractToDelete(null);
-        setOpenDeleteDialog(false);
-    };
-
-    const confirmDeleteFilledContract = async () => {
-        if (!filledContractToDelete) {
-            return;
-        }
-        try {
-            await api.delete(`/contracts/filled/${filledContractToDelete.id}`);
-            setFilledContracts((prev) =>
-                prev.filter((fc) => fc.id !== filledContractToDelete.id)
-            );
-            setSnackbar({
-                open: true,
-                message: 'Contrato llenado eliminado exitosamente.',
-                severity: 'info'
-            });
-        } catch (error) {
-            console.error('Error al eliminar el contrato llenado:', error);
-            setSnackbar({
-                open: true,
-                message: 'Error al eliminar el contrato llenado.',
-                severity: 'error'
-            });
-        } finally {
-            handleCloseDeleteDialog();
+    const handleDeleteFilledContract = async (filledContract) => {
+        const ok = await confirm({
+            title: 'Eliminar contrato llenado',
+            message: 'Se eliminará el contrato llenado. Esta acción no se puede deshacer.',
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: () => api.delete(`/contracts/filled/${filledContract.id}`),
+            errorMessage: 'Error al eliminar el contrato llenado',
+        });
+        if (ok) {
+            setFilledContracts((prev) => prev.filter((fc) => fc.id !== filledContract.id));
+            notify.success('Contrato llenado eliminado');
         }
     };
 
@@ -676,11 +593,7 @@ const SchoolContractsPage = () => {
     // ---------------------------
     const handleGeneratePDF = async () => {
         if (!editorData) {
-            setSnackbar({
-                open: true,
-                message: 'No hay contenido para generar el PDF.',
-                severity: 'warning'
-            });
+            notify.warning('No hay contenido para generar el PDF');
             return;
         }
 
@@ -729,18 +642,10 @@ const SchoolContractsPage = () => {
             const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
             pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
             pdf.save(`${contractTitle || 'Contrato'}.pdf`);
-            setSnackbar({
-                open: true,
-                message: 'PDF generado exitosamente.',
-                severity: 'success'
-            });
+            notify.success('PDF generado');
         } catch (error) {
             console.error('Error generando PDF:', error);
-            setSnackbar({
-                open: true,
-                message: 'Error al generar el PDF.',
-                severity: 'error'
-            });
+            notify.error('Error al generar el PDF');
         }
         document.body.removeChild(tempDiv);
     };
@@ -749,6 +654,7 @@ const SchoolContractsPage = () => {
     // Cerrar el diálogo de creación/edición
     // ---------------------------
     const handleCloseEditor = () => {
+        setTitleError('');
         setOpenEditor(false);
         setCurrentContract(null);
         setContractTitle('');
@@ -790,7 +696,7 @@ const SchoolContractsPage = () => {
 
             if (isMobileView) {
                 return (
-                    <MobileFilledContractCard key={filledContract.id}>
+                    <MobileCard key={filledContract.id} elevation={0} sx={CONTRACT_CARD_SX}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                             <Typography variant="h6">Familia: {familyLastName}</Typography>
                             {filledContract.parent?.deleted && (
@@ -798,7 +704,7 @@ const SchoolContractsPage = () => {
                             )}
                         </Box>
                         <Typography variant="body2" color="textSecondary">
-                            Fecha de Creación: {new Date(filledContract.createdAt).toLocaleString()}
+                            Fecha de Creación: {formatDateTime(filledContract.createdAt)}
                         </Typography>
                         <Typography variant="body2" color="textSecondary">
                             {(() => {
@@ -828,12 +734,12 @@ const SchoolContractsPage = () => {
                                 Descargar PDF
                             </Button>
                             <PermissionGuard permission="contratos-eliminar-llenado">
-                                <IconButton onClick={() => handleOpenDeleteDialog(filledContract)}>
+                                <IconButton onClick={() => handleDeleteFilledContract(filledContract)}>
                                     <DeleteIcon />
                                 </IconButton>
                             </PermissionGuard>
                         </Box>
-                    </MobileFilledContractCard>
+                    </MobileCard>
                 );
             }
 
@@ -851,7 +757,7 @@ const SchoolContractsPage = () => {
                     secondary={
                         <>
                             <Typography variant="body2" color="textSecondary">
-                                Fecha de Creación: {new Date(filledContract.createdAt).toLocaleString()}
+                                Fecha de Creación: {formatDateTime(filledContract.createdAt)}
                             </Typography>
                             <Typography variant="body2" color="textSecondary">
                                 {(() => {
@@ -885,7 +791,7 @@ const SchoolContractsPage = () => {
                     Descargar PDF
                 </Button>
                 <PermissionGuard permission="contratos-eliminar-llenado">
-                    <IconButton onClick={() => handleOpenDeleteDialog(filledContract)}>
+                    <IconButton onClick={() => handleDeleteFilledContract(filledContract)}>
                         <DeleteIcon />
                     </IconButton>
                 </PermissionGuard>
@@ -911,7 +817,7 @@ const SchoolContractsPage = () => {
                 {isMobile ? (
                     <Box>
                         {contracts.map((contract) => (
-                            <MobileContractCard key={contract.id}>
+                            <MobileCard key={contract.id} elevation={0} sx={CONTRACT_CARD_SX}>
                                 <Typography variant="h6">{contract.title}</Typography>
 
                                 <Typography variant="body2" color="textSecondary">
@@ -940,7 +846,7 @@ const SchoolContractsPage = () => {
                                         <ContentCopyIcon />
                                     </IconButton>
                                 </Box>
-                            </MobileContractCard>
+                            </MobileCard>
                         ))}
                     </Box>
                 ) : (
@@ -1014,13 +920,13 @@ const SchoolContractsPage = () => {
                                     ) : (
                                         <>
                                             {unfilledFamilies.map((f) => (
-                                                <MobileFilledContractCard key={f.familyDetailId}>
+                                                <MobileCard key={f.familyDetailId} elevation={0} sx={CONTRACT_CARD_SX}>
                                                     <Typography variant="h6">Familia: {f.familyLastName || 'Sin Apellido'}</Typography>
                                                     <Typography variant="body2" color="textSecondary">Usuario: {f.userName || ''} &nbsp; {f.userEmail ? `(${f.userEmail})` : ''}</Typography>
                                                     <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
                                                         <Typography variant="caption" color="textSecondary">(Información únicamente)</Typography>
                                                     </Box>
-                                                </MobileFilledContractCard>
+                                                </MobileCard>
                                             ))}
                                         </>
                                     )
@@ -1103,119 +1009,82 @@ const SchoolContractsPage = () => {
                 </Box>
 
                 {/* Diálogo Crear/Editar Contrato */}
-                <Dialog open={openEditor} onClose={handleCloseEditor} maxWidth="lg" fullWidth>
-                    <DialogTitle>{currentContract ? 'Editar Contrato' : 'Crear Contrato'}</DialogTitle>
-                    <DialogContent>
-                        <Grid container spacing={2}>
-                            <Grid item xs={12} md={6}>
-                                <TextField
-                                    label="Título del Contrato"
-                                    value={contractTitle}
-                                    onChange={(e) => setContractTitle(e.target.value)}
-                                    fullWidth
-                                    margin="normal"
+                <AppDialog
+                    open={openEditor}
+                    onClose={handleCloseEditor}
+                    title={currentContract ? 'Editar contrato' : 'Nuevo contrato'}
+                    icon={<DescriptionIcon />}
+                    size="lg"
+                    onSubmit={handleSaveOrUpdate}
+                    submitLabel={currentContract ? 'Actualizar contrato' : 'Guardar contrato'}
+                    readOnly={!hasPermission(currentContract ? 'contratos-editar' : 'contratos-crear')}
+                    extraActions={(
+                        <Button variant="outlined" color="secondary" onClick={handleGeneratePDF} sx={{ mr: 'auto' }}>
+                            Generar PDF
+                        </Button>
+                    )}
+                >
+                    <Grid container spacing={2}>
+                        <Grid item xs={12} md={6}>
+                            <TextField
+                                label="Título del contrato"
+                                name="contractTitle"
+                                required
+                                error={Boolean(titleError)}
+                                helperText={titleError}
+                                value={contractTitle}
+                                onChange={(e) => { setContractTitle(e.target.value); setTitleError(''); }}
+                                fullWidth
+                                margin="normal"
+                            />
+
+                            <div style={{ marginBottom: '10px' }}>
+                                <input
+                                    accept=".docx"
+                                    style={{ display: 'none' }}
+                                    id="upload-word"
+                                    type="file"
+                                    onChange={handleWordUpload}
                                 />
+                                <label htmlFor="upload-word">
+                                    <Button
+                                        variant="outlined"
+                                        component="span"
+                                        startIcon={<CloudUploadIcon />}
+                                    >
+                                        Subir Word
+                                    </Button>
+                                </label>
+                            </div>
 
-                                <div style={{ marginBottom: '10px' }}>
-                                    <input
-                                        accept=".docx"
-                                        style={{ display: 'none' }}
-                                        id="upload-word"
-                                        type="file"
-                                        onChange={handleWordUpload}
-                                    />
-                                    <label htmlFor="upload-word">
-                                        <Button
-                                            variant="outlined"
-                                            component="span"
-                                            startIcon={<CloudUploadIcon />}
-                                        >
-                                            Subir Word
-                                        </Button>
-                                    </label>
-                                </div>
-
-                                <ErrorBoundary>
-                                    <SimpleEditor editorData={editorData} setEditorData={setEditorData} />
-                                </ErrorBoundary>
-                            </Grid>
-                            <Grid item xs={12} md={6}>
-                                <Typography variant="h6">Vista Previa del Contrato</Typography>
-                                <Divider style={{ margin: '10px 0' }} />
-                                <div
-                                    style={{
-                                        border: '1px solid #ccc',
-                                        padding: '20px',
-                                        borderRadius: '4px',
-                                        minHeight: '400px',
-                                        backgroundColor: '#fff',
-                                        overflowY: 'auto',
-                                        fontFamily: "'Times New Roman', serif",
-                                        lineHeight: '1.5',
-                                        textAlign: 'justify'
-                                    }}
-                                    id="contract-preview"
-                                >
-                                    {renderContent(editorData)}
-                                </div>
-                            </Grid>
+                            <ErrorBoundary>
+                                <SimpleEditor editorData={editorData} setEditorData={setEditorData} />
+                            </ErrorBoundary>
                         </Grid>
-                        <div style={{ marginTop: '20px', textAlign: 'right' }}>
-                            {hasPermission(currentContract ? 'contratos-editar' : 'contratos-crear') && (
-                                <Button variant="contained" color="primary" onClick={handleSaveOrUpdate}>
-                                    {currentContract ? 'Actualizar Contrato' : 'Guardar Contrato'}
-                                </Button>
-                            )}
-                            <Button variant="contained" style={{ marginLeft: '10px' }} onClick={handleCloseEditor}>
-                                Cancelar
-                            </Button>
-                            <Button
-                                variant="outlined"
-                                color="secondary"
-                                style={{ marginLeft: '10px' }}
-                                onClick={handleGeneratePDF}
+                        <Grid item xs={12} md={6}>
+                            <Typography variant="h6">Vista Previa del Contrato</Typography>
+                            <Divider style={{ margin: '10px 0' }} />
+                            <div
+                                style={{
+                                    border: '1px solid #ccc',
+                                    padding: '20px',
+                                    borderRadius: '4px',
+                                    minHeight: '400px',
+                                    backgroundColor: '#fff',
+                                    overflowY: 'auto',
+                                    fontFamily: "'Times New Roman', serif",
+                                    lineHeight: '1.5',
+                                    textAlign: 'justify'
+                                }}
+                                id="contract-preview"
                             >
-                                Generar PDF
-                            </Button>
-                        </div>
-                    </DialogContent>
-                </Dialog>
+                                {renderContent(editorData)}
+                            </div>
+                        </Grid>
+                    </Grid>
+                </AppDialog>
 
                 {/* Diálogo de confirmación para eliminar contrato llenado */}
-                <Dialog open={openDeleteDialog} onClose={handleCloseDeleteDialog}>
-                    <DialogTitle>Confirmar Eliminación</DialogTitle>
-                    <DialogContent>
-                        <Typography>
-                            ¿Está seguro de que desea eliminar este contrato llenado?
-                        </Typography>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCloseDeleteDialog} color="primary">
-                            Cancelar
-                        </Button>
-                        <PermissionGuard permission="contratos-eliminar-llenado">
-                            <Button onClick={confirmDeleteFilledContract} color="secondary">
-                                Eliminar
-                            </Button>
-                        </PermissionGuard>
-                    </DialogActions>
-                </Dialog>
-
-                {/* Snackbar */}
-                <Snackbar
-                    open={snackbar.open}
-                    autoHideDuration={6000}
-                    onClose={() => setSnackbar({ ...snackbar, open: false })}
-                    anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-                >
-                    <Alert
-                        onClose={() => setSnackbar({ ...snackbar, open: false })}
-                        severity={snackbar.severity}
-                        sx={{ width: '100%' }}
-                    >
-                        {snackbar.message}
-                    </Alert>
-                </Snackbar>
             </>
         </PageContainer>
     );

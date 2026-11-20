@@ -2,32 +2,26 @@
 
 import React, { useState, useContext, useCallback } from 'react';
 import {
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
+    Paper,
     Button,
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    Paper,
     Typography,
     CircularProgress,
     Box,
-    IconButton,
-    TableSortLabel,
     TextField,
-    Grid,
-    useMediaQuery,
-    useTheme
+    Grid
 } from '@mui/material';
-import { Close as CloseIcon, PersonSearch } from '@mui/icons-material';
+import { PersonSearch } from '@mui/icons-material';
 import { AuthContext } from '../../context/AuthProvider';
 import api from '../../utils/axiosConfig';
 import { getScheduleLabel } from '../../utils/scheduleConfig';
+import useTableState from '../../hooks/useTableState';
+import SortableTableHead from '../table/SortableTableHead';
+import AppTableContainer from '../table/AppTableContainer';
+import AppDialog from '../dialogs/AppDialog';
 
 const MIN_FIELD_LENGTH = 2;
 
@@ -42,9 +36,18 @@ const SEARCH_FIELDS = [
 
 const EMPTY_FIELDS = SEARCH_FIELDS.reduce((acc, f) => ({ ...acc, [f.key]: '' }), {});
 
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'lastName', label: 'Apellidos Familia', sortable: true },
+    { id: 'studentName', label: 'Nombres (Estudiante)', sortable: true },
+    { id: 'grade', label: 'Grado', sortable: true },
+    { id: 'route', label: 'Ruta', sortable: true },
+    { id: 'horario', label: 'Horario' },
+    { id: 'stopTime', label: 'Horario Parada', sortable: true },
+    { id: 'note', label: 'Nota Parada', sortable: true },
+];
+
 const SchoolStudentSearchModal = ({ open, onClose, schoolId, cicloEscolarId }) => {
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const { auth } = useContext(AuthContext);
 
     const [fields, setFields] = useState(EMPTY_FIELDS);
@@ -54,22 +57,8 @@ const SchoolStudentSearchModal = ({ open, onClose, schoolId, cicloEscolarId }) =
     const [hasSearched, setHasSearched] = useState(false);
 
     // Sorting: asc -> desc -> none
-    const [sortBy, setSortBy] = useState(null);
-    const [sortOrder, setSortOrder] = useState('asc');
-
-    const handleSortChange = (field) => {
-        if (sortBy !== field) {
-            setSortBy(field);
-            setSortOrder('asc');
-            return;
-        }
-        if (sortOrder === 'asc') {
-            setSortOrder('desc');
-            return;
-        }
-        setSortBy(null);
-        setSortOrder('asc');
-    };
+    const table = useTableState({ clearable: true });
+    const { orderBy: sortBy, order: sortOrder } = table;
 
     const parseTimeToMinutes = (timeStr) => {
         if (!timeStr) {
@@ -143,8 +132,7 @@ const SchoolStudentSearchModal = ({ open, onClose, schoolId, cicloEscolarId }) =
         setStudents([]);
         setError(null);
         setHasSearched(false);
-        setSortBy(null);
-        setSortOrder('asc');
+        table.setSort('', 'asc');
     };
 
     const handleClose = () => {
@@ -236,43 +224,9 @@ const SchoolStudentSearchModal = ({ open, onClose, schoolId, cicloEscolarId }) =
             );
         }
         return (
-            <TableContainer component={Paper} sx={{ maxHeight: { xs: 'calc(100dvh - 340px)', sm: 460 }, overflowX: 'auto' }}>
+            <AppTableContainer component={Paper} maxHeight={{ xs: 'calc(100dvh - 340px)', sm: 460 }}>
                 <Table stickyHeader sx={{ minWidth: 860 }}>
-                    <TableHead>
-                        <TableRow>
-                            <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.50' }}>
-                                <TableSortLabel active={sortBy === 'lastName'} direction={sortBy === 'lastName' ? sortOrder : 'asc'} onClick={() => handleSortChange('lastName')}>
-                                    Apellidos Familia
-                                </TableSortLabel>
-                            </TableCell>
-                            <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.50' }}>
-                                <TableSortLabel active={sortBy === 'studentName'} direction={sortBy === 'studentName' ? sortOrder : 'asc'} onClick={() => handleSortChange('studentName')}>
-                                    Nombres (Estudiante)
-                                </TableSortLabel>
-                            </TableCell>
-                            <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.50' }}>
-                                <TableSortLabel active={sortBy === 'grade'} direction={sortBy === 'grade' ? sortOrder : 'asc'} onClick={() => handleSortChange('grade')}>
-                                    Grado
-                                </TableSortLabel>
-                            </TableCell>
-                            <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.50' }}>
-                                <TableSortLabel active={sortBy === 'route'} direction={sortBy === 'route' ? sortOrder : 'asc'} onClick={() => handleSortChange('route')}>
-                                    Ruta
-                                </TableSortLabel>
-                            </TableCell>
-                            <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.50' }}>Horario</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.50' }}>
-                                <TableSortLabel active={sortBy === 'stopTime'} direction={sortBy === 'stopTime' ? sortOrder : 'asc'} onClick={() => handleSortChange('stopTime')}>
-                                    Horario Parada
-                                </TableSortLabel>
-                            </TableCell>
-                            <TableCell sx={{ fontWeight: 'bold', backgroundColor: 'grey.50' }}>
-                                <TableSortLabel active={sortBy === 'note'} direction={sortBy === 'note' ? sortOrder : 'asc'} onClick={() => handleSortChange('note')}>
-                                    Nota Parada
-                                </TableSortLabel>
-                            </TableCell>
-                        </TableRow>
-                    </TableHead>
+                    <SortableTableHead columns={COLUMNS} cellSx={{ fontWeight: 'bold', backgroundColor: 'grey.50' }} {...table.sortProps} />
                     <TableBody>
                         {visibleStudents.map((student, index) => (
                             <TableRow key={student.slotId || student.id || index} hover>
@@ -311,88 +265,63 @@ const SchoolStudentSearchModal = ({ open, onClose, schoolId, cicloEscolarId }) =
                         ))}
                     </TableBody>
                 </Table>
-            </TableContainer>
+            </AppTableContainer>
         );
     };
 
     return (
-        <Dialog
+        <AppDialog
             open={open}
             onClose={handleClose}
-            maxWidth="lg"
-            fullWidth
-            fullScreen={isMobile}
-            PaperProps={{ sx: { borderRadius: { xs: 0, sm: 2 } } }}
+            title="Buscar estudiantes por parada"
+            icon={<PersonSearch />}
+            size="lg"
+            readOnly
+            contentSx={{ p: 0 }}
+            extraActions={(
+                <Typography variant="body2" color="textSecondary" sx={{ mr: 'auto' }}>
+                    {hasSearched && !loading && !error
+                        ? `${visibleStudents.length} estudiante${visibleStudents.length !== 1 ? 's' : ''} encontrado${visibleStudents.length !== 1 ? 's' : ''}`
+                        : ''}
+                </Typography>
+            )}
         >
-            <DialogTitle sx={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: { xs: 'flex-start', sm: 'center' },
-                gap: 1,
-                backgroundColor: 'primary.main',
-                color: 'white',
-                py: 2
-            }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-                    <PersonSearch />
-                    <Typography variant="h6" component="div" sx={{ overflowWrap: 'anywhere' }}>
-                        Buscar estudiantes por parada
+            <Box sx={{ p: 2 }}>
+                <Grid container spacing={2}>
+                    {SEARCH_FIELDS.map(({ key, label }) => (
+                        <Grid item xs={12} sm={6} md={4} key={key}>
+                            <TextField
+                                variant="outlined"
+                                size="small"
+                                fullWidth
+                                label={label}
+                                placeholder={`Buscar por ${label.toLowerCase()}...`}
+                                value={fields[key]}
+                                onChange={handleFieldChange(key)}
+                                onKeyPress={handleKeyPress}
+                            />
+                        </Grid>
+                    ))}
+                </Grid>
+                <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    <Button variant="contained" onClick={handleSearch} disabled={!canSearch}>
+                        Buscar
+                    </Button>
+                    <Button
+                        variant="outlined"
+                        onClick={handleClear}
+                        disabled={loading || (!hasSearched && Object.values(fields).every((v) => !v))}
+                    >
+                        Limpiar
+                    </Button>
+                    <Typography variant="caption" color="textSecondary" sx={{ alignSelf: 'center' }}>
+                        Se buscan solo los campos con al menos {MIN_FIELD_LENGTH} caracteres.
                     </Typography>
                 </Box>
-                <IconButton onClick={handleClose} sx={{ color: 'white' }} size="small">
-                    <CloseIcon />
-                </IconButton>
-            </DialogTitle>
+            </Box>
 
-            <DialogContent sx={{ p: 0 }}>
-                <Box sx={{ p: 2 }}>
-                    <Grid container spacing={2}>
-                        {SEARCH_FIELDS.map(({ key, label }) => (
-                            <Grid item xs={12} sm={6} md={4} key={key}>
-                                <TextField
-                                    variant="outlined"
-                                    size="small"
-                                    fullWidth
-                                    label={label}
-                                    placeholder={`Buscar por ${label.toLowerCase()}...`}
-                                    value={fields[key]}
-                                    onChange={handleFieldChange(key)}
-                                    onKeyPress={handleKeyPress}
-                                />
-                            </Grid>
-                        ))}
-                    </Grid>
-                    <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                        <Button variant="contained" onClick={handleSearch} disabled={!canSearch}>
-                            Buscar
-                        </Button>
-                        <Button
-                            variant="outlined"
-                            onClick={handleClear}
-                            disabled={loading || (!hasSearched && Object.values(fields).every((v) => !v))}
-                        >
-                            Limpiar
-                        </Button>
-                        <Typography variant="caption" color="textSecondary" sx={{ alignSelf: 'center' }}>
-                            Se buscan solo los campos con al menos {MIN_FIELD_LENGTH} caracteres.
-                        </Typography>
-                    </Box>
-                </Box>
-
-                {renderBody()}
-            </DialogContent>
-
-            <DialogActions sx={{ p: 2, backgroundColor: 'grey.50' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                    <Typography variant="body2" color="textSecondary">
-                        {hasSearched && !loading && !error
-                            ? `${visibleStudents.length} estudiante${visibleStudents.length !== 1 ? 's' : ''} encontrado${visibleStudents.length !== 1 ? 's' : ''}`
-                            : ''}
-                    </Typography>
-                    <Button onClick={handleClose} variant="contained">Cerrar</Button>
-                </Box>
-            </DialogActions>
-        </Dialog>
+            {renderBody()}
+        </AppDialog>
     );
 };
 

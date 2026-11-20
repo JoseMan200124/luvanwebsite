@@ -1,16 +1,13 @@
 // src/pages/ScheduledSendsPage.jsx
 import { useCallback, useEffect, useRef, useState } from 'react';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
-import moment from 'moment-timezone';
 import {
-    Accordion, AccordionDetails, AccordionSummary, Box, Button, Chip, CircularProgress, Dialog,
-    DialogActions, DialogContent, DialogTitle, IconButton,
-    Snackbar, Alert, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination,
+    Accordion, AccordionDetails, AccordionSummary, Box, Button, Chip, CircularProgress, Alert, Stack, Table, TableBody, TableCell, TableHead,
     TableRow, Tooltip, Typography,
 } from '@mui/material';
 import {
     Cancel as CancelIcon, Edit as EditIcon, ExpandMore as ExpandMoreIcon, Replay as ReplayIcon,
-    Visibility as VisibilityIcon,
+    Visibility as VisibilityIcon, ScheduleSend as ScheduleSendIcon,
 } from '@mui/icons-material';
 import api from '../utils/axiosConfig';
 import FilterBar from '../components/filters/FilterBar';
@@ -20,14 +17,25 @@ import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import PermissionGuard from '../components/PermissionGuard';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import RowActions from '../components/table/RowActions';
 import CircularMasivaModal from '../components/CircularMasivaModal';
 import SendNotificationModal from '../components/SendNotificationModal';
-import { SCHEDULE_TIMEZONE, describeSchedule } from '../components/scheduling/scheduleModel';
+import { describeSchedule } from '../components/scheduling/scheduleModel';
 import AudienceDetail, { AudienceSummaryText } from '../components/scheduling/AudienceDetail';
 import { OUTCOME_REASON_LABEL as REASON_LABEL } from '../utils/outcomeReasons';
 import {
     cancelScheduledSend, getScheduledSend, listScheduledSends, resendScheduledSendFailures,
 } from '../services/scheduledSendService';
+import { formatDateTime } from '../utils/dateFormat';
+import { SCHEDULED_SEND_STATUS, SCHEDULED_RUN_STATUS, getStatusLabel } from '../constants/statuses';
+import StatusChip from '../components/StatusChip';
+import AppDialog from '../components/dialogs/AppDialog';
 
 // Secciones desplegables de la vista (una por estado). `hint` explica qué significa cada estado.
 const SECTIONS = [
@@ -39,21 +47,6 @@ const SECTIONS = [
     { status: 'cancelled', label: 'Cancelados', hint: 'No se enviarán más ocurrencias', color: 'default' },
 ];
 const DEFAULT_EXPANDED = { active: true };
-const STATUS_CHIP = {
-    active: { label: 'Activo', color: 'primary' },
-    completed: { label: 'Completado', color: 'success' },
-    partial: { label: 'Parcial', color: 'warning' },
-    failed: { label: 'Fallido', color: 'error' },
-    skipped: { label: 'Omitido', color: 'default' },
-    cancelled: { label: 'Cancelado', color: 'default' },
-};
-const RUN_CHIP = {
-    running: { label: 'Enviando', color: 'info' },
-    sent: { label: 'Enviado', color: 'success' },
-    partial: { label: 'Parcial', color: 'warning' },
-    failed: { label: 'Falló', color: 'error' },
-    skipped: { label: 'Omitido', color: 'warning' },
-};
 const KIND_LABEL = { circular: 'Circular', notification: 'Notificación' };
 const KIND_OPTIONS = [
     { value: 'circular', label: 'Circulares' },
@@ -62,7 +55,6 @@ const KIND_OPTIONS = [
 const KIND_PERMISSION = { circular: 'mail-enviar-circular', notification: 'notificaciones-crear' };
 
 // Hora de Guatemala, como se programó (el aviso de la página lo indica).
-const formatDateTime = (value) => (value ? moment(value).tz(SCHEDULE_TIMEZONE).format('DD/MM/YYYY HH:mm') : '—');
 // Reparto del correo cuando algunos destinatarios no lo recibieron (envío parcial o fallido).
 const formatDelivery = (run) => (run?.failedRecipientsCount > 0
     ? `Correo enviado a ${run.recipientsCount ?? 0} y falló a ${run.failedRecipientsCount} destinatarios`
@@ -84,12 +76,24 @@ const normalizeSchools = (raw) => (Array.isArray(raw) ? raw : []).map((school) =
 // Una sección desplegable por estado. Carga su propia lista (con su paginación) aunque esté cerrada,
 // para mostrar siempre cuántos envíos tiene.
 const StatusSection = ({ section, kind, refreshKey, expanded, onToggle, onError, onView, onEdit, onCancel }) => {
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
+    // Paginación (en el servidor), propia de cada sección
+    const table = useTableState();
+    const { page, rowsPerPage, setPage } = table;
     const [data, setData] = useState({ total: null, items: [] });
     const [loading, setLoading] = useState(true);
     const showNext = section.status === 'active';
-    const columns = showNext ? 9 : 8;
+    const tableColumns = [
+        { id: 'kind', label: 'Tipo' },
+        { id: 'title', label: 'Asunto / Título' },
+        { id: 'audience', label: 'Audiencia' },
+        { id: 'schedule', label: 'Programación' },
+        showNext && { id: 'nextRunAt', label: 'Próximo envío' },
+        { id: 'runCount', label: 'Envíos hechos' },
+        { id: 'status', label: 'Estado' },
+        { id: 'createdBy', label: 'Creado por' },
+        { id: 'actions', label: 'Acciones', align: 'right' },
+    ].filter(Boolean);
+    const columns = tableColumns.length;
 
     useEffect(() => {
         let ignore = false;
@@ -122,7 +126,7 @@ const StatusSection = ({ section, kind, refreshKey, expanded, onToggle, onError,
             }
         })();
         return () => { ignore = true; };
-    }, [page, rowsPerPage, section.status, kind, refreshKey, onError]);
+    }, [page, rowsPerPage, setPage, section.status, kind, refreshKey, onError]);
 
     const hasItems = (data.total || 0) > 0;
 
@@ -145,21 +149,9 @@ const StatusSection = ({ section, kind, refreshKey, expanded, onToggle, onError,
                 </Stack>
             </AccordionSummary>
             <AccordionDetails sx={{ p: 0 }}>
-                <TableContainer>
+                <AppTableContainer>
                     <Table size="small">
-                        <TableHead>
-                            <TableRow>
-                                <TableCell>Tipo</TableCell>
-                                <TableCell>Asunto / Título</TableCell>
-                                <TableCell>Audiencia</TableCell>
-                                <TableCell>Programación</TableCell>
-                                {showNext && <TableCell>Próximo envío</TableCell>}
-                                <TableCell>Envíos hechos</TableCell>
-                                <TableCell>Estado</TableCell>
-                                <TableCell>Creado por</TableCell>
-                                <TableCell align="right">Acciones</TableCell>
-                            </TableRow>
-                        </TableHead>
+                        <SortableTableHead columns={tableColumns} />
                         <TableBody>
                             {loading && (
                                 <TableRow><TableCell colSpan={columns} align="center"><CircularProgress size={24} /></TableCell></TableRow>
@@ -177,7 +169,7 @@ const StatusSection = ({ section, kind, refreshKey, expanded, onToggle, onError,
                                     <TableCell>{item.runCount}</TableCell>
                                     <TableCell>
                                         <Tooltip title={formatDelivery(item.lastRun)}>
-                                            <Chip size="small" color={STATUS_CHIP[item.status]?.color} label={STATUS_CHIP[item.status]?.label || item.status} />
+                                            <StatusChip domain={SCHEDULED_SEND_STATUS} value={item.status} />
                                         </Tooltip>
                                         {formatDelivery(item.lastRun) && (
                                             <Typography variant="caption" color="text.secondary" display="block">
@@ -186,7 +178,7 @@ const StatusSection = ({ section, kind, refreshKey, expanded, onToggle, onError,
                                         )}
                                         {item.schedule?.recurrence && item.lastRun && (
                                             <Typography variant="caption" color="text.secondary" display="block">
-                                                Último envío: {RUN_CHIP[item.lastRun.status]?.label || item.lastRun.status}
+                                                Último envío: {getStatusLabel(SCHEDULED_RUN_STATUS, item.lastRun.status)}
                                             </Typography>
                                         )}
                                         {REASON_LABEL[item.lastRun?.outcomeReason] && (
@@ -197,37 +189,20 @@ const StatusSection = ({ section, kind, refreshKey, expanded, onToggle, onError,
                                     </TableCell>
                                     <TableCell>{item.createdBy?.name || '—'}</TableCell>
                                     <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
-                                        <Tooltip title="Ver detalle y envíos realizados">
-                                            <IconButton size="small" onClick={() => onView(item.uuid)}><VisibilityIcon fontSize="small" /></IconButton>
-                                        </Tooltip>
-                                        {item.status === 'active' && (
-                                            <PermissionGuard permission={KIND_PERMISSION[item.kind]}>
-                                                <>
-                                                    <Tooltip title="Editar">
-                                                        <IconButton size="small" onClick={() => onEdit(item.uuid)}><EditIcon fontSize="small" /></IconButton>
-                                                    </Tooltip>
-                                                    <Tooltip title="Cancelar envío programado">
-                                                        <IconButton size="small" color="error" onClick={() => onCancel(item)}><CancelIcon fontSize="small" /></IconButton>
-                                                    </Tooltip>
-                                                </>
-                                            </PermissionGuard>
-                                        )}
+                                        <RowActions
+                                            actions={[
+                                                { key: 'view', kind: 'view', label: 'Ver detalle y envíos realizados', icon: <VisibilityIcon fontSize="small" />, onClick: () => onView(item.uuid) },
+                                                item.status === 'active' && { key: 'edit', kind: 'edit', label: 'Editar', icon: <EditIcon fontSize="small" />, permission: KIND_PERMISSION[item.kind], onClick: () => onEdit(item.uuid) },
+                                                item.status === 'active' && { key: 'cancel', kind: 'delete', label: 'Cancelar envío programado', icon: <CancelIcon fontSize="small" />, permission: KIND_PERMISSION[item.kind], onClick: () => onCancel(item) },
+                                            ]}
+                                        />
                                     </TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
                     </Table>
-                    <TablePagination
-                        component="div"
-                        count={data.total || 0}
-                        page={page}
-                        onPageChange={(_, p) => setPage(p)}
-                        rowsPerPage={rowsPerPage}
-                        onRowsPerPageChange={(e) => { setRowsPerPage(Number(e.target.value)); setPage(0); }}
-                        rowsPerPageOptions={[10, 20, 50]}
-                        labelRowsPerPage="Filas por página"
-                    />
-                </TableContainer>
+                    <AppTablePagination count={data.total || 0} {...table.paginationProps} />
+                </AppTableContainer>
             </AccordionDetails>
         </Accordion>
     );
@@ -245,14 +220,10 @@ const ScheduledSendsPage = () => {
     const [detail, setDetail] = useState(null);
     const [editing, setEditing] = useState(null);
     const [editSchools, setEditSchools] = useState([]);
-    const [toCancel, setToCancel] = useState(null);
-    const [toResend, setToResend] = useState(null);
-    const [resending, setResending] = useState(false);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
+    const confirm = useConfirm();
 
-    const showError = useCallback((err, fallback) => setSnackbar({
-        open: true, severity: 'error', message: err?.response?.data?.message || fallback,
-    }), []);
+    const showError = useCallback((err, fallback) => notify.fromError(err, fallback), [notify]);
 
     const refresh = useCallback(() => setRefreshKey((key) => key + 1), []);
 
@@ -295,18 +266,28 @@ const ScheduledSendsPage = () => {
         wasRunning.current = hasRunningRun;
     }, [hasRunningRun, refresh]);
 
-    const confirmResend = async () => {
-        setResending(true);
+    const handleResend = async (run) => {
+        const { uuid } = detail;
+        let result = null;
+        const ok = await confirm({
+            title: 'Reenviar a fallidos',
+            message: `Se enviará el correo únicamente a los ${run?.pendingEmailsCount ?? run?.failedRecipientsCount ?? 0} destinatarios que no lo recibieron. La circular y la notificación ya están publicadas en el sistema y no se duplican.`,
+            confirmLabel: 'Reenviar',
+            cancelLabel: 'Volver',
+            onConfirm: async () => {
+                result = await resendScheduledSendFailures(uuid, run.id);
+            },
+            errorMessage: 'Error al reenviar a los destinatarios fallidos',
+        });
+        if (!ok) {
+            return;
+        }
+        notify.success(result?.message || 'Reenviando el correo a los destinatarios fallidos');
+        refresh();
         try {
-            const result = await resendScheduledSendFailures(detail.uuid, toResend.id);
-            setSnackbar({ open: true, severity: 'success', message: result?.message || 'Reenviando el correo a los destinatarios fallidos.' });
-            setToResend(null);
-            setDetail(await getScheduledSend(detail.uuid));
-            refresh();
+            setDetail(await getScheduledSend(uuid));
         } catch (err) {
-            showError(err, 'Error al reenviar a los destinatarios fallidos.');
-        } finally {
-            setResending(false);
+            showError(err, 'Error al actualizar el detalle');
         }
     };
 
@@ -322,20 +303,25 @@ const ScheduledSendsPage = () => {
         }
     };
 
-    const confirmCancel = async () => {
-        try {
-            await cancelScheduledSend(toCancel.uuid);
-            setSnackbar({ open: true, severity: 'success', message: 'Envío programado cancelado.' });
-            setToCancel(null);
+    const handleCancel = async (item) => {
+        const ok = await confirm({
+            title: 'Cancelar envío programado',
+            message: `Se cancelará "${itemTitle(item)}" y no se enviará ninguna ocurrencia más. Lo ya enviado no se modifica, y un envío que esté en curso en este momento terminará normalmente. Esta acción no se puede deshacer.`,
+            confirmLabel: 'Cancelar envío',
+            cancelLabel: 'Volver',
+            tone: 'danger',
+            onConfirm: () => cancelScheduledSend(item.uuid),
+            errorMessage: 'Error al cancelar el envío',
+        });
+        if (ok) {
+            notify.success('Envío programado cancelado');
             refresh();
-        } catch (err) {
-            showError(err, 'Error al cancelar el envío.');
         }
     };
 
     const closeEdit = () => setEditing(null);
     const onEdited = (message) => {
-        setSnackbar({ open: true, severity: 'success', message: message || 'Envío programado actualizado.' });
+        notify.success(message || 'Envío programado actualizado.');
         refresh();
     };
 
@@ -361,106 +347,78 @@ const ScheduledSendsPage = () => {
                     onError={showError}
                     onView={openDetail}
                     onEdit={openEdit}
-                    onCancel={setToCancel}
+                    onCancel={handleCancel}
                 />
             ))}
 
             {/* Detalle */}
-            <Dialog open={!!detail} onClose={() => setDetail(null)} maxWidth="md" fullWidth>
-                <DialogTitle>{detail ? `${KIND_LABEL[detail.kind]}: ${itemTitle(detail)}` : ''}</DialogTitle>
-                <DialogContent dividers>
-                    {detail && (
-                        <Stack spacing={2}>
-                            <Typography variant="body2"><strong>Programación:</strong> {describeSchedule(detail.schedule)}</Typography>
-                            <Typography variant="body2"><strong>Próximo envío:</strong> {formatDateTime(detail.nextRunAt)}</Typography>
-                            <Box><Typography variant="body2" sx={{ mb: 0.5 }}><strong>Audiencia</strong></Typography><AudienceDetail detail={detail.audienceDetail} /></Box>
-                            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                                <strong>{detail.kind === 'circular' ? 'Mensaje' : 'Mensaje push'}:</strong>{' '}
-                                {detail.kind === 'circular' ? detail.content?.body : detail.content?.message}
+            <AppDialog
+                open={!!detail}
+                onClose={() => setDetail(null)}
+                title={detail ? itemTitle(detail) : ''}
+                subtitle={detail ? KIND_LABEL[detail.kind] : undefined}
+                icon={<ScheduleSendIcon />}
+                size="md"
+                readOnly
+            >
+                {detail && (
+                    <Stack spacing={2}>
+                        <Typography variant="body2"><strong>Programación:</strong> {describeSchedule(detail.schedule)}</Typography>
+                        <Typography variant="body2"><strong>Próximo envío:</strong> {formatDateTime(detail.nextRunAt)}</Typography>
+                        <Box><Typography variant="body2" sx={{ mb: 0.5 }}><strong>Audiencia</strong></Typography><AudienceDetail detail={detail.audienceDetail} /></Box>
+                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                            <strong>{detail.kind === 'circular' ? 'Mensaje' : 'Mensaje push'}:</strong>{' '}
+                            {detail.kind === 'circular' ? detail.content?.body : detail.content?.message}
+                        </Typography>
+                        {detail.kind === 'circular' && (
+                            <Typography variant="body2">
+                                <strong>Correo:</strong> {detail.content?.sendEmail ? 'Sí' : 'No'} · <strong>Adjunto:</strong> {detail.attachment?.name || 'Sin adjunto'}
                             </Typography>
-                            {detail.kind === 'circular' && (
-                                <Typography variant="body2">
-                                    <strong>Correo:</strong> {detail.content?.sendEmail ? 'Sí' : 'No'} · <strong>Adjunto:</strong> {detail.attachment?.name || 'Sin adjunto'}
-                                </Typography>
-                            )}
-                            <Typography variant="subtitle2">Envíos realizados</Typography>
-                            {detail.runs.length === 0 ? (
-                                <Typography variant="body2" color="text.secondary">Todavía no se ha enviado.</Typography>
-                            ) : (
-                                <Table size="small">
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>Programado para</TableCell>
-                                            <TableCell>Resultado</TableCell>
-                                            <TableCell>Destinatarios</TableCell>
-                                            <TableCell>Detalle</TableCell>
-                                            <TableCell />
+                        )}
+                        <Typography variant="subtitle2">Envíos realizados</Typography>
+                        {detail.runs.length === 0 ? (
+                            <Typography variant="body2" color="text.secondary">Todavía no se ha enviado.</Typography>
+                        ) : (
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell>Programado para</TableCell>
+                                        <TableCell>Resultado</TableCell>
+                                        <TableCell>Destinatarios</TableCell>
+                                        <TableCell>Detalle</TableCell>
+                                        <TableCell />
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {detail.runs.map((run) => (
+                                        <TableRow key={run.scheduledFor}>
+                                            <TableCell>{formatDateTime(run.scheduledFor)}</TableCell>
+                                            <TableCell><StatusChip domain={SCHEDULED_RUN_STATUS} value={run.status} /></TableCell>
+                                            <TableCell>
+                                                {run.failedRecipientsCount > 0
+                                                    ? `${run.recipientsCount ?? 0} enviados · ${run.failedRecipientsCount} fallidos`
+                                                    : (run.recipientsCount ?? '—')}
+                                            </TableCell>
+                                            <TableCell>{[REASON_LABEL[run.outcomeReason], run.errorMessage].filter(Boolean).join(' · ') || '—'}</TableCell>
+                                            <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                                                {run.canResend && (
+                                                    <PermissionGuard permission={KIND_PERMISSION[detail.kind]}>
+                                                        <Tooltip title="Envía el correo solo a quienes no lo recibieron. No duplica la circular ni la notificación en el sistema.">
+                                                            <Button size="small" variant="outlined" startIcon={<ReplayIcon />} onClick={() => handleResend(run)}>
+                                                                Reenviar a fallidos
+                                                            </Button>
+                                                        </Tooltip>
+                                                    </PermissionGuard>
+                                                )}
+                                            </TableCell>
                                         </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {detail.runs.map((run) => (
-                                            <TableRow key={run.scheduledFor}>
-                                                <TableCell>{formatDateTime(run.scheduledFor)}</TableCell>
-                                                <TableCell><Chip size="small" color={RUN_CHIP[run.status]?.color} label={RUN_CHIP[run.status]?.label || run.status} /></TableCell>
-                                                <TableCell>
-                                                    {run.failedRecipientsCount > 0
-                                                        ? `${run.recipientsCount ?? 0} enviados · ${run.failedRecipientsCount} fallidos`
-                                                        : (run.recipientsCount ?? '—')}
-                                                </TableCell>
-                                                <TableCell>{[REASON_LABEL[run.outcomeReason], run.errorMessage].filter(Boolean).join(' · ') || '—'}</TableCell>
-                                                <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
-                                                    {run.canResend && (
-                                                        <PermissionGuard permission={KIND_PERMISSION[detail.kind]}>
-                                                            <Tooltip title="Envía el correo solo a quienes no lo recibieron. No duplica la circular ni la notificación en el sistema.">
-                                                                <Button size="small" variant="outlined" startIcon={<ReplayIcon />} onClick={() => setToResend(run)}>
-                                                                    Reenviar a fallidos
-                                                                </Button>
-                                                            </Tooltip>
-                                                        </PermissionGuard>
-                                                    )}
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            )}
-                        </Stack>
-                    )}
-                </DialogContent>
-                <DialogActions><Button onClick={() => setDetail(null)}>Cerrar</Button></DialogActions>
-            </Dialog>
-
-            {/* Confirmar reenvío a fallidos */}
-            <Dialog open={!!toResend} onClose={() => !resending && setToResend(null)}>
-                <DialogTitle>Reenviar a fallidos</DialogTitle>
-                <DialogContent>
-                    <Typography variant="body2">
-                        Se enviará el correo únicamente a los {toResend?.pendingEmailsCount ?? toResend?.failedRecipientsCount ?? 0} destinatarios que no lo recibieron.
-                        La circular y la notificación ya están publicadas en el sistema y no se duplican.
-                    </Typography>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setToResend(null)} disabled={resending}>Volver</Button>
-                    <Button variant="contained" onClick={confirmResend} disabled={resending}>
-                        {resending ? 'Reenviando…' : 'Reenviar'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Confirmar cancelación */}
-            <Dialog open={!!toCancel} onClose={() => setToCancel(null)}>
-                <DialogTitle>Cancelar envío programado</DialogTitle>
-                <DialogContent>
-                    <Typography variant="body2">
-                        ¿Cancelar "{toCancel ? itemTitle(toCancel) : ''}"? No se enviará ninguna ocurrencia más.
-                        Lo ya enviado no se modifica, y un envío que esté en curso en este momento terminará normalmente. Esta acción no se puede deshacer.
-                    </Typography>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setToCancel(null)}>Volver</Button>
-                    <Button color="error" variant="contained" onClick={confirmCancel}>Cancelar envío</Button>
-                </DialogActions>
-            </Dialog>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        )}
+                    </Stack>
+                )}
+            </AppDialog>
 
             <CircularMasivaModal
                 open={editing?.kind === 'circular'}
@@ -478,17 +436,6 @@ const ScheduledSendsPage = () => {
                 editing={editing?.kind === 'notification' ? editing : null}
                 onSuccess={onEdited}
             />
-
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </PageContainer>
     );
 };

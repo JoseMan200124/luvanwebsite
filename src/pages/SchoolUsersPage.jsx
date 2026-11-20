@@ -11,23 +11,18 @@ import {
     Button,
     CircularProgress,
     LinearProgress,
-    Snackbar,
     Alert,
     Grid,
     Chip,
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
     Paper,
     FormControl,
     InputLabel,
     Select,
     MenuItem,
-    TablePagination,
-    TableSortLabel,
     TextField,
     IconButton,
     Dialog,
@@ -46,21 +41,24 @@ import {
     Mail,
     Add,
     FileUpload,
-    GetApp,
     ToggleOn,
-    ToggleOff
+    ToggleOff,
+    PersonAdd
 } from '@mui/icons-material';
 import { useParams, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import api from '../utils/axiosConfig';
 import PermissionGuard from '../components/PermissionGuard';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
 import usePermissions from '../hooks/usePermissions';
 import useManageableRoles from '../hooks/useManageableRoles';
 import { normalizeKey } from '../utils/stringHelpers';
 import BulkFamilyDraftsReview, { BulkPendingSteps, getDraftIssues, getDuplicateRowsByEmail, getExistingChanges, hasNothingToUpdate } from '../components/BulkFamilyDraftsReview';
 import { getServerPairing, pruneStalePairing, normalizeStudentText } from '../utils/bulkStudentPairing';
-import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
 import StudentScheduleModal from '../components/modals/StudentScheduleModal';
 import BulkStopsEditor from '../components/paradas/BulkStopsEditor';
 import RetroactiveApplyModal from '../components/modals/RetroactiveApplyModal';
@@ -77,6 +75,12 @@ import { matchSearchTokens } from '../utils/clientFilter';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import useClientScope from '../hooks/useClientScope';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
+import { SERVICE_STATUS } from '../constants/statuses';
+import StatusChip from '../components/StatusChip';
+import { isEmail, validate, hasErrors, focusFirstError, clearError } from '../utils/validators';
+import AppDialog from '../components/dialogs/AppDialog';
 
 const FAMILY_STATUS_OPTIONS = ['Nuevo', 'Duplicado', 'Actualizado', 'Sin asignaciones']
     .map((status) => ({ value: status, label: status }));
@@ -110,6 +114,18 @@ const toBulkServerDraft = ({ _key, hadIssues, skip, autoSkipped, analyzedCorreo,
     ...getServerPairing({ ...draft, existing })
 });
 
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'serviceStatus', label: 'Estado del Servicio', sortable: true, align: 'center' },
+    { id: 'familyLastName', label: 'Apellido Familia', sortable: true },
+    { id: 'students', label: 'Cant. Hijos', sortable: true },
+    { id: 'email', label: 'Correo', sortable: true },
+    { id: 'createdAt', label: 'Inscrito el', sortable: true },
+    { id: 'updatedAt', label: 'Fecha de actualización', sortable: true },
+    { id: 'status', label: 'Estado', sortable: true },
+    { id: 'acciones', label: 'Acciones' },
+];
+
 const SchoolUsersPage = () => {
     const { hasPermission, hasAnyPermission } = usePermissions();
     // Pirámide de roles: el alta y la carga masiva de familias solo para quien gestiona Padres (rol 3)
@@ -126,12 +142,12 @@ const SchoolUsersPage = () => {
     const [filteredUsers, setFilteredUsers] = useState([]);
     const [loading, setLoading] = useState(false);
     // Sorting state
-    const [sortBy, setSortBy] = useState(null); // 'status' | 'updatedAt' | 'familyLastName' | 'name' | 'email' | 'role' | 'students'
-    const [sortOrder, setSortOrder] = useState('asc');
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
+    // Paginación y orden (el orden se calcula en sortedUsers con su lógica propia)
+    const table = useTableState();
+    const { page, rowsPerPage, orderBy: sortBy, order: sortOrder } = table;
     const [selectedUser, setSelectedUser] = useState(null);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
+    const confirm = useConfirm();
 
     // Filtros (en el navegador): solo se aplican con "Aplicar filtros", Enter o "Limpiar filtros".
     const pageFilters = useFilters({
@@ -140,7 +156,7 @@ const SchoolUsersPage = () => {
             F.select('status', { label: 'Estado', options: FAMILY_STATUS_OPTIONS }),
             F.serviceStatus(),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const { search: searchQuery, status: statusFilter, serviceStatus: serviceStatusFilter } = pageFilters.applied;
 
@@ -148,7 +164,6 @@ const SchoolUsersPage = () => {
     
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
     const [openBulkStopsEditor, setOpenBulkStopsEditor] = useState(false);
-    const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
     const [openServiceStatusModal, setOpenServiceStatusModal] = useState(false);
     const [openEditDialog, setOpenEditDialog] = useState(false);
     const [openRouteTypeModal, setOpenRouteTypeModal] = useState(false);
@@ -157,6 +172,7 @@ const SchoolUsersPage = () => {
     const [familyMessageChannel, setFamilyMessageChannel] = useState('');
     const [familyMessageTitle, setFamilyMessageTitle] = useState('');
     const [familyMessageBody, setFamilyMessageBody] = useState('');
+    const [familyMessageErrors, setFamilyMessageErrors] = useState({});
     const [familyMessageFile, setFamilyMessageFile] = useState(null);
     const [familyMessageSending, setFamilyMessageSending] = useState(false);
 
@@ -212,6 +228,13 @@ const SchoolUsersPage = () => {
     const [routeTypeDraft, setRouteTypeDraft] = useState('');
     const [isRouteTypeSelectOpen, setIsRouteTypeSelectOpen] = useState(false);
     const [originalStudents, setOriginalStudents] = useState([]);
+    const familyInitialRef = useRef('');
+    const familyFormSnapshot = JSON.stringify([selectedUser, familyDetail]);
+    useEffect(() => {
+        if (openEditDialog) {
+            familyInitialRef.current = familyFormSnapshot;
+        }
+    }, [openEditDialog]);
     // Quitar un alumno guardado (desactivar / eliminar) y reactivar uno inactivo desde la edición de familia.
     const [removeTarget, setRemoveTarget] = useState(null); // { index, student }
     const [reactivatingId, setReactivatingId] = useState(null);
@@ -234,19 +257,7 @@ const SchoolUsersPage = () => {
         return `${year}${month}${day}_${hours}${minutes}${seconds}`;
     };
 
-    const translateServiceStatus = (status) => {
-        if (!status) {
-            return '';
-        }
-        switch ((status || '').toString()) {
-            case 'ACTIVE': return 'Activo';
-            case 'PAUSED': return 'Pausado';
-            case 'SUSPENDED': return 'Suspendido';
-            case 'PENDING_START': return 'Pendiente de inicio';
-            case 'INACTIVE': return 'Inactivo';
-            default: return '';
-        }
-    };
+    const translateServiceStatus = (status) => SERVICE_STATUS[status]?.label || '';
 
     // Obtener datos del estado de navegación
     const stateSchool = location.state?.school;
@@ -263,12 +274,12 @@ const SchoolUsersPage = () => {
     const handleDownloadCombinedFamilies = async (selection, schoolIdParam) => {
         const schoolIdToUse = schoolIdParam || schoolId || currentSchool?.id;
         if (!schoolIdToUse) {
-            setSnackbar({ open: true, message: 'Por favor selecciona un colegio.', severity: 'warning' });
+            notify.warning('Por favor selecciona un colegio');
             return;
         }
         const choices = Array.isArray(selection) ? selection : [selection].filter(Boolean);
         if (choices.length === 0) {
-            setSnackbar({ open: true, message: 'Selecciona al menos una opción para descargar.', severity: 'warning' });
+            notify.warning('Selecciona al menos una opción para descargar');
             return;
         }
 
@@ -282,7 +293,7 @@ const SchoolUsersPage = () => {
             const parents = resp.data.users || [];
 
             if (parents.length === 0) {
-                setSnackbar({ open: true, message: 'No hay familias para descargar con los filtros seleccionados.', severity: 'info' });
+                notify.info('No hay familias para descargar con los filtros seleccionados');
                 return;
             }
 
@@ -294,7 +305,7 @@ const SchoolUsersPage = () => {
             await buildParentsWorkbookAndDownload(parents, schoolIdToUse, `familias_${optionsSlug}`);
         } catch (error) {
             console.error('[handleDownloadCombinedFamilies] Error:', error);
-            setSnackbar({ open: true, message: 'Error al generar el archivo de familias', severity: 'error' });
+            notify.error('Error al generar el archivo de familias');
         } finally {
             setRouteReportLoading(false);
         }
@@ -303,7 +314,7 @@ const SchoolUsersPage = () => {
     const handleDownloadRouteReport = async (schoolIdParam) => {
         const schoolIdToUse = schoolIdParam || schoolId || currentSchool?.id;
         if (!schoolIdToUse) {
-            setSnackbar({ open: true, message: 'Por favor selecciona un colegio.', severity: 'warning' });
+            notify.warning('Por favor selecciona un colegio');
             return;
         }
 
@@ -588,10 +599,10 @@ const SchoolUsersPage = () => {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
 
-            setSnackbar({ open: true, message: `Reporte de rutas para ${schoolName} descargado exitosamente`, severity: 'success' });
+            notify.success(`Reporte de rutas para ${schoolName} descargado exitosamente`);
         } catch (error) {
             console.error('[handleDownloadRouteReport] Error:', error);
-            setSnackbar({ open: true, message: 'Error al descargar el reporte de rutas', severity: 'error' });
+            notify.error('Error al descargar el reporte de rutas');
         } finally {
             setRouteReportLoading(false);
         }
@@ -734,10 +745,10 @@ const SchoolUsersPage = () => {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
 
-            setSnackbar({ open: true, message: `Archivo con padres de ${schoolName} descargado.`, severity: 'success' });
+            notify.success(`Archivo con padres de ${schoolName} descargado.`);
         } catch (err) {
             console.error('[buildParentsWorkbookAndDownload] Error:', err);
-            setSnackbar({ open: true, message: 'Error al generar el archivo de padres', severity: 'error' });
+            notify.error('Error al generar el archivo de padres');
         }
     };
 
@@ -854,12 +865,12 @@ const SchoolUsersPage = () => {
                 inactiveStudents: (prev.inactiveStudents || []).filter(s => s.id !== student.id)
             }));
             setOriginalStudents(prev => [...(prev || []), reactivado]);
-            setSnackbar({ open: true, message: `${student.fullName} reactivado. Asígnale sus horarios.`, severity: 'success' });
+            notify.success(`${student.fullName} reactivado. Asígnale sus horarios.`);
             // El cambio ya está guardado: se refresca la lista para que, si se cancela la edición, al reabrirla el alumno
             // venga como activo (con datos viejos, guardar otra edición lo volvería a desactivar).
             fetchUsers();
         } catch (err) {
-            setSnackbar({ open: true, message: err?.response?.data?.message || 'No se pudo reactivar al alumno.', severity: 'error' });
+            notify.fromError(err, 'No se pudo reactivar al alumno.');
         } finally {
             setReactivatingId(null);
         }
@@ -1191,17 +1202,13 @@ const SchoolUsersPage = () => {
             setFilteredUsers(normalized);
         } catch (err) {
             console.error('Error fetching users:', err);
-            setSnackbar({ 
-                open: true, 
-                message: 'Error al obtener los usuarios', 
-                severity: 'error' 
-            });
+            notify.error('Error al obtener los usuarios');
             setUsers([]);
             setFilteredUsers([]);
         } finally {
             setLoading(false);
         }
-    }, [auth.token, schoolId, buildSchoolCycleParams]);
+    }, [auth.token, schoolId, buildSchoolCycleParams, notify]);
 
     useEffect(() => {
         if (auth.token && schoolId) {
@@ -1269,15 +1276,6 @@ const SchoolUsersPage = () => {
 
     
 
-    const handleSortChange = (field) => {
-        if (sortBy === field) {
-            setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
-        } else {
-            setSortBy(field);
-            setSortOrder('asc');
-        }
-        setPage(0);
-    };
 
     // Restore action handlers for table actions
     const handleEditClick = async (user) => {
@@ -1386,64 +1384,45 @@ const SchoolUsersPage = () => {
     };
 
     const handleServiceStatusSuccess = () => {
-        setSnackbar({ open: true, message: 'Estado del servicio actualizado correctamente', severity: 'success' });
+        notify.success('Estado del servicio actualizado');
         setSelectedUser(null);
         fetchUsers();
     };
 
-    const handleDeleteClick = (userOrId) => {
+    const handleDeleteClick = async (userOrId) => {
         // Accept either user object or id
         if (!userOrId) {
             return;
         }
-        if (typeof userOrId === 'object') {
-                setSelectedUser(userOrId);
-        } else {
-            const found = filteredUsers.find(u => u.id === userOrId) || users.find(u => u.id === userOrId);
-            setSelectedUser(found ? found : { id: userOrId });
-        }
-        // Open confirmation dialog after selection
-        setOpenDeleteConfirm(true);
-    };
-
-    const handleCancelDelete = () => {
-        setSelectedUser(null);
-        setOpenDeleteConfirm(false);
-    };
-
-    const handleConfirmDelete = async () => {
-        if (!selectedUser?.id) {
-            return;
-        }
+        const user = typeof userOrId === 'object'
+            ? userOrId
+            : (filteredUsers.find(u => u.id === userOrId) || users.find(u => u.id === userOrId) || { id: userOrId });
         const schoolIdToUse = currentSchool?.id || schoolId || stateSchool?.id;
         if (!schoolIdToUse || !stateCicloEscolarId) {
-            setSnackbar({ open: true, message: 'No se pudo resolver el colegio y ciclo escolar para eliminar al usuario.', severity: 'error' });
+            notify.error('No se pudo resolver el colegio y ciclo escolar para eliminar al usuario');
             return;
         }
 
-        try {
-            setBulkLoading(true);
-            const response = await api.delete(`/users/${selectedUser.id}/school-cycle`, {
-                data: {
-                    schoolId: schoolIdToUse,
-                    cicloEscolarId: stateCicloEscolarId,
-                    reason: 'Usuario eliminado desde gestión de familias por ciclo escolar'
-                }
-            });
-            setSnackbar({
-                open: true,
-                message: response?.data?.message || 'Usuario eliminado del ciclo escolar',
-                severity: 'success'
-            });
-            setOpenDeleteConfirm(false);
-            setSelectedUser(null);
+        let response = null;
+        const ok = await confirm({
+            title: 'Eliminar del ciclo escolar',
+            message: `Se eliminará a ${user.name || user.email || user.id} de este colegio y ciclo escolar.`,
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: async () => {
+                response = await api.delete(`/users/${user.id}/school-cycle`, {
+                    data: {
+                        schoolId: schoolIdToUse,
+                        cicloEscolarId: stateCicloEscolarId,
+                        reason: 'Usuario eliminado desde gestión de familias por ciclo escolar'
+                    }
+                });
+            },
+            errorMessage: 'Error al eliminar el usuario',
+        });
+        if (ok) {
+            notify.success(response?.data?.message || 'Usuario eliminado del ciclo escolar');
             fetchUsers();
-        } catch (err) {
-            console.error('Error deleting user:', err);
-            const message = err?.response?.data?.message || 'Error eliminando el usuario';
-            setSnackbar({ open: true, message, severity: 'error' });
-        } finally {
-            setBulkLoading(false);
         }
     };
 
@@ -1472,28 +1451,29 @@ const SchoolUsersPage = () => {
     };
 
     const handleCloseFamilyMessageDialog = () => {
+        setFamilyMessageErrors({});
         setOpenFamilyMessageDialog(false);
         resetFamilyMessageDialog();
     };
 
     const handleSendFamilyMessage = async () => {
         if (!selectedUser?.id) {
-            setSnackbar({ open: true, message: 'No se pudo identificar la familia destino.', severity: 'error' });
+            notify.error('No se pudo identificar la familia destino');
             return;
         }
 
         if (!familyMessageChannel) {
-            setSnackbar({ open: true, message: 'Selecciona si quieres enviar correo o notificación push.', severity: 'warning' });
+            notify.warning('Selecciona si quieres enviar correo o notificación push');
             return;
         }
 
-        if (!familyMessageTitle.trim()) {
-            setSnackbar({ open: true, message: 'El título es requerido.', severity: 'warning' });
-            return;
-        }
-
-        if (!familyMessageBody.trim()) {
-            setSnackbar({ open: true, message: 'El cuerpo del mensaje es requerido.', severity: 'warning' });
+        const found = validate(
+            { familyMessageTitle, familyMessageBody },
+            { familyMessageTitle: ['required'], familyMessageBody: ['required'] }
+        );
+        setFamilyMessageErrors(found);
+        if (hasErrors(found)) {
+            focusFirstError(found);
             return;
         }
 
@@ -1517,7 +1497,7 @@ const SchoolUsersPage = () => {
                     }
                 });
 
-                setSnackbar({ open: true, message: 'Correo enviado a la familia.', severity: 'success' });
+                notify.success('Correo enviado a la familia');
             } else {
                 await api.post('/notifications', {
                     type: 'manual',
@@ -1542,17 +1522,13 @@ const SchoolUsersPage = () => {
                     }
                 });
 
-                setSnackbar({ open: true, message: 'Notificación push enviada a la familia.', severity: 'success' });
+                notify.success('Notificación push enviada a la familia');
             }
 
             handleCloseFamilyMessageDialog();
         } catch (err) {
             console.error('[handleSendFamilyMessage] Error:', err);
-            setSnackbar({
-                open: true,
-                message: err?.response?.data?.message || 'No se pudo enviar la comunicación.',
-                severity: 'error'
-            });
+            notify.fromError(err, 'No se pudo enviar la comunicación.');
         } finally {
             setFamilyMessageSending(false);
         }
@@ -1595,7 +1571,7 @@ const SchoolUsersPage = () => {
 
             // Un alumno nuevo que coincide con uno inactivo exige decidir si es el mismo (Reactivar) u otro.
             if (Number(selectedUser.roleId) === 3 && (familyDetail.students || []).some(s => inactiveMatchFor(s))) {
-                setSnackbar({ open: true, message: 'Indica si cada alumno nuevo es uno inactivo (Reactivar) o es otro alumno.', severity: 'warning' });
+                notify.warning('Indica si cada alumno nuevo es uno inactivo (Reactivar) o es otro alumno');
                 return;
             }
 
@@ -1635,11 +1611,11 @@ const SchoolUsersPage = () => {
                 ).length;
                 const sendingStudents = Object.hasOwn(familyDetailPayload, 'students');
                 if ((!selectedUser.id || sendingStudents) && validStudentsCount === 0) {
-                    setSnackbar({ open: true, message: 'La familia debe tener al menos un estudiante con nombre y grado.', severity: 'warning' });
+                    notify.warning('La familia debe tener al menos un estudiante con nombre y grado');
                     return;
                 }
                 if (!selectedUser.id && !familyDetail.routeType) {
-                    setSnackbar({ open: true, message: 'Selecciona el tipo de ruta de la familia.', severity: 'warning' });
+                    notify.warning('Selecciona el tipo de ruta de la familia');
                     return;
                 }
             }
@@ -1681,36 +1657,26 @@ const SchoolUsersPage = () => {
             // Crear o actualizar (no envíes id en POST)
             if (selectedUser.id) {
                 await api.put(`/users/${selectedUser.id}`, payload);
-                setSnackbar({ open: true, message: 'Usuario actualizado exitosamente', severity: 'success' });
+                notify.success('Usuario actualizado');
             } else {
                 const { id, ...payloadForPost } = payload;
                 await api.post('/users', payloadForPost);
-                setSnackbar({ open: true, message: 'Usuario creado exitosamente', severity: 'success' });
+                notify.success('Usuario creado');
             }
 
             // Refresca y cierra
             fetchUsers();
             setOpenEditDialog(false);
         } catch (err) {
-            // Centralized duplicate-email handler: it shows the snackbar and returns true if handled
-            try {
-                if (showDuplicateEmailFromError(err, setSnackbar)) {
-                    return;
-                }
-            } catch (e) {
-                // fallthrough to generic handling
-            }
-
+            // fromError también reconoce el correo duplicado y lo muestra 15 s.
             console.error('[handleSaveUser] Error:', err);
-            const resp = err?.response?.data || {};
-            const messageToShow = resp.message || 'Error al guardar usuario';
-            setSnackbar({ open: true, message: messageToShow, severity: 'error' });
+            notify.fromError(err, 'Error al guardar usuario');
         }
     };
 
     const handleAddUser = () => {
         if (!canCreateUsersInManagedSchool) {
-            setSnackbar({ open: true, message: newUserCreationDisabledMessage, severity: 'warning' });
+            notify.warning(newUserCreationDisabledMessage);
             return;
         }
 
@@ -1939,7 +1905,7 @@ const SchoolUsersPage = () => {
             return;
         }
         if (!canCreateUsersInManagedSchool) {
-            setSnackbar({ open: true, message: newUserCreationDisabledMessage, severity: 'warning' });
+            notify.warning(newUserCreationDisabledMessage);
             return;
         }
 
@@ -1963,7 +1929,7 @@ const SchoolUsersPage = () => {
 
             const drafts = Array.isArray(response.data?.drafts) ? response.data.drafts : [];
             if (drafts.length === 0) {
-                setSnackbar({ open: true, message: 'No se encontraron familias en la hoja "Padres" del archivo.', severity: 'warning' });
+                notify.warning('No se encontraron familias en la hoja "Padres" del archivo');
                 return;
             }
 
@@ -1988,11 +1954,7 @@ const SchoolUsersPage = () => {
             }));
         } catch (err) {
             console.error('Error in bulk upload:', err);
-            setSnackbar({
-                open: true,
-                message: err?.response?.data?.message || 'Error al analizar el archivo',
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error al analizar el archivo');
         } finally {
             setBulkLoading(false);
         }
@@ -2006,7 +1968,7 @@ const SchoolUsersPage = () => {
     const handleCompletePendingSteps = async () => {
         const schoolToAttach = currentSchool?.id || schoolId || '';
         if (!schoolToAttach) {
-            setSnackbar({ open: true, message: 'No se pudo determinar el colegio.', severity: 'error' });
+            notify.error('No se pudo determinar el colegio');
             return;
         }
 
@@ -2059,23 +2021,17 @@ const SchoolUsersPage = () => {
                 completedCount += 1;
             } }));
             const totalAsked = items.reduce((total, item) => total + item.steps.length, 0);
-            setSnackbar({
-                open: true,
-                message: completedCount === totalAsked
-                    ? `${completedCount} paso(s) completado(s).`
-                    : `${completedCount} de ${totalAsked} paso(s) completado(s). Revisa los que siguen pendientes.`,
-                severity: completedCount === totalAsked ? 'success' : 'warning'
-            });
+            if (completedCount === totalAsked) {
+                notify.success(`${completedCount} paso(s) completado(s)`);
+            } else {
+                notify.warning(`${completedCount} de ${totalAsked} paso(s) completado(s). Revisa los que siguen pendientes.`);
+            }
             if (completedCount > 0) {
                 fetchUsers();
             }
         } catch (err) {
             console.error('Error completing bulk pending steps:', err);
-            setSnackbar({
-                open: true,
-                message: err?.response?.data?.message || 'No se pudieron completar los pasos pendientes. Inténtalo de nuevo.',
-                severity: 'error'
-            });
+            notify.fromError(err, 'No se pudieron completar los pasos pendientes. Inténtalo de nuevo.');
         } finally {
             setBulkCompleting(false);
         }
@@ -2088,7 +2044,7 @@ const SchoolUsersPage = () => {
 
         const schoolToAttach = currentSchool?.id || schoolId || '';
         if (!schoolToAttach) {
-            setSnackbar({ open: true, message: 'No se pudo determinar el colegio.', severity: 'error' });
+            notify.error('No se pudo determinar el colegio');
             return;
         }
 
@@ -2144,11 +2100,7 @@ const SchoolUsersPage = () => {
 
             if (!blockedMessage && failedByKey.size === 0 && uncertainKeys.size === 0 && pendingFamilies.length === 0) {
                 const skippedCount = bulkDrafts.filter(draft => draft.skip).length;
-                setSnackbar({
-                    open: true,
-                    message: `${successCount} familia(s) guardada(s)${skippedCount > 0 ? `; ${skippedCount} omitida(s)` : ''}.`,
-                    severity: 'success'
-                });
+                notify.success(`${successCount} familia(s) guardada(s)${skippedCount > 0 ? `; ${skippedCount} omitida(s)` : ''}`);
                 closeBulkDialog();
                 return;
             }
@@ -2224,7 +2176,11 @@ const SchoolUsersPage = () => {
                 const notSent = draftsToSave.filter(draft => !answeredKeys.has(draft._key) && !uncertainKeys.has(draft._key)).length;
                 parts.push(`El guardado se detuvo: ${blockedMessage} ${notSent} familia(s) no se enviaron.`);
             }
-            setSnackbar({ open: true, message: parts.join(' '), severity: blockedMessage || uncertainKeys.size > 0 ? 'error' : 'warning' });
+            if (blockedMessage || uncertainKeys.size > 0) {
+                notify.error(parts.join(' '));
+            } else {
+                notify.warning(parts.join(' '));
+            }
         } finally {
             setBulkSaving(false);
         }
@@ -2378,9 +2334,6 @@ const SchoolUsersPage = () => {
 
     const paginatedUsers = sortedUsers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
 
     // Fuente de la lista para las consultas asíncronas: así una respuesta tardía puede descartarse si el correo ya cambió.
     const bulkDraftsRef = useRef([]);
@@ -2398,7 +2351,7 @@ const SchoolUsersPage = () => {
 
         let existing = null;
         let otherSchool = null;
-        if (normalizedEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+        if (normalizedEmail && isEmail(normalizedEmail)) {
             try {
                 const response = await api.post('/parents/bulk-upload/lookup', {
                     schoolId: schoolToAttach,
@@ -2409,11 +2362,7 @@ const SchoolUsersPage = () => {
             } catch (err) {
                 console.error('Error consultando el correo de la familia:', err);
                 // Sin respuesta no se sabe nada del correo; el guardado lo vuelve a validar en el servidor.
-                setSnackbar({
-                    open: true,
-                    message: `${err?.response?.data?.message || 'No se pudo verificar el correo.'} Se volverá a validar al guardar.`,
-                    severity: 'warning'
-                });
+                notify.warning(`${err?.response?.data?.message || 'No se pudo verificar el correo.'} Se volverá a validar al guardar.`);
             }
         }
 
@@ -2423,7 +2372,7 @@ const SchoolUsersPage = () => {
             }
             return { ...pruneStalePairing(draft, existing?.students), existing, otherSchool };
         }));
-    }, [auth.token, currentSchool?.id, schoolId]);
+    }, [auth.token, currentSchool?.id, schoolId, notify]);
 
     const handleChangeBulkDraft = useCallback((key, patch) => {
         setBulkDrafts(prev => prev.map(draft => (draft._key === key ? { ...draft, ...patch } : draft)));
@@ -2446,11 +2395,6 @@ const SchoolUsersPage = () => {
         refreshBulkDraftAccount(key, normalizedEmail);
     }, [refreshBulkDraftAccount]);
 
-    const handleChangeRowsPerPage = (event) => {
-    const v = Number.parseInt(event.target.value, 10);
-    setRowsPerPage(Number.isNaN(v) ? 10 : v);
-    setPage(0);
-    };
 
     const totalStudentsLabel = (() => {
         try {
@@ -2495,59 +2439,52 @@ const SchoolUsersPage = () => {
                 </Alert>
             )}
 
-            <Dialog open={openDownloadDialog} onClose={() => setOpenDownloadDialog(false)}>
-                <DialogTitle>Descargar Familias</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>Selecciona qué familias deseas descargar (puedes elegir varias opciones):</DialogContentText>
-                    <FormControl fullWidth sx={{ mt: 2 }}>
-                        <InputLabel id="parents-download-select-label">Opciones</InputLabel>
-                        <Select
-                            labelId="parents-download-select-label"
-                            multiple
-                            value={downloadChoice}
-                            label="Opciones"
-                            onChange={(e) => {
-                                const raw = typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value;
-                                // "Todas" es excluyente: no combina con los demás filtros
-                                if (raw.includes('all')) {
-                                    setDownloadChoice(downloadChoice.includes('all') ? raw.filter((v) => v !== 'all') : ['all']);
-                                } else {
-                                    setDownloadChoice(raw);
-                                }
-                            }}
-                            renderValue={(selected) => selected.map((v) => DOWNLOAD_FAMILY_OPTION_LABELS[v] || v).join(', ')}
-                        >
-                            {DOWNLOAD_FAMILY_OPTIONS.map((opt) => {
-                                const allSelected = downloadChoice.includes('all');
-                                const disabled = opt.value === 'all'
-                                    ? (downloadChoice.length > 0 && !allSelected)
-                                    : allSelected;
-                                return (
-                                    <MenuItem key={opt.value} value={opt.value} disabled={disabled}>
-                                        <Checkbox checked={downloadChoice.indexOf(opt.value) > -1} />
-                                        <ListItemText primary={opt.label} />
-                                    </MenuItem>
-                                );
-                            })}
-                        </Select>
-                    </FormControl>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setOpenDownloadDialog(false)}>Cancelar</Button>
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        startIcon={<GetApp />}
-                        disabled={downloadChoice.length === 0 || routeReportLoading}
-                        onClick={async () => {
-                            await handleDownloadCombinedFamilies(downloadChoice, currentSchool?.id || schoolId);
-                            setOpenDownloadDialog(false);
+            <AppDialog
+                open={openDownloadDialog}
+                onClose={() => setOpenDownloadDialog(false)}
+                title="Descargar familias"
+                size="sm"
+                onSubmit={async () => {
+                    await handleDownloadCombinedFamilies(downloadChoice, currentSchool?.id || schoolId);
+                    setOpenDownloadDialog(false);
+                }}
+                submitLabel="Descargar"
+                submitDisabled={downloadChoice.length === 0 || routeReportLoading}
+            >
+                <DialogContentText>Selecciona qué familias deseas descargar (puedes elegir varias opciones):</DialogContentText>
+                <FormControl fullWidth sx={{ mt: 2 }}>
+                    <InputLabel id="parents-download-select-label">Opciones</InputLabel>
+                    <Select
+                        labelId="parents-download-select-label"
+                        multiple
+                        value={downloadChoice}
+                        label="Opciones"
+                        onChange={(e) => {
+                            const raw = typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value;
+                            // "Todas" es excluyente: no combina con los demás filtros
+                            if (raw.includes('all')) {
+                                setDownloadChoice(downloadChoice.includes('all') ? raw.filter((v) => v !== 'all') : ['all']);
+                            } else {
+                                setDownloadChoice(raw);
+                            }
                         }}
+                        renderValue={(selected) => selected.map((v) => DOWNLOAD_FAMILY_OPTION_LABELS[v] || v).join(', ')}
                     >
-                        Descargar
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                        {DOWNLOAD_FAMILY_OPTIONS.map((opt) => {
+                            const allSelected = downloadChoice.includes('all');
+                            const disabled = opt.value === 'all'
+                                ? (downloadChoice.length > 0 && !allSelected)
+                                : allSelected;
+                            return (
+                                <MenuItem key={opt.value} value={opt.value} disabled={disabled}>
+                                    <Checkbox checked={downloadChoice.indexOf(opt.value) > -1} />
+                                    <ListItemText primary={opt.label} />
+                                </MenuItem>
+                            );
+                        })}
+                    </Select>
+                </FormControl>
+            </AppDialog>
 
             {/* Filtros y búsqueda */}
             <FilterBar {...pageFilters.barProps} loading={loading} />
@@ -2561,96 +2498,14 @@ const SchoolUsersPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer component={Paper} sx={{ maxHeight: 600 }}>
+                            <AppTableContainer component={Paper} maxHeight={600}>
                                 <Table stickyHeader>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell align="center">
-                                                <TableSortLabel
-                                                    active={sortBy === 'serviceStatus'}
-                                                    direction={sortBy === 'serviceStatus' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('serviceStatus')}
-                                                >
-                                                    Estado del Servicio
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'familyLastName'}
-                                                    direction={sortBy === 'familyLastName' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('familyLastName')}
-                                                >
-                                                    Apellido Familia
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'students'}
-                                                    direction={sortBy === 'students' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('students')}
-                                                >
-                                                    Cant. Hijos
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'email'}
-                                                    direction={sortBy === 'email' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('email')}
-                                                >
-                                                    Correo
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'createdAt'}
-                                                    direction={sortBy === 'createdAt' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('createdAt')}
-                                                >
-                                                    Inscrito el
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'updatedAt'}
-                                                    direction={sortBy === 'updatedAt' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('updatedAt')}
-                                                >
-                                                    Fecha de actualización
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'status'}
-                                                    direction={sortBy === 'status' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('status')}
-                                                >
-                                                    Estado
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                Acciones
-                                            </TableCell>
-                                        </TableRow>
-                                    </TableHead>
+                                    <SortableTableHead columns={COLUMNS} {...table.sortProps} />
                                     <TableBody>
                                         {paginatedUsers.map((user) => {
                                             const serviceStatus = user.familyServiceStatus?.status || 'ACTIVE';
                                             const userStatus = getUserStatus(user);
-                                            const getServiceStatusChip = () => {
-                                                if (serviceStatus === 'ACTIVE') {
-                                                    return <Chip label="Activo" size="small" color="success" />;
-                                                } else if (serviceStatus === 'PAUSED') {
-                                                    return <Chip label="Pausado" size="small" color="warning" />;
-                                                } else if (serviceStatus === 'SUSPENDED') {
-                                                    return <Chip label="Suspendido" size="small" color="error" />;
-                                                } else if (serviceStatus === 'PENDING_START') {
-                                                    return <Chip label="Pendiente de inicio" size="small" color="info" />;
-                                                } else if (serviceStatus === 'INACTIVE') {
-                                                    return <Chip label="Inactivo" size="small" sx={{ backgroundColor: '#9e9e9e', color: 'white' }} />;
-                                                }
-                                                return <Chip label="-" size="small" />;
-                                            };
+                                            const getServiceStatusChip = () => <StatusChip domain={SERVICE_STATUS} value={serviceStatus} />;
                                             
                                             return (
                                             <TableRow key={user.id} hover>
@@ -2813,17 +2668,9 @@ const SchoolUsersPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                                </TableContainer>
+                                </AppTableContainer>
 
-                                <TablePagination
-                                    component="div"
-                                    count={sortedUsers.length}
-                                    page={page}
-                                    onPageChange={handleChangePage}
-                                    rowsPerPage={rowsPerPage}
-                                    onRowsPerPageChange={handleChangeRowsPerPage}
-                                    rowsPerPageOptions={[5,10,25,50]}
-                                />
+                                <AppTablePagination count={sortedUsers.length} {...table.paginationProps} />
                         </>
                     )}
                 </CardContent>
@@ -2981,24 +2828,6 @@ const SchoolUsersPage = () => {
                 />
             )}
 
-            {/* Diálogo de confirmación para eliminación de usuario */}
-            <Dialog open={openDeleteConfirm} onClose={handleCancelDelete} maxWidth="xs" fullWidth>
-                <DialogTitle>Eliminar del ciclo escolar</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        ¿Estás seguro que deseas eliminar a <strong>{selectedUser?.name || selectedUser?.email || selectedUser?.id}</strong> de este colegio y ciclo escolar?
-                    </DialogContentText>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCancelDelete}>Cancelar</Button>
-                    <PermissionGuard permission="usuarios-eliminar">
-                        <Button variant="contained" color="error" onClick={handleConfirmDelete} disabled={bulkLoading}>
-                            {bulkLoading ? 'Eliminando...' : 'Eliminar'}
-                        </Button>
-                    </PermissionGuard>
-                </DialogActions>
-            </Dialog>
-
             {/* Modal de gestión de estados del servicio (reemplaza activar/suspender) */}
             <UserServiceStatusModal
                 open={openServiceStatusModal}
@@ -3027,772 +2856,713 @@ const SchoolUsersPage = () => {
             />
 
             {/* Diálogo para envío de comunicación a una familia */}
-            <Dialog
+            <AppDialog
                 open={openFamilyMessageDialog}
                 onClose={handleCloseFamilyMessageDialog}
-                maxWidth="sm"
-                fullWidth
-                PaperProps={{
-                    sx: {
-                        borderRadius: 3,
-                        overflow: 'hidden',
-                        boxShadow: '0 18px 60px rgba(0, 0, 0, 0.22)',
-                    }
-                }}
+                title="Enviar comunicación a la familia"
+                subtitle={`Escribe el mensaje para ${selectedUser?.name || selectedUser?.email || 'la familia'} y elige el tipo de envío.`}
+                icon={<Mail />}
+                size="sm"
+                onSubmit={handleSendFamilyMessage}
+                submitLabel="Enviar"
+                submitting={familyMessageSending}
+                submitDisabled={!familyMessageChannel}
+                contentSx={{ p: 3, background: 'linear-gradient(180deg, #f8fbff 0%, #ffffff 100%)' }}
             >
-                <Box sx={{ background: 'linear-gradient(135deg, #16324f 0%, #1e88e5 100%)', color: 'white', px: 3, py: 2.25 }}>
-                    <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.1 }}>
-                        Enviar comunicación a la familia
-                    </Typography>
-                    <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.92 }}>
-                        Escribe el mensaje para <strong>{selectedUser?.name || selectedUser?.email || 'la familia'}</strong> y elige el tipo de envío.
-                    </Typography>
-                </Box>
-
-                <DialogContent sx={{ p: 3, background: 'linear-gradient(180deg, #f8fbff 0%, #ffffff 100%)' }}>
-                    {!familyMessageChannel ? (
-                        <Box>
-                            <Typography variant="subtitle2" sx={{ mb: 1.5, color: 'text.secondary', letterSpacing: 0.4, textTransform: 'uppercase' }}>
-                                Tipo de envío
-                            </Typography>
-                            <Grid container spacing={1.5}>
-                                <PermissionGuard permission="mail-enviar-familia">
-                                <Grid item xs={12} md={6}>
-                                    <Button
-                                        fullWidth
-                                        variant="contained"
-                                        onClick={() => setFamilyMessageChannel('email')}
-                                        sx={{
-                                            height: 48,
-                                            borderRadius: 2,
-                                            textTransform: 'none',
-                                            fontWeight: 700,
-                                            boxShadow: '0 8px 20px rgba(25, 118, 210, 0.25)',
-                                            background: 'linear-gradient(135deg, #1976d2 0%, #4f9df7 100%)',
-                                            '&:hover': {
-                                                background: 'linear-gradient(135deg, #1565c0 0%, #3b8ce6 100%)',
-                                            },
-                                        }}
-                                    >
-                                        Correo electrónico
-                                    </Button>
-                                </Grid>
-                                </PermissionGuard>
-                                <PermissionGuard permission="notificaciones-crear">
-                                <Grid item xs={12} md={6}>
-                                    <Button
-                                        fullWidth
-                                        variant="outlined"
-                                        onClick={() => setFamilyMessageChannel('push')}
-                                        sx={{
-                                            height: 48,
-                                            borderRadius: 2,
-                                            textTransform: 'none',
-                                            fontWeight: 700,
-                                            borderWidth: 1.5,
-                                            backgroundColor: 'rgba(30, 136, 229, 0.04)',
-                                            '&:hover': {
-                                                borderWidth: 1.5,
-                                                backgroundColor: 'rgba(30, 136, 229, 0.08)',
-                                            },
-                                        }}
-                                    >
-                                        Notificación
-                                    </Button>
-                                </Grid>
-                                </PermissionGuard>
-                            </Grid>
-                        </Box>
-                    ) : (
-                        <Grid container spacing={2}>
-                            <Grid item xs={12}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, p: 1.5, borderRadius: 2, backgroundColor: familyMessageChannel === 'email' ? 'rgba(25,118,210,0.08)' : 'rgba(46,125,50,0.08)', border: '1px solid', borderColor: familyMessageChannel === 'email' ? 'rgba(25,118,210,0.20)' : 'rgba(46,125,50,0.20)' }}>
-                                    <Box>
-                                        <Typography variant="body2" sx={{ fontWeight: 800 }}>
-                                            {familyMessageChannel === 'email' ? 'Modo correo' : 'Modo notificación'}
-                                        </Typography>
-                                        <Typography variant="caption" color="text.secondary">
-                                            {familyMessageChannel === 'email'
-                                                ? 'Puedes incluir un archivo adjunto.'
-                                                : 'Se enviará como mensaje directo.'}
-                                        </Typography>
-                                    </Box>
-                                    <Button
-                                        size="small"
-                                        variant="text"
-                                        onClick={() => setFamilyMessageChannel('')}
-                                        sx={{ textTransform: 'none', fontWeight: 700 }}
-                                    >
-                                        Cambiar
-                                    </Button>
-                                </Box>
-                            </Grid>
-                            <Grid item xs={12}>
-                                <TextField
-                                    fullWidth
-                                    size="small"
-                                    label="Título"
-                                    value={familyMessageTitle}
-                                    onChange={(e) => setFamilyMessageTitle(e.target.value)}
-                                    required
-                                />
-                            </Grid>
-                            <Grid item xs={12}>
-                                <TextField
-                                    fullWidth
-                                    size="small"
-                                    label="Mensaje"
-                                    value={familyMessageBody}
-                                    onChange={(e) => setFamilyMessageBody(e.target.value)}
-                                    multiline
-                                    minRows={4}
-                                    required
-                                />
-                            </Grid>
-                            {familyMessageChannel === 'email' && (
-                                <Grid item xs={12}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-                                        <Button
-                                            size="small"
-                                            variant="outlined"
-                                            component="label"
-                                            sx={{ textTransform: 'none', borderRadius: 2, fontWeight: 700, height: 36 }}
-                                        >
-                                            Adjuntar archivo
-                                            <input
-                                                type="file"
-                                                hidden
-                                                onChange={(e) => setFamilyMessageFile(e.target.files?.[0] || null)}
-                                            />
-                                        </Button>
-                                        {familyMessageFile ? (
-                                            <Chip
-                                                size="small"
-                                                label={familyMessageFile.name}
-                                                onDelete={() => setFamilyMessageFile(null)}
-                                                sx={{ maxWidth: '100%' }}
-                                            />
-                                        ) : (
-                                            <Typography variant="caption" color="text.secondary">
-                                                Sin archivo adjunto
-                                            </Typography>
-                                        )}
-                                    </Box>
-                                </Grid>
-                            )}
-                        </Grid>
-                    )}
-                </DialogContent>
-                <DialogActions sx={{ px: 3, py: 2, gap: 1, backgroundColor: '#fff' }}>
-                    <Button
-                        onClick={handleCloseFamilyMessageDialog}
-                        disabled={familyMessageSending}
-                        size="small"
-                        sx={{ textTransform: 'none', borderRadius: 2, fontWeight: 700 }}
-                    >
-                        Cancelar
-                    </Button>
-                    {familyMessageChannel && (
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            onClick={handleSendFamilyMessage}
-                            disabled={familyMessageSending}
-                            size="small"
-                            sx={{ textTransform: 'none', borderRadius: 2, fontWeight: 700, px: 2.25, boxShadow: 'none' }}
-                        >
-                            {familyMessageSending ? 'Enviando...' : 'Enviar'}
-                        </Button>
-                    )}
-                </DialogActions>
-            </Dialog>
-
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert
-                    onClose={() => setSnackbar({ ...snackbar, open: false })}
-                    severity={snackbar.severity}
-                    sx={{ width: '100%' }}
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
-
-            {/* Diálogo para crear/editar usuario */}
-            <Dialog
-                open={openEditDialog}
-                onClose={() => {
-                    setOpenRouteTypeModal(false);
-                    setOpenEditDialog(false);
-                }}
-                maxWidth="md"
-                fullWidth
-            >
-                <DialogTitle>{selectedUser?.id ? 'Editar Familia' : 'Añadir Familia'}</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        {selectedUser?.id
-                            ? 'Actualiza la información del usuario.'
-                            : 'Completa la información para crear un nuevo usuario.'}
-                    </DialogContentText>
-                    <Grid container spacing={2} sx={{ mt: 1 }}>
-                        <Grid item xs={12} md={6}>
-                            <Grid container spacing={2}>
-                                <Grid item xs={12}>
-                                    <TextField
-                                        autoFocus={!!selectedUser?.id}
-                                        name="name"
-                                        label="Nombre Completo"
-                                        type="text"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={selectedUser?.name || ''}
-                                        onChange={handleUserChange}
-                                        required
-                                    />
-                                </Grid>
-                                {selectedUser?.id && (
-                                    <Grid item xs={12}>
-                                        <TextField
-                                            name="password"
-                                            label="Nueva Contraseña (opcional)"
-                                            type="password"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={selectedUser?.password || ''}
-                                            onChange={handleUserChange}
-                                            helperText="Dejarlo en blanco para mantener la contraseña actual"
-                                        />
-                                    </Grid>
-                                )}
-                            </Grid>
-                        </Grid>
-                        <Grid item xs={12} md={6}>
-                            <TextField
-                                name="email"
-                                label="Correo Electrónico"
-                                type="email"
-                                fullWidth
-                                variant="outlined"
-                                value={selectedUser?.email || ''}
-                                onChange={handleUserChange}
-                                required
-                            />
-                        </Grid>
-                        {!selectedUser?.id && (
+                {!familyMessageChannel ? (
+                    <Box>
+                        <Typography variant="subtitle2" sx={{ mb: 1.5, color: 'text.secondary', letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                            Tipo de envío
+                        </Typography>
+                        <Grid container spacing={1.5}>
+                            <PermissionGuard permission="mail-enviar-familia">
                             <Grid item xs={12} md={6}>
-                                <TextField
-                                    name="password"
-                                    label="Contraseña"
-                                    type="password"
+                                <Button
+                                    fullWidth
+                                    variant="contained"
+                                    onClick={() => setFamilyMessageChannel('email')}
+                                    sx={{
+                                        height: 48,
+                                        borderRadius: 2,
+                                        textTransform: 'none',
+                                        fontWeight: 700,
+                                        boxShadow: '0 8px 20px rgba(25, 118, 210, 0.25)',
+                                        background: 'linear-gradient(135deg, #1976d2 0%, #4f9df7 100%)',
+                                        '&:hover': {
+                                            background: 'linear-gradient(135deg, #1565c0 0%, #3b8ce6 100%)',
+                                        },
+                                    }}
+                                >
+                                    Correo electrónico
+                                </Button>
+                            </Grid>
+                            </PermissionGuard>
+                            <PermissionGuard permission="notificaciones-crear">
+                            <Grid item xs={12} md={6}>
+                                <Button
                                     fullWidth
                                     variant="outlined"
-                                    value={selectedUser?.password || ''}
+                                    onClick={() => setFamilyMessageChannel('push')}
+                                    sx={{
+                                        height: 48,
+                                        borderRadius: 2,
+                                        textTransform: 'none',
+                                        fontWeight: 700,
+                                        borderWidth: 1.5,
+                                        backgroundColor: 'rgba(30, 136, 229, 0.04)',
+                                        '&:hover': {
+                                            borderWidth: 1.5,
+                                            backgroundColor: 'rgba(30, 136, 229, 0.08)',
+                                        },
+                                    }}
+                                >
+                                    Notificación
+                                </Button>
+                            </Grid>
+                            </PermissionGuard>
+                        </Grid>
+                    </Box>
+                ) : (
+                    <Grid container spacing={2}>
+                        <Grid item xs={12}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, p: 1.5, borderRadius: 2, backgroundColor: familyMessageChannel === 'email' ? 'rgba(25,118,210,0.08)' : 'rgba(46,125,50,0.08)', border: '1px solid', borderColor: familyMessageChannel === 'email' ? 'rgba(25,118,210,0.20)' : 'rgba(46,125,50,0.20)' }}>
+                                <Box>
+                                    <Typography variant="body2" sx={{ fontWeight: 800 }}>
+                                        {familyMessageChannel === 'email' ? 'Modo correo' : 'Modo notificación'}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                        {familyMessageChannel === 'email'
+                                            ? 'Puedes incluir un archivo adjunto.'
+                                            : 'Se enviará como mensaje directo.'}
+                                    </Typography>
+                                </Box>
+                                <Button
+                                    size="small"
+                                    variant="text"
+                                    onClick={() => setFamilyMessageChannel('')}
+                                    sx={{ textTransform: 'none', fontWeight: 700 }}
+                                >
+                                    Cambiar
+                                </Button>
+                            </Box>
+                        </Grid>
+                        <Grid item xs={12}>
+                            <TextField
+                                fullWidth
+                                size="small"
+                                label="Título"
+                                name="familyMessageTitle"
+                                value={familyMessageTitle}
+                                onChange={(e) => { setFamilyMessageTitle(e.target.value); setFamilyMessageErrors((prev) => clearError(prev, 'familyMessageTitle')); }}
+                                required
+                                error={Boolean(familyMessageErrors.familyMessageTitle)}
+                                helperText={familyMessageErrors.familyMessageTitle}
+                            />
+                        </Grid>
+                        <Grid item xs={12}>
+                            <TextField
+                                fullWidth
+                                size="small"
+                                label="Mensaje"
+                                name="familyMessageBody"
+                                value={familyMessageBody}
+                                onChange={(e) => { setFamilyMessageBody(e.target.value); setFamilyMessageErrors((prev) => clearError(prev, 'familyMessageBody')); }}
+                                multiline
+                                minRows={4}
+                                required
+                                error={Boolean(familyMessageErrors.familyMessageBody)}
+                                helperText={familyMessageErrors.familyMessageBody}
+                            />
+                        </Grid>
+                        {familyMessageChannel === 'email' && (
+                            <Grid item xs={12}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+                                    <Button
+                                        size="small"
+                                        variant="outlined"
+                                        component="label"
+                                        sx={{ textTransform: 'none', borderRadius: 2, fontWeight: 700, height: 36 }}
+                                    >
+                                        Adjuntar archivo
+                                        <input
+                                            type="file"
+                                            hidden
+                                            onChange={(e) => setFamilyMessageFile(e.target.files?.[0] || null)}
+                                        />
+                                    </Button>
+                                    {familyMessageFile ? (
+                                        <Chip
+                                            size="small"
+                                            label={familyMessageFile.name}
+                                            onDelete={() => setFamilyMessageFile(null)}
+                                            sx={{ maxWidth: '100%' }}
+                                        />
+                                    ) : (
+                                        <Typography variant="caption" color="text.secondary">
+                                            Sin archivo adjunto
+                                        </Typography>
+                                    )}
+                                </Box>
+                            </Grid>
+                        )}
+                    </Grid>
+                )}
+            </AppDialog>
+
+
+            {/* Diálogo para crear/editar usuario */}
+            <AppDialog
+                open={openEditDialog}
+                onClose={() => { setOpenRouteTypeModal(false); setOpenEditDialog(false); }}
+                title={selectedUser?.id ? 'Editar familia' : 'Nueva familia'}
+                icon={selectedUser?.id ? <Edit /> : <PersonAdd />}
+                dirty={familyFormSnapshot !== familyInitialRef.current}
+                size="md"
+                onSubmit={handleSaveUser}
+                submitLabel={selectedUser?.id ? 'Guardar cambios' : 'Crear familia'}
+                submitDisabled={!selectedUser?.id &&
+                            Number(selectedUser?.roleId) === 3 &&
+                            !(Array.isArray(familyDetail.students) && familyDetail.students.some(
+                                s => String(s?.fullName || '').trim() !== '' && String(s?.grade || '').trim() !== ''
+                            ))}
+                readOnly={!(hasPermission(selectedUser?.id ? 'usuarios-editar' : 'usuarios-crear'))}
+            >
+                <DialogContentText>
+                    {selectedUser?.id
+                        ? 'Actualiza la información del usuario.'
+                        : 'Completa la información para crear un nuevo usuario.'}
+                </DialogContentText>
+                <Grid container spacing={2} sx={{ mt: 1 }}>
+                    <Grid item xs={12} md={6}>
+                        <Grid container spacing={2}>
+                            <Grid item xs={12}>
+                                <TextField
+                                    autoFocus={!!selectedUser?.id}
+                                    name="name"
+                                    label="Nombre Completo"
+                                    type="text"
+                                    fullWidth
+                                    variant="outlined"
+                                    value={selectedUser?.name || ''}
                                     onChange={handleUserChange}
                                     required
                                 />
                             </Grid>
-                        )}
-                        {Number(selectedUser?.roleId) === 3 && (
-                            <>
-                                <Typography variant="h6" sx={{ mt: 3, ml: 2 }}>
-                                    Datos de la Familia
-                                </Typography>
-                                <Grid container spacing={2} sx={{ mt: 1, pl: 2 }}>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            autoFocus={!selectedUser?.id}
-                                            name="familyLastName"
-                                            label="Apellido de la Familia"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.familyLastName}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="motherName"
-                                            label="Nombre de la Madre"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.motherName}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="motherCellphone"
-                                            label="Celular de la Madre"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.motherCellphone}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="motherEmail"
-                                            label="Correo de la Madre"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.motherEmail}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="fatherName"
-                                            label="Nombre del Padre"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.fatherName}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="fatherCellphone"
-                                            label="Celular del Padre"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.fatherCellphone}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="fatherEmail"
-                                            label="Correo del Padre"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.fatherEmail}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="razonSocial"
-                                            label="Razón Social"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.razonSocial}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="nit"
-                                            label="NIT"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.nit}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="mainAddress"
-                                            label="Dirección Principal"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.mainAddress}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="alternativeAddress"
-                                            label="Dirección Alternativa"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.alternativeAddress}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="zoneOrSector"
-                                            label="Zona/Sector"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.zoneOrSector}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="specialFee"
-                                            label="Descuento Especial"
-                                            type="number"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.specialFee}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <FormControl variant="outlined" fullWidth required={!selectedUser?.id}>
-                                            <InputLabel>Tipo de Ruta</InputLabel>
-                                            <Select
-                                                name="routeType"
-                                                value={selectedUser?.id ? routeTypeDraft : familyDetail.routeType}
-                                                onChange={handleFamilyDetailChange}
-                                                onOpen={() => setIsRouteTypeSelectOpen(true)}
-                                                onClose={() => setIsRouteTypeSelectOpen(false)}
-                                                label="Tipo de Ruta"
-                                            >
-                                                <MenuItem
-                                                    value="Completa"
-                                                    onClick={selectedUser?.id ? () => handleRouteTypePick('Completa') : undefined}
-                                                >
-                                                    Completa
-                                                </MenuItem>
-                                                <MenuItem
-                                                    value="Media AM"
-                                                    onClick={selectedUser?.id ? () => handleRouteTypePick('Media AM') : undefined}
-                                                >
-                                                    Media AM
-                                                </MenuItem>
-                                                <MenuItem
-                                                    value="Media PM"
-                                                    onClick={selectedUser?.id ? () => handleRouteTypePick('Media PM') : undefined}
-                                                >
-                                                    Media PM
-                                                </MenuItem>
-                                            </Select>
-                                        </FormControl>
-                                    </Grid>
-                                    {selectedUser?.id && isRouteTypeSelectOpen && (
-                                        <Grid item xs={12} md={4}>
-                                            <Paper variant="outlined" sx={(theme) => ({
-                                                p: 2,
-                                                height: '100%',
-                                                borderColor: theme.palette.warning.main,
-                                                backgroundColor: alpha(theme.palette.warning.main, 0.10),
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                justifyContent: 'center'
-                                            })}>
-                                                <Typography variant="body2" sx={(theme) => ({ fontWeight: 700, color: theme.palette.warning.dark })}>
-                                                    Cambio de ruta
-                                                </Typography>
-                                                <Typography variant="caption" display="block" sx={{ color: 'text.secondary' }}>
-                                                    - Selecciona un tipo de ruta para proceder con el cambio.
-                                                </Typography>
-                                                <Typography variant="caption" display="block" sx={{ color: 'text.secondary' }}>
-                                                    - Para proceder con el tipo de ruta actual, selecciona el mismo tipo de ruta.
-                                                </Typography>
-                                            </Paper>
-                                        </Grid>
-                                    )}
+                            {selectedUser?.id && (
+                                <Grid item xs={12}>
+                                    <TextField
+                                        name="password"
+                                        label="Nueva Contraseña (opcional)"
+                                        type="password"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={selectedUser?.password || ''}
+                                        onChange={handleUserChange}
+                                        helperText="Dejarlo en blanco para mantener la contraseña actual"
+                                    />
                                 </Grid>
-
-                                {/* Sección de contacto de emergencia */}
-                                <Typography variant="h6" sx={{ mt: 3, ml: 2 }}>
-                                    Contacto de Emergencia
-                                </Typography>
-                                <Grid container spacing={2} sx={{ mt: 1, pl: 2 }}>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="emergencyContact"
-                                            label="Nombre del Contacto"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.emergencyContact}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="emergencyRelationship"
-                                            label="Parentesco"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.emergencyRelationship}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={4}>
-                                        <TextField
-                                            name="emergencyPhone"
-                                            label="Teléfono de Emergencia"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={familyDetail.emergencyPhone}
-                                            onChange={handleFamilyDetailChange}
-                                        />
-                                    </Grid>
+                            )}
+                        </Grid>
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                        <TextField
+                            name="email"
+                            label="Correo Electrónico"
+                            type="email"
+                            fullWidth
+                            variant="outlined"
+                            value={selectedUser?.email || ''}
+                            onChange={handleUserChange}
+                            required
+                        />
+                    </Grid>
+                    {!selectedUser?.id && (
+                        <Grid item xs={12} md={6}>
+                            <TextField
+                                name="password"
+                                label="Contraseña"
+                                type="password"
+                                fullWidth
+                                variant="outlined"
+                                value={selectedUser?.password || ''}
+                                onChange={handleUserChange}
+                                required
+                            />
+                        </Grid>
+                    )}
+                    {Number(selectedUser?.roleId) === 3 && (
+                        <>
+                            <Typography variant="h6" sx={{ mt: 3, ml: 2 }}>
+                                Datos de la Familia
+                            </Typography>
+                            <Grid container spacing={2} sx={{ mt: 1, pl: 2 }}>
+                                <Grid item xs={12} md={4}>
+                                    <TextField
+                                        autoFocus={!selectedUser?.id}
+                                        name="familyLastName"
+                                        label="Apellido de la Familia"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={familyDetail.familyLastName}
+                                        onChange={handleFamilyDetailChange}
+                                    />
                                 </Grid>
-                                
-                                {/* Sección de estudiantes */}
-                                <Typography variant="h6" sx={{ mt: 3, ml: 2 }}>
-                                    Estudiantes
-                                </Typography>
-                                <Grid container spacing={2} sx={{ mt: 1, pl: 2 }}>
-                                    <Grid item xs={12} md={5}>
-                                        <TextField
-                                            name="fullName"
-                                            label="Nombre del Estudiante"
-                                            fullWidth
-                                            variant="outlined"
-                                            value={newStudent.fullName}
-                                            onChange={(e) => setNewStudent(prev => ({ ...prev, fullName: e.target.value }))}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} md={5}>
-                                        <FormControl fullWidth variant="outlined">
-                                            <InputLabel>Grado</InputLabel>
-                                            <Select
-                                                name="grade"
-                                                label="Grado"
-                                                value={newStudent.grade}
-                                                onChange={(e) => setNewStudent(prev => ({ ...prev, grade: e.target.value }))}
-                                            >
-                                                <MenuItem value="">
-                                                    <em>Seleccione un grado</em>
-                                                </MenuItem>
-                                                {availableGrades.length === 0 ? (
-                                                    <MenuItem value="">No hay grados disponibles</MenuItem>
-                                                ) : (
-                                                    availableGrades.map((g, i) => (
-                                                        <MenuItem key={i} value={g}>{g}</MenuItem>
-                                                    ))
-                                                )}
-                                            </Select>
-                                        </FormControl>
-                                    </Grid>
-                                    <Grid item xs={12} md={2}>
-                                        <Button
-                                            variant="outlined"
-                                            onClick={handleAddStudent}
-                                            fullWidth
-                                            sx={{ height: '56px' }}
+                                <Grid item xs={12} md={4}>
+                                    <TextField
+                                        name="motherName"
+                                        label="Nombre de la Madre"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={familyDetail.motherName}
+                                        onChange={handleFamilyDetailChange}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <TextField
+                                        name="motherCellphone"
+                                        label="Celular de la Madre"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={familyDetail.motherCellphone}
+                                        onChange={handleFamilyDetailChange}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <TextField
+                                        name="motherEmail"
+                                        label="Correo de la Madre"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={familyDetail.motherEmail}
+                                        onChange={handleFamilyDetailChange}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <TextField
+                                        name="fatherName"
+                                        label="Nombre del Padre"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={familyDetail.fatherName}
+                                        onChange={handleFamilyDetailChange}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <TextField
+                                        name="fatherCellphone"
+                                        label="Celular del Padre"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={familyDetail.fatherCellphone}
+                                        onChange={handleFamilyDetailChange}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <TextField
+                                        name="fatherEmail"
+                                        label="Correo del Padre"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={familyDetail.fatherEmail}
+                                        onChange={handleFamilyDetailChange}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <TextField
+                                        name="razonSocial"
+                                        label="Razón Social"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={familyDetail.razonSocial}
+                                        onChange={handleFamilyDetailChange}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <TextField
+                                        name="nit"
+                                        label="NIT"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={familyDetail.nit}
+                                        onChange={handleFamilyDetailChange}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <TextField
+                                        name="mainAddress"
+                                        label="Dirección Principal"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={familyDetail.mainAddress}
+                                        onChange={handleFamilyDetailChange}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <TextField
+                                        name="alternativeAddress"
+                                        label="Dirección Alternativa"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={familyDetail.alternativeAddress}
+                                        onChange={handleFamilyDetailChange}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <TextField
+                                        name="zoneOrSector"
+                                        label="Zona/Sector"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={familyDetail.zoneOrSector}
+                                        onChange={handleFamilyDetailChange}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <TextField
+                                        name="specialFee"
+                                        label="Descuento Especial"
+                                        type="number"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={familyDetail.specialFee}
+                                        onChange={handleFamilyDetailChange}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <FormControl variant="outlined" fullWidth required={!selectedUser?.id}>
+                                        <InputLabel>Tipo de Ruta</InputLabel>
+                                        <Select
+                                            name="routeType"
+                                            value={selectedUser?.id ? routeTypeDraft : familyDetail.routeType}
+                                            onChange={handleFamilyDetailChange}
+                                            onOpen={() => setIsRouteTypeSelectOpen(true)}
+                                            onClose={() => setIsRouteTypeSelectOpen(false)}
+                                            label="Tipo de Ruta"
                                         >
-                                            Agregar
-                                        </Button>
+                                            <MenuItem
+                                                value="Completa"
+                                                onClick={selectedUser?.id ? () => handleRouteTypePick('Completa') : undefined}
+                                            >
+                                                Completa
+                                            </MenuItem>
+                                            <MenuItem
+                                                value="Media AM"
+                                                onClick={selectedUser?.id ? () => handleRouteTypePick('Media AM') : undefined}
+                                            >
+                                                Media AM
+                                            </MenuItem>
+                                            <MenuItem
+                                                value="Media PM"
+                                                onClick={selectedUser?.id ? () => handleRouteTypePick('Media PM') : undefined}
+                                            >
+                                                Media PM
+                                            </MenuItem>
+                                        </Select>
+                                    </FormControl>
+                                </Grid>
+                                {selectedUser?.id && isRouteTypeSelectOpen && (
+                                    <Grid item xs={12} md={4}>
+                                        <Paper variant="outlined" sx={(theme) => ({
+                                            p: 2,
+                                            height: '100%',
+                                            borderColor: theme.palette.warning.main,
+                                            backgroundColor: alpha(theme.palette.warning.main, 0.10),
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            justifyContent: 'center'
+                                        })}>
+                                            <Typography variant="body2" sx={(theme) => ({ fontWeight: 700, color: theme.palette.warning.dark })}>
+                                                Cambio de ruta
+                                            </Typography>
+                                            <Typography variant="caption" display="block" sx={{ color: 'text.secondary' }}>
+                                                - Selecciona un tipo de ruta para proceder con el cambio.
+                                            </Typography>
+                                            <Typography variant="caption" display="block" sx={{ color: 'text.secondary' }}>
+                                                - Para proceder con el tipo de ruta actual, selecciona el mismo tipo de ruta.
+                                            </Typography>
+                                        </Paper>
                                     </Grid>
-                                    {Number(selectedUser?.roleId) === 3 && !(Array.isArray(familyDetail.students) && familyDetail.students.some(
-                                        s => String(s?.fullName || '').trim() !== '' && String(s?.grade || '').trim() !== ''
-                                    )) && (
-                                        <Grid item xs={12}>
-                                            <Typography variant="body2" sx={{ color: '#c62828' }}>
-                                                La familia debe tener al menos un estudiante con nombre y grado.
-                                            </Typography>
-                                        </Grid>
-                                    )}
-                                    {(familyDetail.students.length > 0 || (familyDetail.inactiveStudents || []).length > 0) && (
-                                        <Grid item xs={12}>
-                                            <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                                                Estudiantes registrados:
-                                            </Typography>
-                                            {familyDetail.students.map((student, index) => {
-                                                const inactiveMatch = inactiveMatchFor(student);
-                                                return (
-                                                <Grid container spacing={2} key={index} sx={{ mb: 2, alignItems: 'center' }}>
-                                                    <Grid item xs={12} md={6}>
-                                                        <TextField
-                                                            fullWidth
-                                                            label={`Nombre del Estudiante ${index + 1}`}
-                                                            value={student.fullName || ''}
+                                )}
+                            </Grid>
+
+                            {/* Sección de contacto de emergencia */}
+                            <Typography variant="h6" sx={{ mt: 3, ml: 2 }}>
+                                Contacto de Emergencia
+                            </Typography>
+                            <Grid container spacing={2} sx={{ mt: 1, pl: 2 }}>
+                                <Grid item xs={12} md={4}>
+                                    <TextField
+                                        name="emergencyContact"
+                                        label="Nombre del Contacto"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={familyDetail.emergencyContact}
+                                        onChange={handleFamilyDetailChange}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <TextField
+                                        name="emergencyRelationship"
+                                        label="Parentesco"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={familyDetail.emergencyRelationship}
+                                        onChange={handleFamilyDetailChange}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                    <TextField
+                                        name="emergencyPhone"
+                                        label="Teléfono de Emergencia"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={familyDetail.emergencyPhone}
+                                        onChange={handleFamilyDetailChange}
+                                    />
+                                </Grid>
+                            </Grid>
+                                
+                            {/* Sección de estudiantes */}
+                            <Typography variant="h6" sx={{ mt: 3, ml: 2 }}>
+                                Estudiantes
+                            </Typography>
+                            <Grid container spacing={2} sx={{ mt: 1, pl: 2 }}>
+                                <Grid item xs={12} md={5}>
+                                    <TextField
+                                        name="fullName"
+                                        label="Nombre del Estudiante"
+                                        fullWidth
+                                        variant="outlined"
+                                        value={newStudent.fullName}
+                                        onChange={(e) => setNewStudent(prev => ({ ...prev, fullName: e.target.value }))}
+                                    />
+                                </Grid>
+                                <Grid item xs={12} md={5}>
+                                    <FormControl fullWidth variant="outlined">
+                                        <InputLabel>Grado</InputLabel>
+                                        <Select
+                                            name="grade"
+                                            label="Grado"
+                                            value={newStudent.grade}
+                                            onChange={(e) => setNewStudent(prev => ({ ...prev, grade: e.target.value }))}
+                                        >
+                                            <MenuItem value="">
+                                                <em>Seleccione un grado</em>
+                                            </MenuItem>
+                                            {availableGrades.length === 0 ? (
+                                                <MenuItem value="">No hay grados disponibles</MenuItem>
+                                            ) : (
+                                                availableGrades.map((g, i) => (
+                                                    <MenuItem key={i} value={g}>{g}</MenuItem>
+                                                ))
+                                            )}
+                                        </Select>
+                                    </FormControl>
+                                </Grid>
+                                <Grid item xs={12} md={2}>
+                                    <Button
+                                        variant="outlined"
+                                        onClick={handleAddStudent}
+                                        fullWidth
+                                        sx={{ height: '56px' }}
+                                    >
+                                        Agregar
+                                    </Button>
+                                </Grid>
+                                {Number(selectedUser?.roleId) === 3 && !(Array.isArray(familyDetail.students) && familyDetail.students.some(
+                                    s => String(s?.fullName || '').trim() !== '' && String(s?.grade || '').trim() !== ''
+                                )) && (
+                                    <Grid item xs={12}>
+                                        <Typography variant="body2" sx={{ color: '#c62828' }}>
+                                            La familia debe tener al menos un estudiante con nombre y grado.
+                                        </Typography>
+                                    </Grid>
+                                )}
+                                {(familyDetail.students.length > 0 || (familyDetail.inactiveStudents || []).length > 0) && (
+                                    <Grid item xs={12}>
+                                        <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                                            Estudiantes registrados:
+                                        </Typography>
+                                        {familyDetail.students.map((student, index) => {
+                                            const inactiveMatch = inactiveMatchFor(student);
+                                            return (
+                                            <Grid container spacing={2} key={index} sx={{ mb: 2, alignItems: 'center' }}>
+                                                <Grid item xs={12} md={6}>
+                                                    <TextField
+                                                        fullWidth
+                                                        label={`Nombre del Estudiante ${index + 1}`}
+                                                        value={student.fullName || ''}
+                                                        onChange={(e) => setFamilyDetail(prev => {
+                                                            const copy = Array.isArray(prev.students) ? [...prev.students] : [];
+                                                            copy[index] = { ...copy[index], fullName: e.target.value };
+                                                            return { ...prev, students: copy };
+                                                        })}
+                                                    />
+                                                </Grid>
+                                                <Grid item xs={9} md={5}>
+                                                    <FormControl fullWidth variant="outlined">
+                                                        <InputLabel>{`Grado`}</InputLabel>
+                                                        <Select
+                                                            value={student.grade || ''}
+                                                            label="Grado"
                                                             onChange={(e) => setFamilyDetail(prev => {
                                                                 const copy = Array.isArray(prev.students) ? [...prev.students] : [];
-                                                                copy[index] = { ...copy[index], fullName: e.target.value };
+                                                                copy[index] = { ...copy[index], grade: e.target.value };
                                                                 return { ...prev, students: copy };
                                                             })}
-                                                        />
-                                                    </Grid>
-                                                    <Grid item xs={9} md={5}>
-                                                        <FormControl fullWidth variant="outlined">
-                                                            <InputLabel>{`Grado`}</InputLabel>
-                                                            <Select
-                                                                value={student.grade || ''}
-                                                                label="Grado"
-                                                                onChange={(e) => setFamilyDetail(prev => {
-                                                                    const copy = Array.isArray(prev.students) ? [...prev.students] : [];
-                                                                    copy[index] = { ...copy[index], grade: e.target.value };
-                                                                    return { ...prev, students: copy };
-                                                                })}
-                                                            >
-                                                                <MenuItem value="">
-                                                                    <em>Seleccione un grado</em>
-                                                                </MenuItem>
-                                                                {availableGrades.length === 0 ? (
-                                                                    <MenuItem value="">No hay grados disponibles</MenuItem>
-                                                                ) : (
-                                                                    availableGrades.map((g, i) => (
-                                                                        <MenuItem key={i} value={g}>{g}</MenuItem>
-                                                                    ))
-                                                                )}
-                                                            </Select>
-                                                        </FormControl>
-                                                    </Grid>
-                                                    <Grid item xs={3} md={1} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                        {/* Un alumno guardado solo lo quita (desactiva / elimina) quien tiene alumnos-cambiar-estado. */}
-                                                        {(!student.id || canChangeStudentState) && (
-                                                        <IconButton
-                                                            size="small"
-                                                            aria-label="Quitar alumno"
-                                                            data-testid={`remove-student-${student.id ?? `new-${index}`}`}
-                                                            onClick={() => {
-                                                                // Fila nueva (sin guardar): se quita sin más. Alumno guardado: desactivar o eliminar.
-                                                                if (!student.id) {
-                                                                    setFamilyDetail(prev => ({ ...prev, students: prev.students.filter((_, i) => i !== index) }));
-                                                                    return;
-                                                                }
-                                                                setRemoveTarget({ index, student });
-                                                            }}
                                                         >
-                                                            <Delete fontSize="small" />
-                                                        </IconButton>
-                                                        )}
-                                                    </Grid>
-                                                    {inactiveMatch && (
-                                                        <Grid item xs={12}>
-                                                            <Alert
-                                                                severity="info"
-                                                                data-testid={`inactive-match-${index}`}
-                                                                action={(
-                                                                    <>
-                                                                        {canChangeStudentState && (
-                                                                            <Button size="small" onClick={() => reactivarCoincidencia(index)}>
-                                                                                Reactivar a {inactiveMatch.fullName.split(' ')[0]}
-                                                                            </Button>
-                                                                        )}
-                                                                        <Button size="small" onClick={() => setFamilyDetail(prev => {
-                                                                            const copy = [...prev.students];
-                                                                            copy[index] = { ...copy[index], decisionInactivo: 'nuevo' };
-                                                                            return { ...prev, students: copy };
-                                                                        })}>
-                                                                            Es otro alumno
-                                                                        </Button>
-                                                                    </>
-                                                                )}
-                                                            >
-                                                                Coincide con {inactiveMatch.fullName} ({inactiveMatch.grade}), inactivo. ¿Es el mismo alumno?
-                                                            </Alert>
-                                                        </Grid>
+                                                            <MenuItem value="">
+                                                                <em>Seleccione un grado</em>
+                                                            </MenuItem>
+                                                            {availableGrades.length === 0 ? (
+                                                                <MenuItem value="">No hay grados disponibles</MenuItem>
+                                                            ) : (
+                                                                availableGrades.map((g, i) => (
+                                                                    <MenuItem key={i} value={g}>{g}</MenuItem>
+                                                                ))
+                                                            )}
+                                                        </Select>
+                                                    </FormControl>
+                                                </Grid>
+                                                <Grid item xs={3} md={1} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    {/* Un alumno guardado solo lo quita (desactiva / elimina) quien tiene alumnos-cambiar-estado. */}
+                                                    {(!student.id || canChangeStudentState) && (
+                                                    <IconButton
+                                                        size="small"
+                                                        aria-label="Quitar alumno"
+                                                        data-testid={`remove-student-${student.id ?? `new-${index}`}`}
+                                                        onClick={() => {
+                                                            // Fila nueva (sin guardar): se quita sin más. Alumno guardado: desactivar o eliminar.
+                                                            if (!student.id) {
+                                                                setFamilyDetail(prev => ({ ...prev, students: prev.students.filter((_, i) => i !== index) }));
+                                                                return;
+                                                            }
+                                                            setRemoveTarget({ index, student });
+                                                        }}
+                                                    >
+                                                        <Delete fontSize="small" />
+                                                    </IconButton>
                                                     )}
                                                 </Grid>
-                                                );
-                                            })}
-                                            <InactiveStudentsList
-                                                students={familyDetail.inactiveStudents}
-                                                canReactivate={canChangeStudentState}
-                                                busyId={reactivatingId}
-                                                onReactivate={reactivarInactivo}
-                                            />
-                                            <RemoveStudentDialog
-                                                open={Boolean(removeTarget)}
-                                                student={removeTarget?.student}
-                                                canDelete={hasPermission('alumnos-eliminar')}
-                                                onClose={() => setRemoveTarget(null)}
-                                                onConfirm={confirmarQuitarAlumno}
-                                            />
-                                        </Grid>
-                                    )}
-                                </Grid>
-                            </>
-                        )}
-                        {Number(selectedUser?.roleId) === 6 && (
-                            <Box sx={{ mt: 3, clear: 'both', width: '100%' }}>
-                                <Typography variant="h6" sx={{ mb: 1 }}>
-                                    Pilotos a cargo
-                                </Typography>
-                                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                    Selecciona uno o más pilotos que estarán a cargo de este Supervisor.
-                                </Typography>
-                                <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto' }}>
-                                    {!Array.isArray(allPilots) || allPilots.length === 0 ? (
-                                        <Typography variant="body2" color="text.secondary">
-                                            No hay pilotos disponibles.
-                                        </Typography>
-                                    ) : (
-                                        allPilots.map((pilot) => {
-                                            const checked = selectedSupervisorPilots.includes(pilot.id);
-                                            return (
-                                                <FormControlLabel
-                                                    key={pilot.id}
-                                                    control={
-                                                        <Checkbox
-                                                            checked={checked}
-                                                            onChange={() => handleToggleSupervisorPilot(pilot.id)}
-                                                            color="primary"
-                                                        />
-                                                    }
-                                                    label={`${pilot.name} - ${pilot.email} (ID: ${pilot.id})`}
-                                                    sx={{ display: 'block', mb: 1 }}
-                                                />
+                                                {inactiveMatch && (
+                                                    <Grid item xs={12}>
+                                                        <Alert
+                                                            severity="info"
+                                                            data-testid={`inactive-match-${index}`}
+                                                            action={(
+                                                                <>
+                                                                    {canChangeStudentState && (
+                                                                        <Button size="small" onClick={() => reactivarCoincidencia(index)}>
+                                                                            Reactivar a {inactiveMatch.fullName.split(' ')[0]}
+                                                                        </Button>
+                                                                    )}
+                                                                    <Button size="small" onClick={() => setFamilyDetail(prev => {
+                                                                        const copy = [...prev.students];
+                                                                        copy[index] = { ...copy[index], decisionInactivo: 'nuevo' };
+                                                                        return { ...prev, students: copy };
+                                                                    })}>
+                                                                        Es otro alumno
+                                                                    </Button>
+                                                                </>
+                                                            )}
+                                                        >
+                                                            Coincide con {inactiveMatch.fullName} ({inactiveMatch.grade}), inactivo. ¿Es el mismo alumno?
+                                                        </Alert>
+                                                    </Grid>
+                                                )}
+                                            </Grid>
                                             );
-                                        })
-                                    )}
-                                </Paper>
-                            </Box>
-                        )}
-                        {selectedUser?.roleId === 7 && (
-                            <Box sx={{ mt: 3, clear: 'both', width: '100%' }}>
-                                <Typography variant="h6" sx={{ mb: 1 }}>
-                                    Monitoras a cargo
-                                </Typography>
-                                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                    Selecciona una o más monitoras que estarán a cargo de este Auxiliar.
-                                </Typography>
-                                <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto' }}>
-                                    {!Array.isArray(allMonitoras) || allMonitoras.length === 0 ? (
-                                        <Typography variant="body2" color="text.secondary">
-                                            No hay monitoras disponibles.
-                                        </Typography>
-                                    ) : (
-                                        allMonitoras.map((monitora) => {
-                                            const checked = selectedAuxiliarMonitoras.includes(monitora.id);
-                                            return (
-                                                <FormControlLabel
-                                                    key={monitora.id}
-                                                    control={
-                                                        <Checkbox
-                                                            checked={checked}
-                                                            onChange={() => handleToggleAuxiliarMonitora(monitora.id)}
-                                                            color="primary"
-                                                        />
-                                                    }
-                                                    label={`${monitora.name} - ${monitora.email} (ID: ${monitora.id})`}
-                                                    sx={{ display: 'block', mb: 1 }}
-                                                />
-                                            );
-                                        })
-                                    )}
-                                </Paper>
-                            </Box>
-                        )}
-                    </Grid>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => {
-                        setOpenRouteTypeModal(false);
-                        setOpenEditDialog(false);
-                    }}>Cancelar</Button>
-                    {hasPermission(selectedUser?.id ? 'usuarios-editar' : 'usuarios-crear') && (
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={handleSaveUser}
-                        disabled={
-                            !selectedUser?.id &&
-                            Number(selectedUser?.roleId) === 3 &&
-                            !(Array.isArray(familyDetail.students) && familyDetail.students.some(
-                                s => String(s?.fullName || '').trim() !== '' && String(s?.grade || '').trim() !== ''
-                            ))
-                        }
-                    >
-                        {selectedUser?.id ? 'Guardar Cambios' : 'Crear Usuario'}
-                    </Button>
+                                        })}
+                                        <InactiveStudentsList
+                                            students={familyDetail.inactiveStudents}
+                                            canReactivate={canChangeStudentState}
+                                            busyId={reactivatingId}
+                                            onReactivate={reactivarInactivo}
+                                        />
+                                        <RemoveStudentDialog
+                                            open={Boolean(removeTarget)}
+                                            student={removeTarget?.student}
+                                            canDelete={hasPermission('alumnos-eliminar')}
+                                            onClose={() => setRemoveTarget(null)}
+                                            onConfirm={confirmarQuitarAlumno}
+                                        />
+                                    </Grid>
+                                )}
+                            </Grid>
+                        </>
                     )}
-                </DialogActions>
-            </Dialog>
+                    {Number(selectedUser?.roleId) === 6 && (
+                        <Box sx={{ mt: 3, clear: 'both', width: '100%' }}>
+                            <Typography variant="h6" sx={{ mb: 1 }}>
+                                Pilotos a cargo
+                            </Typography>
+                            <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                Selecciona uno o más pilotos que estarán a cargo de este Supervisor.
+                            </Typography>
+                            <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto' }}>
+                                {!Array.isArray(allPilots) || allPilots.length === 0 ? (
+                                    <Typography variant="body2" color="text.secondary">
+                                        No hay pilotos disponibles.
+                                    </Typography>
+                                ) : (
+                                    allPilots.map((pilot) => {
+                                        const checked = selectedSupervisorPilots.includes(pilot.id);
+                                        return (
+                                            <FormControlLabel
+                                                key={pilot.id}
+                                                control={
+                                                    <Checkbox
+                                                        checked={checked}
+                                                        onChange={() => handleToggleSupervisorPilot(pilot.id)}
+                                                        color="primary"
+                                                    />
+                                                }
+                                                label={`${pilot.name} - ${pilot.email} (ID: ${pilot.id})`}
+                                                sx={{ display: 'block', mb: 1 }}
+                                            />
+                                        );
+                                    })
+                                )}
+                            </Paper>
+                        </Box>
+                    )}
+                    {selectedUser?.roleId === 7 && (
+                        <Box sx={{ mt: 3, clear: 'both', width: '100%' }}>
+                            <Typography variant="h6" sx={{ mb: 1 }}>
+                                Monitoras a cargo
+                            </Typography>
+                            <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                Selecciona una o más monitoras que estarán a cargo de este Auxiliar.
+                            </Typography>
+                            <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto' }}>
+                                {!Array.isArray(allMonitoras) || allMonitoras.length === 0 ? (
+                                    <Typography variant="body2" color="text.secondary">
+                                        No hay monitoras disponibles.
+                                    </Typography>
+                                ) : (
+                                    allMonitoras.map((monitora) => {
+                                        const checked = selectedAuxiliarMonitoras.includes(monitora.id);
+                                        return (
+                                            <FormControlLabel
+                                                key={monitora.id}
+                                                control={
+                                                    <Checkbox
+                                                        checked={checked}
+                                                        onChange={() => handleToggleAuxiliarMonitora(monitora.id)}
+                                                        color="primary"
+                                                    />
+                                                }
+                                                label={`${monitora.name} - ${monitora.email} (ID: ${monitora.id})`}
+                                                sx={{ display: 'block', mb: 1 }}
+                                            />
+                                        );
+                                    })
+                                )}
+                            </Paper>
+                        </Box>
+                    )}
+                </Grid>
+            </AppDialog>
 
             {selectedUser?.id && (
                 <RetroactiveApplyModal
@@ -3804,7 +3574,7 @@ const SchoolUsersPage = () => {
                     onApplied={() => {
                         setFamilyDetail(prev => ({ ...prev, routeType: routeTypeDraft }));
                         setOpenRouteTypeModal(false);
-                        setSnackbar({ open: true, message: 'Cambio de tipo de ruta aplicado correctamente', severity: 'success' });
+                        notify.success('Cambio de tipo de ruta aplicado');
                         fetchUsers();
                     }}
                 />

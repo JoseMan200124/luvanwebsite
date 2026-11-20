@@ -9,6 +9,8 @@ import LandingPage from './pages/LandingPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import AuthProvider from './context/AuthProvider';
+import NotificationProvider from './components/feedback/NotificationProvider';
+import { ConfirmProvider } from './components/feedback/ConfirmDialog';
 import PermissionsProvider from './context/PermissionsProvider';
 import MFAVerify from './components/MFAVerify';
 import PermissionsManagementPage from './pages/PermissionsManagementPage';
@@ -78,314 +80,318 @@ function App() {
 
     return (
         <Router>
-            <AuthProvider>
-                <PermissionsProvider>
-                    <Routes>
-                        <Route path="/"                   element={<LandingPage />} />
-                        <Route path="/login"              element={<LoginPage />} />
-                        <Route path="/mfa"                element={<MFAVerify />} />
-                        <Route path="/privacy-policy"     element={<PrivacyPolicyPage />} />
-                    <Route path="/thank-you"          element={<ThankYouPage />} />
+            <NotificationProvider>
+                <ConfirmProvider>
+                    <AuthProvider>
+                        <PermissionsProvider>
+                            <Routes>
+                                <Route path="/"                   element={<LandingPage />} />
+                                <Route path="/login"              element={<LoginPage />} />
+                                <Route path="/mfa"                element={<MFAVerify />} />
+                                <Route path="/privacy-policy"     element={<PrivacyPolicyPage />} />
+                            <Route path="/thank-you"          element={<ThankYouPage />} />
 
-                    {/* Forzar cambio de contraseña */}
-                    <Route path="/force-password-change" element={<ForcePasswordChangePage />} />
+                            {/* Forzar cambio de contraseña */}
+                            <Route path="/force-password-change" element={<ForcePasswordChangePage />} />
 
-                    <Route
-                        path="/select-context"
-                        element={
-                            <ProtectedRoute requireSchoolContext={false} redirectTo="/login">
-                                <SchoolContextSelectionPage />
-                            </ProtectedRoute>
-                        }
-                    />
+                            <Route
+                                path="/select-context"
+                                element={
+                                    <ProtectedRoute requireSchoolContext={false} redirectTo="/login">
+                                        <SchoolContextSelectionPage />
+                                    </ProtectedRoute>
+                                }
+                            />
 
-                    {/* Contratos públicos */}
-                    <Route path="/contracts/share/:uuid" element={<ContractFillPage />} />
+                            {/* Contratos públicos */}
+                            <Route path="/contracts/share/:uuid" element={<ContractFillPage />} />
 
-                    {/* Contratos protegidos */}
-                    <Route
-                        path="/admin/contratos-llenados/:uuid"
-                        element={
-                            <ProtectedRoute moduleKey={'contratos-ver-llenado-detalle'}>
-                                <FilledContractViewer />
-                            </ProtectedRoute>
-                        }
-                    />
-                    <Route
-                        path="/admin/contratos/:uuid"
-                        element={
-                            <ProtectedRoute moduleKey={'contratos-ver-detalle'}>
-                                <ContractViewer />
-                            </ProtectedRoute>
-                        }
-                    />
+                            {/* Contratos protegidos */}
+                            <Route
+                                path="/admin/contratos-llenados/:uuid"
+                                element={
+                                    <ProtectedRoute moduleKey={'contratos-ver-llenado-detalle'}>
+                                        <FilledContractViewer />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/admin/contratos/:uuid"
+                                element={
+                                    <ProtectedRoute moduleKey={'contratos-ver-detalle'}>
+                                        <ContractViewer />
+                                    </ProtectedRoute>
+                                }
+                            />
 
-                    {/* Inscripción colegios (pública) */}
-                    <Route path="/schools/enroll/:schoolId" element={<SchoolEnrollmentPage />} />
+                            {/* Inscripción colegios (pública) */}
+                            <Route path="/schools/enroll/:schoolId" element={<SchoolEnrollmentPage />} />
 
-                    {/* Inscripción corporaciones (pública) */}
-                    <Route path="/corporations/enroll/:corporationId" element={<CorporateEnrollmentPage />} />
+                            {/* Inscripción corporaciones (pública) */}
+                            <Route path="/corporations/enroll/:corporationId" element={<CorporateEnrollmentPage />} />
 
-                    {/* ---------------- Panel administrativo -------------- */}
-                    <Route
-                        path="/admin/*"
-                        element={
-                            <ProtectedRoute requireSchoolContext={false}>
-                                <ProtectedLayout />
-                            </ProtectedRoute>
-                        }
-                    >
-                        <Route index             element={<DefaultAdminRoute />} />
-                        <Route
-                            path="dashboard"
-                            element={
-                                <ProtectedRoute moduleKey="dashboard-ver" redirectTo="/admin">
-                                    <Dashboard />
-                                </ProtectedRoute>
-                            }
-                        />
-
-                        {renderDynamicRoutes()}
-
-                        <Route
-                            path="roles-permisos"
-                            element={
-                                <ProtectedRoute moduleKey="permisos-ver-por-rol">
-                                    <PermissionsManagementPage />
-                                </ProtectedRoute>
-                            }
-                        />
-
-
-                        {/* Nuevas rutas para gestión de escuelas por ciclo escolar */}
-                        <Route
-                            path="escuelas"
-                            element={
-                                <ProtectedRoute moduleKey={'colegios-listar'}>
-                                    <CicloEscolarSelectionPage />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="escuelas/ciclo/:cicloEscolarId/:schoolId"
-                            element={
-                                <ProtectedRoute moduleKey={'colegios-dashboard'}>
-                                    <SchoolDashboardPage />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="escuelas/ciclo/:cicloEscolarId/:schoolId/usuarios"
-                            element={
-                                <ProtectedRoute moduleKey={'colegios-familias'}>
-                                    <SchoolUsersPage />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="escuelas/ciclo/:cicloEscolarId/:schoolId/buses-gestion"
-                            element={
-                                <ProtectedRoute moduleKey={'colegios-gestion-buses'}>
-                                    <SchoolBusesPage />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="escuelas/ciclo/:cicloEscolarId/:schoolId/contratos"
-                            element={
-                                <ProtectedRoute moduleKey={'colegios-contratos'}>
-                                    <SchoolContractsPage />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="escuelas/ciclo/:cicloEscolarId/:schoolId/protocolos"
-                            element={
-                                <ProtectedRoute moduleKey={'colegios-protocolos-reglamentos'}>
-                                    <SchoolProtocolsPage />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="escuelas/ciclo/:cicloEscolarId/:schoolId/pagos"
-                            element={
-                                <ProtectedRoute moduleKey={'colegios-pagos'}>
-                                    <SchoolPaymentsPage />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="escuelas/ciclo/:cicloEscolarId/:schoolId/solicitudes"
-                            element={
-                                <ProtectedRoute moduleKey={'colegios-solicitudes'}>
-                                    <RequestsPage />
-                                </ProtectedRoute>
-                            }
-                        />
-
-                        {/* Rutas para gestión de corporaciones por año fiscal */}
-                        <Route
-                            path="corporaciones/:fiscalYear/:corporationId"
-                            element={
-                                <ProtectedRoute moduleKey={'corporaciones'} requireSchoolContext={false}>
-                                    <CorporateDashboardPage />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="corporaciones/:fiscalYear/:corporationId/colaboradores"
-                            element={
-                                <ProtectedRoute moduleKey={'corporaciones-colaboradores'} requireSchoolContext={false}>
-                                    <ColaboradoresPage />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="corporaciones/:fiscalYear/:corporationId/buses-gestion"
-                            element={
-                                <ProtectedRoute moduleKey={'corporaciones-gestion-buses'} requireSchoolContext={false}>
-                                    <CorporateBusesPage />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="corporaciones/:fiscalYear/:corporationId/protocolos"
-                            element={
-                                <ProtectedRoute moduleKey={'corporaciones-protocolos-reglamentos'} requireSchoolContext={false}>
-                                    <CorporateProtocolsPage />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="corporaciones/:fiscalYear/:corporationId/pagos"
-                            element={
-                                <ProtectedRoute moduleKey="pagos-listar" requireSchoolContext={false}>
-                                    <SchoolPaymentsPage />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="corporaciones/:fiscalYear/:corporationId/solicitudes"
-                            element={
-                                <ProtectedRoute moduleKey={'corporaciones-solicitudes'} requireSchoolContext={false}>
-                                    <RequestsPage />
-                                </ProtectedRoute>
-                            }
-                        />
-
-                        {/* Redirect genérico. Absoluto: en react-router v7 un "dashboard" relativo dentro de
-                            path="*" se resuelve contra la URL completa y se repite sin fin (/x/dashboard/dashboard/...). */}
-                        <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
-                    </Route>
-
-                    {/* Ruta oculta de auditoría (no listada en menús). Cambia la ruta a tu preferencia */}
-                    <Route
-                        path="/_hidden/audit-logs/gestor/9c7f0f2a-2b74-4b1a-b2e0-7a8d3f0c5e91"
-                        element={
-                <ProtectedRoute roles={['Gestor']}>
-                                <AdminAuditHidden />
-                            </ProtectedRoute>
-                        }
-                    />
-
-                    {/* Ruta oculta de reconstrucción de pagos (no listada en menús). */}
-                    <Route
-                        path="/_hidden/rebuild-payments/gestor/3f1e7a92-5c4d-4e8b-9f1a-2d6b8c7e0a14"
-                        element={
-                            <ProtectedRoute roles={['Gestor']}>
-                                <AdminRebuildPaymentsHidden />
-                            </ProtectedRoute>
-                        }
-                    />
-
-                    {/* ---------------- Área PADRES (sin sidebar) --------- */}
-                    <Route
-                        path="/parent/dashboard"
-                        element={
-                            <ProtectedRoute 
-                                moduleKey={'padre-dashboard'} 
-                                redirectTo="/login"
+                            {/* ---------------- Panel administrativo -------------- */}
+                            <Route
+                                path="/admin/*"
+                                element={
+                                    <ProtectedRoute requireSchoolContext={false}>
+                                        <ProtectedLayout />
+                                    </ProtectedRoute>
+                                }
                             >
-                                <ParentDashboardPage />
-                            </ProtectedRoute>
-                        }
-                    />
-                    <Route
-                        path="/parent/solicitudes"
-                        element={
-                            <ProtectedRoute redirectTo="/parent/dashboard" roles={['Padre']} requireSchoolContext={false}>
-                                <ParentRequestsPage />
-                            </ProtectedRoute>
-                        }
-                    />
-                    <Route
-                        path="/parent/payment"
-                        element={
-                            <ProtectedRoute
-                                moduleKey={'padres-subir-boleta'}
-                                redirectTo="/parent/dashboard"
-                            >
-                                <ParentPaymentPage />
-                            </ProtectedRoute>
-                        }
-                    />
+                                <Route index             element={<DefaultAdminRoute />} />
+                                <Route
+                                    path="dashboard"
+                                    element={
+                                        <ProtectedRoute moduleKey="dashboard-ver" redirectTo="/admin">
+                                            <Dashboard />
+                                        </ProtectedRoute>
+                                    }
+                                />
 
-                    <Route
-                        path="/parent/protocolos"
-                        element={
-                            <ProtectedRoute 
-                                moduleKey={'padre-protocolos-reglamentos'} 
-                                redirectTo="/parent/dashboard"
-                            >
-                                <ParentProtocolsPage />
-                            </ProtectedRoute>
-                        }
-                    />
+                                {renderDynamicRoutes()}
 
-                    <Route
-                        path="/parent/circulares"
-                        element={
-                            <ProtectedRoute
-                                moduleKey={'circulares-padre-listar'}
-                                redirectTo="/parent/dashboard"
-                            >
-                                <ParentCircularsPage />
-                            </ProtectedRoute>
-                        }
-                    />
+                                <Route
+                                    path="roles-permisos"
+                                    element={
+                                        <ProtectedRoute moduleKey="permisos-ver-por-rol">
+                                            <PermissionsManagementPage />
+                                        </ProtectedRoute>
+                                    }
+                                />
 
-                    {/* ---------------- Área COLABORADOR (sin sidebar) --------- */}
-                    <Route
-                        path="/colaborador/dashboard"
-                        element={
-                            <ProtectedRoute
-                                moduleKey={'colaborador-dashboard'}
-                                redirectTo="/login"
-                                requireSchoolContext={false}
-                            >
-                                <ColaboradorDashboardPage />
-                            </ProtectedRoute>
-                        }
-                    />
 
-                    <Route
-                        path="/colaborador/protocolos"
-                        element={
-                            <ProtectedRoute
-                                moduleKey={'colaborador-protocolos-reglamentos'}
-                                redirectTo="/colaborador/dashboard"
-                                requireSchoolContext={false}
-                            >
-                                <ColaboradorProtocolsPage />
-                            </ProtectedRoute>
-                        }
-                    />
+                                {/* Nuevas rutas para gestión de escuelas por ciclo escolar */}
+                                <Route
+                                    path="escuelas"
+                                    element={
+                                        <ProtectedRoute moduleKey={'colegios-listar'}>
+                                            <CicloEscolarSelectionPage />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="escuelas/ciclo/:cicloEscolarId/:schoolId"
+                                    element={
+                                        <ProtectedRoute moduleKey={'colegios-dashboard'}>
+                                            <SchoolDashboardPage />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="escuelas/ciclo/:cicloEscolarId/:schoolId/usuarios"
+                                    element={
+                                        <ProtectedRoute moduleKey={'colegios-familias'}>
+                                            <SchoolUsersPage />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="escuelas/ciclo/:cicloEscolarId/:schoolId/buses-gestion"
+                                    element={
+                                        <ProtectedRoute moduleKey={'colegios-gestion-buses'}>
+                                            <SchoolBusesPage />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="escuelas/ciclo/:cicloEscolarId/:schoolId/contratos"
+                                    element={
+                                        <ProtectedRoute moduleKey={'colegios-contratos'}>
+                                            <SchoolContractsPage />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="escuelas/ciclo/:cicloEscolarId/:schoolId/protocolos"
+                                    element={
+                                        <ProtectedRoute moduleKey={'colegios-protocolos-reglamentos'}>
+                                            <SchoolProtocolsPage />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="escuelas/ciclo/:cicloEscolarId/:schoolId/pagos"
+                                    element={
+                                        <ProtectedRoute moduleKey={'colegios-pagos'}>
+                                            <SchoolPaymentsPage />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="escuelas/ciclo/:cicloEscolarId/:schoolId/solicitudes"
+                                    element={
+                                        <ProtectedRoute moduleKey={'colegios-solicitudes'}>
+                                            <RequestsPage />
+                                        </ProtectedRoute>
+                                    }
+                                />
 
-                    {/* Catch-all */}
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-            </PermissionsProvider>
-            </AuthProvider>
+                                {/* Rutas para gestión de corporaciones por año fiscal */}
+                                <Route
+                                    path="corporaciones/:fiscalYear/:corporationId"
+                                    element={
+                                        <ProtectedRoute moduleKey={'corporaciones'} requireSchoolContext={false}>
+                                            <CorporateDashboardPage />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="corporaciones/:fiscalYear/:corporationId/colaboradores"
+                                    element={
+                                        <ProtectedRoute moduleKey={'corporaciones-colaboradores'} requireSchoolContext={false}>
+                                            <ColaboradoresPage />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="corporaciones/:fiscalYear/:corporationId/buses-gestion"
+                                    element={
+                                        <ProtectedRoute moduleKey={'corporaciones-gestion-buses'} requireSchoolContext={false}>
+                                            <CorporateBusesPage />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="corporaciones/:fiscalYear/:corporationId/protocolos"
+                                    element={
+                                        <ProtectedRoute moduleKey={'corporaciones-protocolos-reglamentos'} requireSchoolContext={false}>
+                                            <CorporateProtocolsPage />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="corporaciones/:fiscalYear/:corporationId/pagos"
+                                    element={
+                                        <ProtectedRoute moduleKey="pagos-listar" requireSchoolContext={false}>
+                                            <SchoolPaymentsPage />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="corporaciones/:fiscalYear/:corporationId/solicitudes"
+                                    element={
+                                        <ProtectedRoute moduleKey={'corporaciones-solicitudes'} requireSchoolContext={false}>
+                                            <RequestsPage />
+                                        </ProtectedRoute>
+                                    }
+                                />
+
+                                {/* Redirect genérico. Absoluto: en react-router v7 un "dashboard" relativo dentro de
+                                  path="*" se resuelve contra la URL completa y se repite sin fin (/x/dashboard/dashboard/...). */}
+                                <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
+                            </Route>
+
+                            {/* Ruta oculta de auditoría (no listada en menús). Cambia la ruta a tu preferencia */}
+                            <Route
+                                path="/_hidden/audit-logs/gestor/9c7f0f2a-2b74-4b1a-b2e0-7a8d3f0c5e91"
+                                element={
+                        <ProtectedRoute roles={['Gestor']}>
+                                        <AdminAuditHidden />
+                                    </ProtectedRoute>
+                                }
+                            />
+
+                            {/* Ruta oculta de reconstrucción de pagos (no listada en menús). */}
+                            <Route
+                                path="/_hidden/rebuild-payments/gestor/3f1e7a92-5c4d-4e8b-9f1a-2d6b8c7e0a14"
+                                element={
+                                    <ProtectedRoute roles={['Gestor']}>
+                                        <AdminRebuildPaymentsHidden />
+                                    </ProtectedRoute>
+                                }
+                            />
+
+                            {/* ---------------- Área PADRES (sin sidebar) --------- */}
+                            <Route
+                                path="/parent/dashboard"
+                                element={
+                                    <ProtectedRoute 
+                                        moduleKey={'padre-dashboard'} 
+                                        redirectTo="/login"
+                                    >
+                                        <ParentDashboardPage />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/parent/solicitudes"
+                                element={
+                                    <ProtectedRoute redirectTo="/parent/dashboard" roles={['Padre']} requireSchoolContext={false}>
+                                        <ParentRequestsPage />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/parent/payment"
+                                element={
+                                    <ProtectedRoute
+                                        moduleKey={'padres-subir-boleta'}
+                                        redirectTo="/parent/dashboard"
+                                    >
+                                        <ParentPaymentPage />
+                                    </ProtectedRoute>
+                                }
+                            />
+
+                            <Route
+                                path="/parent/protocolos"
+                                element={
+                                    <ProtectedRoute 
+                                        moduleKey={'padre-protocolos-reglamentos'} 
+                                        redirectTo="/parent/dashboard"
+                                    >
+                                        <ParentProtocolsPage />
+                                    </ProtectedRoute>
+                                }
+                            />
+
+                            <Route
+                                path="/parent/circulares"
+                                element={
+                                    <ProtectedRoute
+                                        moduleKey={'circulares-padre-listar'}
+                                        redirectTo="/parent/dashboard"
+                                    >
+                                        <ParentCircularsPage />
+                                    </ProtectedRoute>
+                                }
+                            />
+
+                            {/* ---------------- Área COLABORADOR (sin sidebar) --------- */}
+                            <Route
+                                path="/colaborador/dashboard"
+                                element={
+                                    <ProtectedRoute
+                                        moduleKey={'colaborador-dashboard'}
+                                        redirectTo="/login"
+                                        requireSchoolContext={false}
+                                    >
+                                        <ColaboradorDashboardPage />
+                                    </ProtectedRoute>
+                                }
+                            />
+
+                            <Route
+                                path="/colaborador/protocolos"
+                                element={
+                                    <ProtectedRoute
+                                        moduleKey={'colaborador-protocolos-reglamentos'}
+                                        redirectTo="/colaborador/dashboard"
+                                        requireSchoolContext={false}
+                                    >
+                                        <ColaboradorProtocolsPage />
+                                    </ProtectedRoute>
+                                }
+                            />
+
+                            {/* Catch-all */}
+                            <Route path="*" element={<Navigate to="/" replace />} />
+                        </Routes>
+                    </PermissionsProvider>
+                    </AuthProvider>
+                </ConfirmProvider>
+            </NotificationProvider>
         </Router>
     );
 }

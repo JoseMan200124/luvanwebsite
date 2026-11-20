@@ -2,28 +2,18 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Typography,
     Paper,
+    Typography,
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    TablePagination,
     CircularProgress,
     Box,
     Grid,
     Card,
     CardContent,
     Chip,
-    IconButton,
-    Tooltip,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Button,
     List,
     ListItem,
     ListItemIcon,
@@ -35,7 +25,6 @@ import {
     CheckCircle as CheckCircleIcon,
     Cancel as CancelIcon,
 } from '@mui/icons-material';
-import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { getAttendances, getAttendanceDetails } from '../services/attendanceService';
 import api from '../utils/axiosConfig';
@@ -48,14 +37,35 @@ import { F, toPlateOptions, toRouteOptions } from '../components/filters/filterF
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import RowActions from '../components/table/RowActions';
+import { formatDate } from '../utils/dateFormat';
+import AppDialog from '../components/dialogs/AppDialog';
 
-moment.tz.setDefault('America/Guatemala');
+// Columnas de la tabla de asistencias
+const COLUMNS = [
+    { id: 'fecha', label: 'Fecha' },
+    { id: 'dia', label: 'Día' },
+    { id: 'horario', label: 'Horario' },
+    { id: 'monitora', label: 'Monitora' },
+    { id: 'placa', label: 'Placa' },
+    { id: 'ruta', label: 'Ruta' },
+    { id: 'colegio', label: 'Colegio' },
+    { id: 'total_alumnos', label: 'Total Alumnos', align: 'center' },
+    { id: 'presentes', label: 'Presentes', align: 'center' },
+    { id: 'asistencia', label: '% Asistencia', align: 'center' },
+    { id: 'acciones', label: 'Acciones', align: 'center' },
+];
 
 const AttendanceManagementPage = () => {
     const [attendances, setAttendances] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(25);
+    // Paginación (en el servidor)
+    const table = useTableState();
+    const { page, rowsPerPage } = table;
     const [totalCount, setTotalCount] = useState(0);
 
     // Modal de detalles
@@ -112,7 +122,7 @@ const AttendanceManagementPage = () => {
             F.schedule({ dependsOn: 'client', requireParent: false, options: availableScheduleCodes.map((code) => ({ value: code, label: getScheduleLabel(code) })) }),
             F.dateRange('dates'),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const {
         cycle: selectedCicloEscolar,
@@ -287,15 +297,6 @@ const AttendanceManagementPage = () => {
         setAttendanceDetails(null);
     };
 
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
-
     const getDayLabel = (day) => {
         const labels = {
             'monday': 'Lunes',
@@ -380,23 +381,9 @@ const AttendanceManagementPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer sx={{ overflowX: 'auto' }}>
+                            <AppTableContainer>
                                 <Table sx={{ minWidth: 980 }}>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>Fecha</TableCell>
-                                            <TableCell>Día</TableCell>
-                                            <TableCell>Horario</TableCell>
-                                            <TableCell>Monitora</TableCell>
-                                            <TableCell>Placa</TableCell>
-                                            <TableCell>Ruta</TableCell>
-                                            <TableCell>Colegio</TableCell>
-                                            <TableCell align="center">Total Alumnos</TableCell>
-                                            <TableCell align="center">Presentes</TableCell>
-                                            <TableCell align="center">% Asistencia</TableCell>
-                                            <TableCell align="center">Acciones</TableCell>
-                                        </TableRow>
-                                    </TableHead>
+                                    <SortableTableHead columns={COLUMNS} />
                                     <TableBody>
                                         {attendances.map((attendance) => {
                                             const percentage = attendance.totalAlumnos > 0
@@ -406,7 +393,7 @@ const AttendanceManagementPage = () => {
                                             return (
                                                 <TableRow key={attendance.id}>
                                                     <TableCell>
-                                                        {moment(attendance.fecha).format('DD/MM/YYYY')}
+                                                        {formatDate(attendance.fecha)}
                                                     </TableCell>
                                                     <TableCell>{getDayLabel(attendance.day)}</TableCell>
                                                     <TableCell>
@@ -445,15 +432,11 @@ const AttendanceManagementPage = () => {
                                                         />
                                                     </TableCell>
                                                     <TableCell align="center">
-                                                        <Tooltip title="Ver lista de alumnos">
-                                                            <IconButton 
-                                                                size="small"
-                                                                color="primary"
-                                                                onClick={() => handleViewDetails(attendance)}
-                                                            >
-                                                                <VisibilityIcon />
-                                                            </IconButton>
-                                                        </Tooltip>
+                                                        <RowActions
+                                                            actions={[
+                                                                { key: 'view', kind: 'view', color: 'primary', label: 'Ver lista de alumnos', icon: <VisibilityIcon fontSize="small" />, onClick: () => handleViewDetails(attendance) },
+                                                            ]}
+                                                        />
                                                     </TableCell>
                                                 </TableRow>
                                             );
@@ -467,134 +450,110 @@ const AttendanceManagementPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={totalCount}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                labelRowsPerPage="Registros por página:"
-                                labelDisplayedRows={({ from, to, count }) =>
-                                    `${from}-${to} de ${count !== -1 ? count : `más de ${to}`}`
-                                }
-                            />
+                            </AppTableContainer>
+                            <AppTablePagination count={totalCount} {...table.paginationProps} />
                         </>
                     )}
                 </Paper>
 
                 {/* Modal de Detalles de Asistencia */}
-                <Dialog 
-                    open={openModal} 
+                <AppDialog
+                    open={openModal}
                     onClose={handleCloseModal}
-                    maxWidth="md"
-                    fullWidth
+                    title="Lista de alumnos - asistencia"
+                    subtitle={selectedAttendance
+                        ? `${formatDate(selectedAttendance.fecha)} - ${getScheduleLabel(selectedAttendance.schedule)} - ${getDayLabel(selectedAttendance.day)}`
+                        : undefined}
+                    size="md"
+                    readOnly
                 >
-                    <DialogTitle>
-                        <Typography variant="h6">
-                            Lista de Alumnos - Asistencia
-                        </Typography>
-                        {selectedAttendance && (
-                            <Typography variant="body2" color="textSecondary">
-                                {moment(selectedAttendance.fecha).format('DD/MM/YYYY')} - {getScheduleLabel(selectedAttendance.schedule)} - {getDayLabel(selectedAttendance.day)}
-                            </Typography>
-                        )}
-                    </DialogTitle>
-                    <DialogContent dividers>
-                        {loadingDetails ? (
-                            <Box display="flex" justifyContent="center" p={3}>
-                                <CircularProgress />
-                            </Box>
-                        ) : attendanceDetails ? (
-                            <Box>
-                                {/* Resumen */}
-                                <Box mb={3}>
-                                    <Grid container spacing={2}>
-                                        <Grid item xs={12} sm={6}>
-                                            <Card variant="outlined">
-                                                <CardContent>
-                                                    <Typography variant="h6" color="success.main">
-                                                        {attendanceDetails.students?.present?.length || 0}
-                                                    </Typography>
-                                                    <Typography variant="body2" color="textSecondary">
-                                                        Alumnos Presentes
-                                                    </Typography>
-                                                </CardContent>
-                                            </Card>
-                                        </Grid>
-                                        <Grid item xs={12} sm={6}>
-                                            <Card variant="outlined">
-                                                <CardContent>
-                                                    <Typography variant="h6" color="error.main">
-                                                        {attendanceDetails.students?.absent?.length || 0}
-                                                    </Typography>
-                                                    <Typography variant="body2" color="textSecondary">
-                                                        Alumnos Ausentes
-                                                    </Typography>
-                                                </CardContent>
-                                            </Card>
-                                        </Grid>
+                    {loadingDetails ? (
+                        <Box display="flex" justifyContent="center" p={3}>
+                            <CircularProgress />
+                        </Box>
+                    ) : attendanceDetails ? (
+                        <Box>
+                            {/* Resumen */}
+                            <Box mb={3}>
+                                <Grid container spacing={2}>
+                                    <Grid item xs={12} sm={6}>
+                                        <Card variant="outlined">
+                                            <CardContent>
+                                                <Typography variant="h6" color="success.main">
+                                                    {attendanceDetails.students?.present?.length || 0}
+                                                </Typography>
+                                                <Typography variant="body2" color="textSecondary">
+                                                    Alumnos Presentes
+                                                </Typography>
+                                            </CardContent>
+                                        </Card>
                                     </Grid>
-                                </Box>
-
-                                {/* Lista de Presentes */}
-                                {attendanceDetails.students?.present && attendanceDetails.students.present.length > 0 && (
-                                    <Box mb={3}>
-                                        <Typography variant="subtitle1" gutterBottom color="success.main" fontWeight="bold">
-                                            ✓ Presentes ({attendanceDetails.students.present.length})
-                                        </Typography>
-                                        <List dense>
-                                            {attendanceDetails.students.present.map((student) => (
-                                                <ListItem key={student.id}>
-                                                    <ListItemIcon>
-                                                        <CheckCircleIcon color="success" />
-                                                    </ListItemIcon>
-                                                    <ListItemText primary={student.fullName} />
-                                                </ListItem>
-                                            ))}
-                                        </List>
-                                        <Divider />
-                                    </Box>
-                                )}
-
-                                {/* Lista de Ausentes */}
-                                {attendanceDetails.students?.absent && attendanceDetails.students.absent.length > 0 && (
-                                    <Box>
-                                        <Typography variant="subtitle1" gutterBottom color="error.main" fontWeight="bold">
-                                            ✗ Ausentes ({attendanceDetails.students.absent.length})
-                                        </Typography>
-                                        <List dense>
-                                            {attendanceDetails.students.absent.map((student) => (
-                                                <ListItem key={student.id}>
-                                                    <ListItemIcon>
-                                                        <CancelIcon color="error" />
-                                                    </ListItemIcon>
-                                                    <ListItemText primary={student.fullName} />
-                                                </ListItem>
-                                            ))}
-                                        </List>
-                                    </Box>
-                                )}
-
-                                {(!attendanceDetails.students?.present?.length && !attendanceDetails.students?.absent?.length) && (
-                                    <Typography align="center" color="textSecondary">
-                                        No hay información de estudiantes para este registro
-                                    </Typography>
-                                )}
+                                    <Grid item xs={12} sm={6}>
+                                        <Card variant="outlined">
+                                            <CardContent>
+                                                <Typography variant="h6" color="error.main">
+                                                    {attendanceDetails.students?.absent?.length || 0}
+                                                </Typography>
+                                                <Typography variant="body2" color="textSecondary">
+                                                    Alumnos Ausentes
+                                                </Typography>
+                                            </CardContent>
+                                        </Card>
+                                    </Grid>
+                                </Grid>
                             </Box>
-                        ) : (
-                            <Typography align="center" color="textSecondary">
-                                No se pudieron cargar los detalles
-                            </Typography>
-                        )}
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCloseModal} color="primary">
-                            Cerrar
-                        </Button>
-                    </DialogActions>
-                </Dialog>
+
+                            {/* Lista de Presentes */}
+                            {attendanceDetails.students?.present && attendanceDetails.students.present.length > 0 && (
+                                <Box mb={3}>
+                                    <Typography variant="subtitle1" gutterBottom color="success.main" fontWeight="bold">
+                                        ✓ Presentes ({attendanceDetails.students.present.length})
+                                    </Typography>
+                                    <List dense>
+                                        {attendanceDetails.students.present.map((student) => (
+                                            <ListItem key={student.id}>
+                                                <ListItemIcon>
+                                                    <CheckCircleIcon color="success" />
+                                                </ListItemIcon>
+                                                <ListItemText primary={student.fullName} />
+                                            </ListItem>
+                                        ))}
+                                    </List>
+                                    <Divider />
+                                </Box>
+                            )}
+
+                            {/* Lista de Ausentes */}
+                            {attendanceDetails.students?.absent && attendanceDetails.students.absent.length > 0 && (
+                                <Box>
+                                    <Typography variant="subtitle1" gutterBottom color="error.main" fontWeight="bold">
+                                        ✗ Ausentes ({attendanceDetails.students.absent.length})
+                                    </Typography>
+                                    <List dense>
+                                        {attendanceDetails.students.absent.map((student) => (
+                                            <ListItem key={student.id}>
+                                                <ListItemIcon>
+                                                    <CancelIcon color="error" />
+                                                </ListItemIcon>
+                                                <ListItemText primary={student.fullName} />
+                                            </ListItem>
+                                        ))}
+                                    </List>
+                                </Box>
+                            )}
+
+                            {(!attendanceDetails.students?.present?.length && !attendanceDetails.students?.absent?.length) && (
+                                <Typography align="center" color="textSecondary">
+                                    No hay información de estudiantes para este registro
+                                </Typography>
+                            )}
+                        </Box>
+                    ) : (
+                        <Typography align="center" color="textSecondary">
+                            No se pudieron cargar los detalles
+                        </Typography>
+                    )}
+                </AppDialog>
             </PageContainer>
     );
 };

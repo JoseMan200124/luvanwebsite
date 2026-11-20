@@ -7,22 +7,11 @@ import {
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    TablePagination,
     CircularProgress,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Button,
     IconButton,
     Tooltip,
-    useTheme,
-    useMediaQuery,
-    Box,
-    TableSortLabel
+    Box
 } from '@mui/material';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
@@ -31,15 +20,20 @@ import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { matchSearchTokens } from '../utils/clientFilter';
-import styled from 'styled-components';
+import useTableState from '../hooks/useTableState';
+import useIsMobile from '../hooks/useIsMobile';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import { MobileCard, MobileField } from '../components/table/MobileCard';
+import { sortRows } from '../utils/tableSort';
 import { Visibility as VisibilityIcon } from '@mui/icons-material';
-import moment from 'moment-timezone';
 
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
-
-moment.tz.setDefault('America/Guatemala');
+import { formatDateTime } from '../utils/dateFormat';
+import AppDialog from '../components/dialogs/AppDialog';
 
 // Contenedor principal
 // Helper para agrupar por colegio (school)
@@ -55,70 +49,14 @@ const groupBySchool = (arr) => {
     return result;
 };
 
-// Componentes para la vista móvil (tarjetas)
-const MobileCard = styled(Paper)`
-    padding: 16px;
-    margin-bottom: 16px;
-`;
-
-const MobileField = styled(Box)`
-    margin-bottom: 8px;
-    display: flex;
-    flex-direction: column;
-`;
-
-const MobileLabel = styled(Typography)`
-    font-weight: bold;
-    font-size: 0.875rem;
-    color: #555;
-`;
-
-const MobileValue = styled(Typography)`
-    font-size: 1rem;
-`;
-
-/* ========== Código para ordenamiento ========== */
-function descendingComparator(a, b, orderBy) {
-    const aValue = getFieldValue(a, orderBy);
-    const bValue = getFieldValue(b, orderBy);
-    if (aValue == null && bValue == null) {
-        return 0;
-    }
-    if (aValue == null) {
-        return 1;
-    }
-    if (bValue == null) {
-        return -1;
-    }
-    if (typeof aValue === 'string' && typeof bValue === 'string') {
-        return bValue.localeCompare(aValue);
-    }
-    if (bValue < aValue) {
-        return -1;
-    }
-    if (bValue > aValue) {
-        return 1;
-    }
-    return 0;
-}
-
-function getComparator(order, orderBy) {
-    return order === 'desc'
-        ? (a, b) => descendingComparator(a, b, orderBy)
-        : (a, b) => -descendingComparator(a, b, orderBy);
-}
-
-function stableSort(array, comparator) {
-    const stabilizedThis = array.map((el, index) => [el, index]);
-    stabilizedThis.sort((a, b) => {
-        const order = comparator(a[0], b[0]);
-        if (order !== 0) {
-            return order;
-        }
-        return a[1] - b[1];
-    });
-    return stabilizedThis.map((el) => el[0]);
-}
+// Columnas de la tabla de monitores
+const COLUMNS = [
+    { id: 'name', label: 'Nombre', sortable: true },
+    { id: 'email', label: 'Email', sortable: true },
+    { id: 'phoneNumber', label: 'Teléfono', sortable: true },
+    { id: 'incidentsCount', label: 'Incidentes', sortable: true },
+    { id: 'emergenciesCount', label: 'Emergencias', sortable: true },
+];
 
 /**
  * Extrae el valor a ordenar a partir de un monitor según la columna.
@@ -139,34 +77,21 @@ function getFieldValue(monitor, field) {
             return '';
     }
 }
-/* ========== Fin código para ordenamiento ========== */
 
 const MonitorsManagementPage = () => {
     const { auth } = useContext(AuthContext);
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
 
     const [monitors, setMonitors] = useState([]);
     const [loading, setLoading] = useState(false);
 
-    // Para búsqueda y paginación
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
+    // Para búsqueda, paginación y ordenamiento
+    const table = useTableState();
     const pageFilters = useFilters({
         fields: [F.search('search', { placeholder: 'Nombre o correo' })],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const { search: searchQuery } = pageFilters.applied;
-
-    // Estados para ordenamiento (agregados)
-    const [order, setOrder] = useState('asc');
-    const [orderBy, setOrderBy] = useState('');
-
-    const handleRequestSort = (property) => {
-        const isAsc = orderBy === property && order === 'asc';
-        setOrder(isAsc ? 'desc' : 'asc');
-        setOrderBy(property);
-    };
 
     // Diálogos para ver detalles de incidentes/emergencias
     const [openIncidentsDialog, setOpenIncidentsDialog] = useState(false);
@@ -202,15 +127,6 @@ const MonitorsManagementPage = () => {
 
     // Filtrado por texto
     const filteredMonitors = monitors.filter((m) => matchSearchTokens(searchQuery, [m.name, m.email]));
-
-    // Manejo de paginación
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
 
     // Para mostrar el diálogo de incidentes
     const handleViewIncidents = (monitor) => {
@@ -257,8 +173,9 @@ const MonitorsManagementPage = () => {
                     ) : (
                         schoolKeys.map((school) => {
                             const data = groupedData[school];
-                            // Aplicar ordenamiento a los monitores del grupo
-                            const sortedData = stableSort(data, getComparator(order, orderBy));
+                            // Aplicar ordenamiento y paginación a los monitores del grupo
+                            const sortedData = sortRows(data, { orderBy: table.orderBy, order: table.order, getValue: getFieldValue });
+                            const pageData = table.paginate(sortedData);
                             return (
                                 <Paper key={school} sx={{ mb: 4, p: 2 }}>
                                     <Typography variant="h6" sx={{ mb: 2 }}>
@@ -267,177 +184,81 @@ const MonitorsManagementPage = () => {
 
                                     {isMobile ? (
                                         // Vista móvil: tarjetas
-                                        <>
-                                            {sortedData
-                                                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                                .map((monitor) => (
-                                                    <MobileCard key={monitor.email}>
-                                                        <MobileField>
-                                                            <MobileLabel>Nombre</MobileLabel>
-                                                            <MobileValue>{monitor.name}</MobileValue>
-                                                        </MobileField>
-                                                        <MobileField>
-                                                            <MobileLabel>Email</MobileLabel>
-                                                            <MobileValue>{monitor.email}</MobileValue>
-                                                        </MobileField>
-                                                        <MobileField>
-                                                            <MobileLabel>Teléfono</MobileLabel>
-                                                            <MobileValue>{monitor.phoneNumber || '—'}</MobileValue>
-                                                        </MobileField>
-                                                        <MobileField>
-                                                            <MobileLabel>Incidentes</MobileLabel>
-                                                            <MobileValue style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        pageData.map((monitor) => (
+                                            <MobileCard key={monitor.email}>
+                                                <MobileField label="Nombre">{monitor.name}</MobileField>
+                                                <MobileField label="Email">{monitor.email}</MobileField>
+                                                <MobileField label="Teléfono">{monitor.phoneNumber || '—'}</MobileField>
+                                                <MobileField label="Incidentes">
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                        <Tooltip title="Ver detalles de incidentes">
+                                                            <IconButton
+                                                                onClick={() => handleViewIncidents(monitor)}
+                                                                color={monitor.incidentsCount > 0 ? 'error' : 'default'}
+                                                                size="small"
+                                                            >
+                                                                <VisibilityIcon fontSize="small" />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                        {monitor.incidentsCount || 0}
+                                                    </Box>
+                                                </MobileField>
+                                                <MobileField label="Emergencias">
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                        <Tooltip title="Ver detalles de emergencias">
+                                                            <IconButton
+                                                                onClick={() => handleViewEmergencies(monitor)}
+                                                                color={monitor.emergenciesCount > 0 ? 'error' : 'default'}
+                                                                size="small"
+                                                            >
+                                                                <VisibilityIcon fontSize="small" />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                        {monitor.emergenciesCount || 0}
+                                                    </Box>
+                                                </MobileField>
+                                            </MobileCard>
+                                        ))
+                                    ) : (
+                                        // Vista desktop: tabla
+                                        <AppTableContainer>
+                                            <Table sx={{ minWidth: 760 }}>
+                                                <SortableTableHead columns={COLUMNS} {...table.sortProps} showSortIcons />
+                                                <TableBody>
+                                                    {pageData.map((monitor) => (
+                                                        <TableRow key={monitor.email}>
+                                                            <TableCell>{monitor.name}</TableCell>
+                                                            <TableCell>{monitor.email}</TableCell>
+                                                            <TableCell>{monitor.phoneNumber || '—'}</TableCell>
+                                                            <TableCell>
                                                                 <Tooltip title="Ver detalles de incidentes">
                                                                     <IconButton
                                                                         onClick={() => handleViewIncidents(monitor)}
                                                                         color={monitor.incidentsCount > 0 ? 'error' : 'default'}
-                                                                        size="small"
                                                                     >
-                                                                        <VisibilityIcon fontSize="small" />
+                                                                        <VisibilityIcon />
                                                                     </IconButton>
                                                                 </Tooltip>
                                                                 {monitor.incidentsCount || 0}
-                                                            </MobileValue>
-                                                        </MobileField>
-                                                        <MobileField>
-                                                            <MobileLabel>Emergencias</MobileLabel>
-                                                            <MobileValue style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                            </TableCell>
+                                                            <TableCell>
                                                                 <Tooltip title="Ver detalles de emergencias">
                                                                     <IconButton
                                                                         onClick={() => handleViewEmergencies(monitor)}
                                                                         color={monitor.emergenciesCount > 0 ? 'error' : 'default'}
-                                                                        size="small"
                                                                     >
-                                                                        <VisibilityIcon fontSize="small" />
+                                                                        <VisibilityIcon />
                                                                     </IconButton>
                                                                 </Tooltip>
                                                                 {monitor.emergenciesCount || 0}
-                                                            </MobileValue>
-                                                        </MobileField>
-                                                    </MobileCard>
-                                                ))}
-                                            <TablePagination
-                                                component="div"
-                                                count={sortedData.length}
-                                                page={page}
-                                                onPageChange={handleChangePage}
-                                                rowsPerPage={rowsPerPage}
-                                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                                rowsPerPageOptions={[5, 10, 25]}
-                                                labelRowsPerPage="Filas por página"
-                                            />
-                                        </>
-                                    ) : (
-                                        // Vista desktop: tabla
-                                        <>
-                                            <TableContainer sx={{ overflowX: 'auto' }}>
-                                                <Table sx={{ minWidth: 760 }}>
-                                                    <TableHead>
-                                                        <TableRow>
-                                                            <TableCell sortDirection={orderBy === 'name' ? order : false}>
-                                                                <TableSortLabel
-                                                                    active={orderBy === 'name'}
-                                                                    direction={orderBy === 'name' ? order : 'asc'}
-                                                                    onClick={() => handleRequestSort('name')}
-                                                                    hideSortIcon={false}
-                                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                                >
-                                                                    Nombre
-                                                                </TableSortLabel>
-                                                            </TableCell>
-                                                            <TableCell sortDirection={orderBy === 'email' ? order : false}>
-                                                                <TableSortLabel
-                                                                    active={orderBy === 'email'}
-                                                                    direction={orderBy === 'email' ? order : 'asc'}
-                                                                    onClick={() => handleRequestSort('email')}
-                                                                    hideSortIcon={false}
-                                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                                >
-                                                                    Email
-                                                                </TableSortLabel>
-                                                            </TableCell>
-                                                            <TableCell sortDirection={orderBy === 'phoneNumber' ? order : false}>
-                                                                <TableSortLabel
-                                                                    active={orderBy === 'phoneNumber'}
-                                                                    direction={orderBy === 'phoneNumber' ? order : 'asc'}
-                                                                    onClick={() => handleRequestSort('phoneNumber')}
-                                                                    hideSortIcon={false}
-                                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                                >
-                                                                    Teléfono
-                                                                </TableSortLabel>
-                                                            </TableCell>
-                                                            <TableCell sortDirection={orderBy === 'incidentsCount' ? order : false}>
-                                                                <TableSortLabel
-                                                                    active={orderBy === 'incidentsCount'}
-                                                                    direction={orderBy === 'incidentsCount' ? order : 'asc'}
-                                                                    onClick={() => handleRequestSort('incidentsCount')}
-                                                                    hideSortIcon={false}
-                                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                                >
-                                                                    Incidentes
-                                                                </TableSortLabel>
-                                                            </TableCell>
-                                                            <TableCell sortDirection={orderBy === 'emergenciesCount' ? order : false}>
-                                                                <TableSortLabel
-                                                                    active={orderBy === 'emergenciesCount'}
-                                                                    direction={orderBy === 'emergenciesCount' ? order : 'asc'}
-                                                                    onClick={() => handleRequestSort('emergenciesCount')}
-                                                                    hideSortIcon={false}
-                                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                                >
-                                                                    Emergencias
-                                                                </TableSortLabel>
                                                             </TableCell>
                                                         </TableRow>
-                                                    </TableHead>
-                                                    <TableBody>
-                                                        {stableSort(sortedData, getComparator(order, orderBy))
-                                                            .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                                                            .map((monitor) => (
-                                                                <TableRow key={monitor.email}>
-                                                                    <TableCell>{monitor.name}</TableCell>
-                                                                    <TableCell>{monitor.email}</TableCell>
-                                                                    <TableCell>{monitor.phoneNumber || '—'}</TableCell>
-                                                                    <TableCell>
-                                                                        <Tooltip title="Ver detalles de incidentes">
-                                                                            <IconButton
-                                                                                onClick={() => handleViewIncidents(monitor)}
-                                                                                color={monitor.incidentsCount > 0 ? 'error' : 'default'}
-                                                                            >
-                                                                                <VisibilityIcon />
-                                                                            </IconButton>
-                                                                        </Tooltip>
-                                                                        {monitor.incidentsCount || 0}
-                                                                    </TableCell>
-                                                                    <TableCell>
-                                                                        <Tooltip title="Ver detalles de emergencias">
-                                                                            <IconButton
-                                                                                onClick={() => handleViewEmergencies(monitor)}
-                                                                                color={monitor.emergenciesCount > 0 ? 'error' : 'default'}
-                                                                            >
-                                                                                <VisibilityIcon />
-                                                                            </IconButton>
-                                                                        </Tooltip>
-                                                                        {monitor.emergenciesCount || 0}
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            ))}
-                                                    </TableBody>
-                                                </Table>
-                                            </TableContainer>
-                                            <TablePagination
-                                                component="div"
-                                                count={sortedData.length}
-                                                page={page}
-                                                onPageChange={handleChangePage}
-                                                rowsPerPage={rowsPerPage}
-                                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                                rowsPerPageOptions={[5, 10, 25]}
-                                                labelRowsPerPage="Filas por página"
-                                            />
-                                        </>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </AppTableContainer>
                                     )}
+                                    <AppTablePagination count={sortedData.length} {...table.paginationProps} />
                                 </Paper>
                             );
                         })
@@ -446,70 +267,62 @@ const MonitorsManagementPage = () => {
             )}
 
             {/* Diálogo de Incidentes */}
-            <Dialog open={openIncidentsDialog} onClose={handleCloseIncidentsDialog} maxWidth="sm">
-                <DialogTitle>Incidentes Reportados</DialogTitle>
-                <DialogContent dividers>
-                    {incidentsList.length === 0 ? (
-                        <Typography variant="body2">
-                            No hay incidentes registrados para este monitor.
-                        </Typography>
-                    ) : (
-                        incidentsList.map((inc, index) => {
-                            const formattedDate = moment(inc.date)
-                                .tz('America/Guatemala')
-                                .format('DD/MM/YYYY HH:mm:ss');
-                            return (
-                                <div key={index} style={{ marginBottom: '8px' }}>
-                                    <Typography variant="body2" color="textSecondary">
-                                        <strong>Fecha/Hora:</strong> {formattedDate}
-                                    </Typography>
-                                    <Typography variant="body2">
-                                        {inc.desc || 'Descripción no disponible'}
-                                    </Typography>
-                                </div>
-                            );
-                        })
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseIncidentsDialog} variant="outlined">
-                        Cerrar
-                    </Button>
-                </DialogActions>
-            </Dialog>
+            <AppDialog
+                open={openIncidentsDialog}
+                onClose={handleCloseIncidentsDialog}
+                title="Incidentes reportados"
+                size="sm"
+                readOnly
+            >
+                {incidentsList.length === 0 ? (
+                    <Typography variant="body2">
+                        No hay incidentes registrados para este monitor.
+                    </Typography>
+                ) : (
+                    incidentsList.map((inc, index) => {
+                        const formattedDate = formatDateTime(inc.date);
+                        return (
+                            <div key={index} style={{ marginBottom: '8px' }}>
+                                <Typography variant="body2" color="textSecondary">
+                                    <strong>Fecha/Hora:</strong> {formattedDate}
+                                </Typography>
+                                <Typography variant="body2">
+                                    {inc.desc || 'Descripción no disponible'}
+                                </Typography>
+                            </div>
+                        );
+                    })
+                )}
+            </AppDialog>
 
             {/* Diálogo de Emergencias */}
-            <Dialog open={openEmergenciesDialog} onClose={handleCloseEmergenciesDialog} maxWidth="sm">
-                <DialogTitle>Emergencias Reportadas</DialogTitle>
-                <DialogContent dividers>
-                    {emergenciesList.length === 0 ? (
-                        <Typography variant="body2">
-                            No hay emergencias registradas para este monitor.
-                        </Typography>
-                    ) : (
-                        emergenciesList.map((eme, index) => {
-                            const formattedDate = moment(eme.date)
-                                .tz('America/Guatemala')
-                                .format('DD/MM/YYYY HH:mm:ss');
-                            return (
-                                <div key={index} style={{ marginBottom: '8px' }}>
-                                    <Typography variant="body2" color="textSecondary">
-                                        <strong>Fecha/Hora:</strong> {formattedDate}
-                                    </Typography>
-                                    <Typography variant="body2">
-                                        {eme.desc || 'Descripción no disponible'}
-                                    </Typography>
-                                </div>
-                            );
-                        })
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseEmergenciesDialog} variant="outlined">
-                        Cerrar
-                    </Button>
-                </DialogActions>
-            </Dialog>
+            <AppDialog
+                open={openEmergenciesDialog}
+                onClose={handleCloseEmergenciesDialog}
+                title="Emergencias reportadas"
+                size="sm"
+                readOnly
+            >
+                {emergenciesList.length === 0 ? (
+                    <Typography variant="body2">
+                        No hay emergencias registradas para este monitor.
+                    </Typography>
+                ) : (
+                    emergenciesList.map((eme, index) => {
+                        const formattedDate = formatDateTime(eme.date);
+                        return (
+                            <div key={index} style={{ marginBottom: '8px' }}>
+                                <Typography variant="body2" color="textSecondary">
+                                    <strong>Fecha/Hora:</strong> {formattedDate}
+                                </Typography>
+                                <Typography variant="body2">
+                                    {eme.desc || 'Descripción no disponible'}
+                                </Typography>
+                            </div>
+                        );
+                    })
+                )}
+            </AppDialog>
         </PageContainer>
     );
 };

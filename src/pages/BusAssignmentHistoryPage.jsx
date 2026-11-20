@@ -1,19 +1,16 @@
 import React, { useState, useEffect, useContext } from 'react';
 import {
+    Paper,
     Box,
     Card,
     CardContent,
     Chip,
     CircularProgress,
     Alert,
-    Paper,
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    TablePagination,
     Typography
 } from '@mui/material';
 import {
@@ -35,15 +32,11 @@ import { F } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
-
-moment.tz.setDefault('America/Guatemala');
-
-const formatGuatemalaDatetime = (dateString) => {
-    if (!dateString) {
-        return '—';
-    }
-    return moment.utc(dateString).tz('America/Guatemala').format('DD/MM/YYYY, hh:mm a');
-};
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import { formatDateTime, formatDate } from '../utils/dateFormat';
 
 const safeParseJson = (v) => {
     if (!v) {
@@ -319,13 +312,23 @@ const renderChangeDetailCell = (ctype, fromText, toText) => {
     return <Typography variant="body2" color="text.secondary">—</Typography>;
 };
 
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'fecha_y_hora', label: 'Fecha y hora' },
+    { id: 'tipo_de_cambio', label: 'Tipo de cambio' },
+    { id: 'bus', label: 'Bus' },
+    { id: 'cambio_realizado', label: 'Cambio realizado' },
+    { id: 'quien', label: 'Quién' },
+];
+
 const BusAssignmentHistoryPage = () => {
     const { auth } = useContext(AuthContext);
     const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(25);
+    // Paginación (en el servidor)
+    const table = useTableState();
+    const { page, rowsPerPage } = table;
     const [totalRecords, setTotalRecords] = useState(0);
 
     const [buses, setBuses] = useState([]);
@@ -347,7 +350,7 @@ const BusAssignmentHistoryPage = () => {
             F.select('changeType', { label: 'Tipo de cambio', options: CHANGE_TYPE_LABELS }),
             F.dateRange('dates'),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const { cycle: selectedCicloEscolar, client: selectedClient, changeType: changeTypeFilter, dates } = pageFilters.applied;
     const busId = pageFilters.applied.bus?.value || '';
@@ -482,9 +485,6 @@ const BusAssignmentHistoryPage = () => {
         fetchCatalogs();
     }, [fetchCatalogs]);
 
-    const handleChangePage = (event, newPage) => setPage(newPage);
-    const handleChangeRowsPerPage = (event) => { setRowsPerPage(Number.parseInt(event.target.value, 10)); setPage(0); };
-
     return (
         <PageContainer width="xl">
             <PageHeader
@@ -520,7 +520,7 @@ const BusAssignmentHistoryPage = () => {
                         {isSpecificCicloEscolarSelected && 'Al filtrar por ciclo escolar, los registros de corporaciones se incluyen siempre, porque las corporaciones son válidas en todos los ciclos.'}
                         {isSpecificCicloEscolarSelected && startDate && endDate && <br />}
                         {startDate && endDate && (
-                            <>Mostrando cambios desde <strong>{moment(startDate).format('DD/MM/YYYY')}</strong> hasta <strong>{moment(endDate).format('DD/MM/YYYY')}</strong></>
+                            <>Mostrando cambios desde <strong>{formatDate(startDate)}</strong> hasta <strong>{formatDate(endDate)}</strong></>
                         )}
                     </>
                 ) : undefined}
@@ -538,17 +538,9 @@ const BusAssignmentHistoryPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
+                            <AppTableContainer component={Paper} variant="outlined">
                                 <Table sx={{ minWidth: 1000 }}>
-                                    <TableHead>
-                                        <TableRow sx={{ bgcolor: 'grey.100' }}>
-                                            <TableCell sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>Fecha y hora</TableCell>
-                                            <TableCell sx={{ fontWeight: 700 }}>Tipo de cambio</TableCell>
-                                            <TableCell sx={{ fontWeight: 700 }}>Bus</TableCell>
-                                            <TableCell sx={{ fontWeight: 700 }}>Cambio realizado</TableCell>
-                                            <TableCell sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>Quién</TableCell>
-                                        </TableRow>
-                                    </TableHead>
+                                    <SortableTableHead columns={COLUMNS} cellSx={{ fontWeight: 700 }} rowSx={{ bgcolor: 'grey.100' }} />
                                     <TableBody>
                                         {history.length === 0 ? (
                                             <TableRow>
@@ -578,7 +570,7 @@ const BusAssignmentHistoryPage = () => {
                                                         {/* Fecha y hora */}
                                                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                                                             <Typography variant="body2">
-                                                                {formatGuatemalaDatetime(record.createdAt)}
+                                                                {formatDateTime(record.createdAt, { utc: true })}
                                                             </Typography>
                                                         </TableCell>
 
@@ -627,18 +619,8 @@ const BusAssignmentHistoryPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={totalRecords}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                rowsPerPageOptions={[10, 25, 50, 100]}
-                                labelRowsPerPage="Filas por página:"
-                                labelDisplayedRows={({ from, to, count }) => `${from}-${to} de ${count}`}
-                            />
+                            </AppTableContainer>
+                            <AppTablePagination count={totalRecords} {...table.paginationProps} />
                         </>
                     )}
                 </CardContent>

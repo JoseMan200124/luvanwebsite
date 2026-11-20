@@ -15,28 +15,17 @@ import {
     Chip,
     IconButton,
     Tooltip,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     Button,
-    Snackbar,
-    Alert,
     AccordionActions,
     Divider,
     TextField,
-    TablePagination,
     FormControl,
     InputLabel,
     Select,
     MenuItem,
     FormControlLabel,
     Switch,
-    useTheme,
-    useMediaQuery,
-    Box,
-    TableSortLabel,
-    TableContainer
+    Box
 } from '@mui/material';
 import {
     ExpandMore as ExpandMoreIcon,
@@ -46,7 +35,8 @@ import {
     LocalHospital as HospitalIcon,
     Build as BuildIcon,
     LocationOn as LocationOnIcon,
-    Report as ReportIcon
+    Report as ReportIcon,
+    ReceiptLong as ReceiptLongIcon
 } from '@mui/icons-material';
 
 import {
@@ -65,27 +55,23 @@ import {
 import tw, { styled } from 'twin.macro';
 import api from '../utils/axiosConfig';
 import usePermissions from '../hooks/usePermissions';
+import useNotify from '../hooks/useNotify';
+import { validate, hasErrors, focusFirstError, clearError } from '../utils/validators';
 import moment from 'moment-timezone';
-
-moment.tz.setDefault('America/Guatemala');
+import useTableState from '../hooks/useTableState';
+import useIsMobile from '../hooks/useIsMobile';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import { MobileCard, MobileField } from '../components/table/MobileCard';
+import { sortRows } from '../utils/tableSort';
+import { formatDateTime, formatDate } from '../utils/dateFormat';
+import { formatQ } from '../utils/currency';
+import AppDialog from '../components/dialogs/AppDialog';
 
 // -------------
 // Funciones de formateo
 // -------------
-const formatGuatemalaDatetime = (dateString) => {
-    if (!dateString) {
-        return '—';
-    }
-    return moment.utc(dateString).tz('America/Guatemala').format('DD/MM/YYYY HH:mm');
-};
-
-const formatGuatemalaDate = (dateString) => {
-    if (!dateString) {
-        return '—';
-    }
-    return moment.utc(dateString).tz('America/Guatemala').format('DD/MM/YYYY');
-};
-
 // -------------
 // Estilos con twin.macro
 // -------------
@@ -148,66 +134,7 @@ const FiltersRow = tw.div`
     items-center
 `;
 
-const MobileCard = styled(Paper)(() => [
-    tw`p-4 mb-4`,
-    { backgroundColor: '#fff' }
-]);
-const MobileField = styled(Box)(() => [
-    tw`mb-2`
-]);
-const MobileLabel = styled(Typography)(() => [
-    tw`font-bold text-sm`,
-    { color: '#555' }
-]);
-const MobileValue = styled(Typography)(() => [
-    tw`text-base`
-]);
-
-// =================== Código para ordenamiento ===================
-function descendingComparator(a, b, orderBy, type) {
-    const aValue = getFieldValue(a, orderBy, type);
-    const bValue = getFieldValue(b, orderBy, type);
-
-    if (aValue == null && bValue == null) {
-        return 0;
-    }
-    if (aValue == null) {
-        return 1;
-    }
-    if (bValue == null) {
-        return -1;
-    }
-
-    if (typeof aValue === 'string' && typeof bValue === 'string') {
-        return bValue.localeCompare(aValue);
-    }
-    if (bValue < aValue) {
-        return -1;
-    }
-    if (bValue > aValue) {
-        return 1;
-    }
-    return 0;
-}
-
-function getComparator(order, orderBy, type) {
-    return order === 'desc'
-        ? (a, b) => descendingComparator(a, b, orderBy, type)
-        : (a, b) => -descendingComparator(a, b, orderBy, type);
-}
-
-function stableSort(array, comparator) {
-    const stabilizedThis = array.map((el, index) => [el, index]);
-    stabilizedThis.sort((a, b) => {
-        const order = comparator(a[0], b[0]);
-        if (order !== 0) {
-            return order;
-        }
-        return a[1] - b[1];
-    });
-    return stabilizedThis.map((el) => el[0]);
-}
-
+// =================== Valores para ordenamiento ===================
 function getFieldValue(item, field, type) {
     if (type === 'buses') {
         switch (field) {
@@ -270,9 +197,45 @@ function getFieldValue(item, field, type) {
 }
 // =================== Fin código para ordenamiento ===================
 
+// Columnas de la tabla
+const BUS_COLUMNS = [
+    { id: 'plate', label: 'Placa', sortable: true },
+    { id: 'pilot', label: 'Piloto', sortable: true },
+    { id: 'monitora', label: 'Monitora', sortable: true },
+    { id: 'description', label: 'Descripción', sortable: true },
+];
+
+// Columnas de la tabla
+const INCIDENT_COLUMNS = [
+    { id: 'fecha', label: 'Fecha', sortable: true },
+    { id: 'piloto', label: 'Piloto', sortable: true },
+    { id: 'tipo_gravedad', label: 'Tipo (Gravedad)' },
+    { id: 'tipoFalla', label: 'Tipo de Falla', sortable: true },
+    { id: 'descripcion', label: 'Descripción', sortable: true },
+    { id: 'continuo', label: '¿Continuó?' },
+    { id: 'bus_suplente', label: '¿Bus Suplente?' },
+];
+
+// Columnas de la tabla
+const EMERGENCY_COLUMNS = [
+    { id: 'fecha', label: 'Fecha', sortable: true },
+    { id: 'piloto', label: 'Piloto', sortable: true },
+    { id: 'mensaje', label: 'Mensaje' },
+    { id: 'ubicacion_lat_lng', label: 'Ubicación (Lat,Lng)' },
+];
+
+// Columnas de la tabla
+const PAYMENT_COLUMNS = [
+    { id: 'padre_usuario', label: 'Padre (Usuario)' },
+    { id: 'email', label: 'Email' },
+    { id: 'finalStatus', label: 'Estado', sortable: true },
+    { id: 'nextPaymentDate', label: 'Próximo Pago', sortable: true },
+    { id: 'leftover', label: 'Saldo', sortable: true },
+    { id: 'acciones', label: 'Acciones' },
+];
+
 const ActivityLogPage = () => {
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
 
     const { hasPermission } = usePermissions();
     const puedeVerPagos = hasPermission('pagos-listar');
@@ -290,11 +253,7 @@ const ActivityLogPage = () => {
     const [loadingPayments, setLoadingPayments] = useState(false);
     const [loadingBoletas, setLoadingBoletas] = useState(false);
 
-    const [snackbar, setSnackbar] = useState({
-        open: false,
-        message: '',
-        severity: 'info'
-    });
+    const notify = useNotify();
 
     const [openBoletasDialog, setOpenBoletasDialog] = useState(false);
     const [currentBoletas, setCurrentBoletas] = useState([]);
@@ -314,71 +273,35 @@ const ActivityLogPage = () => {
         otroFallaDetalle: ''
     });
 
+    const [incidentErrors, setIncidentErrors] = useState({});
+
     const [expanded, setExpanded] = useState(false);
 
     // Filtros & Paginación
     const [busPilotFilter, setBusPilotFilter] = useState('');
     const [busMonitoraFilter, setBusMonitoraFilter] = useState('');
     const [busDescriptionFilter, setBusDescriptionFilter] = useState('');
-    const [busPage, setBusPage] = useState(0);
-    const [busRowsPerPage, setBusRowsPerPage] = useState(5);
 
     const [incDateFrom, setIncDateFrom] = useState('');
     const [incDateTo, setIncDateTo] = useState('');
     const [incPilotFilter, setIncPilotFilter] = useState('');
     const [incDescriptionFilter, setIncDescriptionFilter] = useState('');
-    const [incPage, setIncPage] = useState(0);
-    const [incRowsPerPage, setIncRowsPerPage] = useState(5);
 
     const [emeDateFrom, setEmeDateFrom] = useState('');
     const [emeDateTo, setEmeDateTo] = useState('');
     const [emePilotFilter, setEmePilotFilter] = useState('');
-    const [emePage, setEmePage] = useState(0);
-    const [emeRowsPerPage, setEmeRowsPerPage] = useState(5);
 
     const [payDateFrom, setPayDateFrom] = useState('');
     const [payDateTo, setPayDateTo] = useState('');
     const [payBalanceMin, setPayBalanceMin] = useState('');
     const [payBalanceMax, setPayBalanceMax] = useState('');
-    const [payPage, setPayPage] = useState(0);
-    const [payRowsPerPage, setPayRowsPerPage] = useState(10);
     
 
-    // Orden Buses
-    const [busOrder, setBusOrder] = useState('asc');
-    const [busOrderBy, setBusOrderBy] = useState('plate');
-    const handleRequestBusSort = (property) => {
-        const isAsc = busOrderBy === property && busOrder === 'asc';
-        setBusOrder(isAsc ? 'desc' : 'asc');
-        setBusOrderBy(property);
-    };
-
-    // Orden Incidentes
-    const [incOrder, setIncOrder] = useState('asc');
-    const [incOrderBy, setIncOrderBy] = useState('');
-    const handleRequestIncSort = (property) => {
-        const isAsc = incOrderBy === property && incOrder === 'asc';
-        setIncOrder(isAsc ? 'desc' : 'asc');
-        setIncOrderBy(property);
-    };
-
-    // Orden Emergencias
-    const [emeOrder, setEmeOrder] = useState('asc');
-    const [emeOrderBy, setEmeOrderBy] = useState('');
-    const handleRequestEmeSort = (property) => {
-        const isAsc = emeOrderBy === property && emeOrder === 'asc';
-        setEmeOrder(isAsc ? 'desc' : 'asc');
-        setEmeOrderBy(property);
-    };
-
-    // Orden Pagos
-    const [payOrder, setPayOrder] = useState('asc');
-    const [payOrderBy, setPayOrderBy] = useState('');
-    const handleRequestPaySort = (property) => {
-        const isAsc = payOrderBy === property && payOrder === 'asc';
-        setPayOrder(isAsc ? 'desc' : 'asc');
-        setPayOrderBy(property);
-    };
+    const busTable = useTableState({ defaultOrderBy: 'plate' });
+    const incTable = useTableState();
+    const emeTable = useTableState();
+    const payTable = useTableState();
+    const { page: payPage, rowsPerPage: payRowsPerPage, order: payOrder, orderBy: payOrderBy } = payTable;
 
     useEffect(() => {
         fetchAllData();
@@ -405,11 +328,7 @@ const ActivityLogPage = () => {
             }
         } catch (error) {
             console.error('Error fetchAllData =>', error);
-            setSnackbar({
-                open: true,
-                message: 'Error al obtener datos para registro de actividades',
-                severity: 'error'
-            });
+            notify.error('Error al obtener datos para registro de actividades');
         } finally {
             setLoading(false);
         }
@@ -431,7 +350,7 @@ const ActivityLogPage = () => {
             setPayments(res.data.payments || []);
             setTotalPaymentsCount(res.data.totalCount || 0);
         } catch (error) {
-            setSnackbar({ open: true, message: 'Error al obtener pagos', severity: 'error' });
+            notify.error('Error al obtener pagos');
         } finally {
             setLoadingPayments(false);
         }
@@ -459,11 +378,7 @@ const ActivityLogPage = () => {
             setOpenBoletasDialog(true);
         } catch (error) {
             console.error('Error handleViewBoletas =>', error);
-            setSnackbar({
-                open: true,
-                message: 'Error al obtener boletas del padre',
-                severity: 'error'
-            });
+            notify.error('Error al obtener boletas del padre');
         } finally {
             setLoadingBoletas(false); // Solo para boletas
         }
@@ -487,21 +402,11 @@ const ActivityLogPage = () => {
         try {
             setLoading(true);
             await api.put(`/buses/${bus.id}/taller`, { inWorkshop: newValue });
-            setSnackbar({
-                open: true,
-                message: newValue
-                    ? 'Bus marcado como "En Taller".'
-                    : 'Bus marcado como disponible.',
-                severity: 'success'
-            });
+            notify.success(newValue ? 'Bus marcado como "En Taller".' : 'Bus marcado como disponible.');
             fetchAllData();
         } catch (error) {
             console.error('Error handleToggleBusTaller =>', error);
-            setSnackbar({
-                open: true,
-                message: 'No se pudo actualizar el estado del bus',
-                severity: 'error'
-            });
+            notify.error('No se pudo actualizar el estado del bus');
         } finally {
             setLoading(false);
         }
@@ -522,9 +427,31 @@ const ActivityLogPage = () => {
 
     const handleCloseIncidentDialog = () => {
         setOpenIncidentDialog(false);
+        setIncidentErrors({});
+    };
+    
+    const handleTraceRoute = () => {
+        const destination = `${selectedCoords.lat},${selectedCoords.lng}`;
+        const openRoute = (origin) => window.open(
+            `https://www.google.com/maps/dir/?api=1${origin ? `&origin=${origin}` : ''}&destination=${destination}`,
+            '_blank'
+        );
+        if (!navigator.geolocation) {
+            openRoute(null);
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            (pos) => openRoute(`${pos.coords.latitude},${pos.coords.longitude}`),
+            (err) => {
+                console.error('No se pudo obtener geolocalización =>', err);
+                openRoute(null);
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
     };
 
     const handleIncidentFormChange = (field, value) => {
+        setIncidentErrors((prev) => clearError(prev, field));
         setIncidentForm((prev) => ({
             ...prev,
             [field]: value
@@ -532,20 +459,14 @@ const ActivityLogPage = () => {
     };
 
     const handleSubmitIncident = async () => {
-        if (!incidentForm.descripcion) {
-            setSnackbar({
-                open: true,
-                message: 'La descripción es obligatoria para el incidente',
-                severity: 'warning'
-            });
+        const found = validate(incidentForm, { descripcion: ['required'] });
+        setIncidentErrors(found);
+        if (hasErrors(found)) {
+            focusFirstError(found);
             return;
         }
         if (!incidentForm.busId) {
-            setSnackbar({
-                open: true,
-                message: 'No se encontró el bus para el incidente.',
-                severity: 'error'
-            });
+            notify.error('No se encontró el bus para el incidente');
             return;
         }
 
@@ -563,22 +484,14 @@ const ActivityLogPage = () => {
                         ? incidentForm.otroFallaDetalle
                         : ''
             });
-            setSnackbar({
-                open: true,
-                message: 'Incidencia reportada correctamente',
-                severity: 'success'
-            });
+            notify.success('Incidencia reportada');
             setOpenIncidentDialog(false);
 
             const incResp = await api.get('/activity-logs/incidents');
             setIncidents(incResp.data.incidents || []);
         } catch (error) {
             console.error('Error al crear incidente =>', error);
-            setSnackbar({
-                open: true,
-                message: 'No se pudo reportar el incidente.',
-                severity: 'error'
-            });
+            notify.error('No se pudo reportar el incidente');
         } finally {
             setLoading(false);
         }
@@ -606,22 +519,9 @@ const ActivityLogPage = () => {
         }
         return true;
     });
-    const sortedBuses = stableSort(
-        filteredBuses,
-        getComparator(busOrder, busOrderBy, 'buses')
-    );
-    const busesPaginated = sortedBuses.slice(
-        busPage * busRowsPerPage,
-        busPage * busRowsPerPage + busRowsPerPage
-    );
+    const sortedBuses = sortRows(filteredBuses, { orderBy: busTable.orderBy, order: busTable.order, getValue: (row, field) => getFieldValue(row, field, 'buses') });
+    const busesPaginated = busTable.paginate(sortedBuses);
 
-    const handleChangeBusPage = (event, newPage) => {
-        setBusPage(newPage);
-    };
-    const handleChangeBusRowsPerPage = (event) => {
-        setBusRowsPerPage(Number.parseInt(event.target.value, 10));
-        setBusPage(0);
-    };
 
     // === Filtrado y Ordenamiento Incidentes ===
     const filteredIncidents = incidents.filter((inc) => {
@@ -653,21 +553,8 @@ const ActivityLogPage = () => {
         }
         return true;
     });
-    const sortedIncidents = stableSort(
-        filteredIncidents,
-        getComparator(incOrder, incOrderBy, 'incidents')
-    );
-    const incPaginated = sortedIncidents.slice(
-        incPage * incRowsPerPage,
-        incPage * incRowsPerPage + incRowsPerPage
-    );
-    const handleChangeIncPage = (event, newPage) => {
-        setIncPage(newPage);
-    };
-    const handleChangeIncRowsPerPage = (event) => {
-        setIncRowsPerPage(Number.parseInt(event.target.value, 10));
-        setIncPage(0);
-    };
+    const sortedIncidents = sortRows(filteredIncidents, { orderBy: incTable.orderBy, order: incTable.order, getValue: (row, field) => getFieldValue(row, field, 'incidents') });
+    const incPaginated = incTable.paginate(sortedIncidents);
 
     // === Filtrado y Ordenamiento Emergencias ===
     const filteredEmergencies = emergencies.filter((eme) => {
@@ -693,30 +580,10 @@ const ActivityLogPage = () => {
         }
         return true;
     });
-    const sortedEmergencies = stableSort(
-        filteredEmergencies,
-        getComparator(emeOrder, emeOrderBy, 'emergencies')
-    );
-    const emePaginated = sortedEmergencies.slice(
-        emePage * emeRowsPerPage,
-        emePage * emeRowsPerPage + emeRowsPerPage
-    );
-    const handleChangeEmePage = (event, newPage) => {
-        setEmePage(newPage);
-    };
-    const handleChangeEmeRowsPerPage = (event) => {
-        setEmeRowsPerPage(Number.parseInt(event.target.value, 10));
-        setEmePage(0);
-    };
+    const sortedEmergencies = sortRows(filteredEmergencies, { orderBy: emeTable.orderBy, order: emeTable.order, getValue: (row, field) => getFieldValue(row, field, 'emergencies') });
+    const emePaginated = emeTable.paginate(sortedEmergencies);
 
     // === Filtrado y Ordenamiento Pagos (no supervisor) ===
-    const handleChangePayPage = (event, newPage) => {
-        setPayPage(newPage);
-    };
-    const handleChangePayRowsPerPage = (event) => {
-        setPayRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPayPage(0);
-    };
     
     // Colores para segmentos: CONFIRMADO, ADELANTADO, EN_PROCESO, PENDIENTE, MORA
         const COLORS = ['#2E7D32', '#1976D2', '#2196f3', '#FFC107', '#F44336'];
@@ -784,7 +651,7 @@ const ActivityLogPage = () => {
             setTotalDueGlobal(res.data.sumTotalDue || 0);
             setTotalPenaltyGlobal(res.data.sumPenalty || 0);
         } catch (error) {
-            setSnackbar({ open: true, message: 'Error al obtener análisis global de pagos', severity: 'error' });
+            notify.error('Error al obtener análisis global de pagos');
         }
     };
 
@@ -836,54 +703,7 @@ const ActivityLogPage = () => {
 
                         {!isMobile && filteredBuses.length > 0 && (
                             <Table size="small" sx={{ mb: 2 }}>
-                                <TableHead>
-                                    <TableRow>
-                                        <TableHeaderCell sortDirection={busOrderBy === 'plate' ? busOrder : false}>
-                                            <TableSortLabel
-                                                active={busOrderBy === 'plate'}
-                                                direction={busOrderBy === 'plate' ? busOrder : 'asc'}
-                                                onClick={() => handleRequestBusSort('plate')}
-                                                hideSortIcon={false}
-                                                sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                            >
-                                                Placa
-                                            </TableSortLabel>
-                                        </TableHeaderCell>
-                                        <TableHeaderCell sortDirection={busOrderBy === 'pilot' ? busOrder : false}>
-                                            <TableSortLabel
-                                                active={busOrderBy === 'pilot'}
-                                                direction={busOrderBy === 'pilot' ? busOrder : 'asc'}
-                                                onClick={() => handleRequestBusSort('pilot')}
-                                                hideSortIcon={false}
-                                                sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                            >
-                                                Piloto
-                                            </TableSortLabel>
-                                        </TableHeaderCell>
-                                        <TableHeaderCell sortDirection={busOrderBy === 'monitora' ? busOrder : false}>
-                                            <TableSortLabel
-                                                active={busOrderBy === 'monitora'}
-                                                direction={busOrderBy === 'monitora' ? busOrder : 'asc'}
-                                                onClick={() => handleRequestBusSort('monitora')}
-                                                hideSortIcon={false}
-                                                sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                            >
-                                                Monitora
-                                            </TableSortLabel>
-                                        </TableHeaderCell>
-                                        <TableHeaderCell sortDirection={busOrderBy === 'description' ? busOrder : false}>
-                                            <TableSortLabel
-                                                active={busOrderBy === 'description'}
-                                                direction={busOrderBy === 'description' ? busOrder : 'asc'}
-                                                onClick={() => handleRequestBusSort('description')}
-                                                hideSortIcon={false}
-                                                sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                            >
-                                                Descripción
-                                            </TableSortLabel>
-                                        </TableHeaderCell>
-                                    </TableRow>
-                                </TableHead>
+                                <SortableTableHead columns={BUS_COLUMNS} {...busTable.sortProps} cellSx={{ fontWeight: 600, backgroundColor: '#DCF3FF', color: '#333' }} showSortIcons />
                             </Table>
                         )}
 
@@ -897,50 +717,43 @@ const ActivityLogPage = () => {
                                     <>
                                         {busesPaginated.map((bus) => (
                                             <MobileCard key={bus.id}>
-                                                <MobileField>
-                                                    <MobileLabel>Placa:</MobileLabel>
-                                                    <MobileValue>{bus.plate}</MobileValue>
+                                                <MobileField label="Placa">
+                                                    <div>{bus.plate}</div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Piloto:</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="Piloto">
+                                                    <div>
                                                         {bus.pilot ? bus.pilot.name : '—'}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Monitora:</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="Monitora">
+                                                    <div>
                                                         {bus.monitora ? bus.monitora.name : '—'}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Número de ruta:</MobileLabel>
-                                                    <MobileValue>{bus.routeNumber || '—'}</MobileValue>
+                                                <MobileField label="Número de ruta">
+                                                    <div>{bus.routeNumber || '—'}</div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Descripción:</MobileLabel>
-                                                    <MobileValue>{bus.description || '—'}</MobileValue>
+                                                <MobileField label="Descripción">
+                                                    <div>{bus.description || '—'}</div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Estado de Ruta:</MobileLabel>
+                                                <MobileField label="Estado de Ruta">
                                                     {!bus.currentRoute && (
-                                                        <MobileValue>Sin ruta activa</MobileValue>
+                                                        <div>Sin ruta activa</div>
                                                     )}
                                                     {bus.currentRoute && !bus.currentRoute.endTime && (
-                                                        <MobileValue>
+                                                        <div>
                                                             En Ruta (Inicio:{' '}
-                                                            {formatGuatemalaDatetime(bus.currentRoute.startTime)})
-                                                        </MobileValue>
+                                                            {formatDateTime(bus.currentRoute.startTime, { utc: true })})
+                                                        </div>
                                                     )}
                                                     {bus.currentRoute?.endTime && (
-                                                        <MobileValue>
+                                                        <div>
                                                             Finalizada a las{' '}
-                                                            {formatGuatemalaDatetime(bus.currentRoute.endTime)}
-                                                        </MobileValue>
+                                                            {formatDateTime(bus.currentRoute.endTime, { utc: true })}
+                                                        </div>
                                                     )}
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Paradas:</MobileLabel>
+                                                <MobileField label="Paradas">
                                                     {Array.isArray(bus.stops) && bus.stops.length > 0 ? (
                                                         <>
                                                             {bus.stops.map((stop) => (
@@ -948,44 +761,38 @@ const ActivityLogPage = () => {
                                                                     key={stop.stopId}
                                                                     sx={{ p: 2, mb: 1 }}
                                                                 >
-                                                                    <MobileField>
-                                                                        <MobileLabel>Horario:</MobileLabel>
-                                                                        <MobileValue>{stop.time}</MobileValue>
+                                                                    <MobileField label="Horario">
+                                                                        <div>{stop.time}</div>
                                                                     </MobileField>
-                                                                    <MobileField>
-                                                                        <MobileLabel>Nota:</MobileLabel>
-                                                                        <MobileValue>
+                                                                    <MobileField label="Nota">
+                                                                        <div>
                                                                             {stop.note || ''}
-                                                                        </MobileValue>
+                                                                        </div>
                                                                     </MobileField>
-                                                                    <MobileField>
-                                                                        <MobileLabel>Padre:</MobileLabel>
-                                                                        <MobileValue>
+                                                                    <MobileField label="Padre">
+                                                                        <div>
                                                                             {stop.parentName}
-                                                                        </MobileValue>
+                                                                        </div>
                                                                     </MobileField>
-                                                                    <MobileField>
-                                                                        <MobileLabel>Estudiantes:</MobileLabel>
-                                                                        <MobileValue>
+                                                                    <MobileField label="Estudiantes">
+                                                                        <div>
                                                                             {stop.students}
-                                                                        </MobileValue>
+                                                                        </div>
                                                                     </MobileField>
                                                                 </MobileCard>
                                                             ))}
                                                         </>
                                                     ) : (
-                                                        <MobileValue>No hay paradas registradas.</MobileValue>
+                                                        <div>No hay paradas registradas.</div>
                                                     )}
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>ID Bus:</MobileLabel>
-                                                    <MobileValue>{bus.id}</MobileValue>
+                                                <MobileField label="ID Bus">
+                                                    <div>{bus.id}</div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Estado Taller:</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="Estado Taller">
+                                                    <div>
                                                         {bus.inWorkshop ? 'En Taller' : 'Disponible'}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
 
                                                 <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
@@ -1025,15 +832,7 @@ const ActivityLogPage = () => {
                                                 </Box>
                                             </MobileCard>
                                         ))}
-                                        <TablePagination
-                                            component="div"
-                                            count={filteredBuses.length}
-                                            page={busPage}
-                                            onPageChange={handleChangeBusPage}
-                                            rowsPerPage={busRowsPerPage}
-                                            onRowsPerPageChange={handleChangeBusRowsPerPage}
-                                            labelRowsPerPage="Filas por página"
-                                        />
+                                        <AppTablePagination count={filteredBuses.length} {...busTable.paginationProps} />
                                     </>
                                 ) : (
                                     <>
@@ -1071,9 +870,7 @@ const ActivityLogPage = () => {
                                                     )}
                                                     {bus.currentRoute && !bus.currentRoute.endTime && (
                                                         <Chip
-                                                            label={`En Ruta (Inicio: ${formatGuatemalaDatetime(
-                                                                bus.currentRoute.startTime
-                                                            )})`}
+                                                            label={`En Ruta (Inicio: ${formatDateTime(bus.currentRoute.startTime, { utc: true })})`}
                                                             color="primary"
                                                             size="small"
                                                             sx={{ ml: 2 }}
@@ -1081,9 +878,7 @@ const ActivityLogPage = () => {
                                                     )}
                                                     {bus.currentRoute?.endTime && (
                                                         <Chip
-                                                            label={`Finalizada a las ${formatGuatemalaDatetime(
-                                                                bus.currentRoute.endTime
-                                                            )}`}
+                                                            label={`Finalizada a las ${formatDateTime(bus.currentRoute.endTime, { utc: true })}`}
                                                             color="secondary"
                                                             size="small"
                                                             sx={{ ml: 2 }}
@@ -1179,15 +974,7 @@ const ActivityLogPage = () => {
                                                 </AccordionActions>
                                             </AccordionStyled>
                                         ))}
-                                        <TablePagination
-                                            component="div"
-                                            count={filteredBuses.length}
-                                            page={busPage}
-                                            onPageChange={handleChangeBusPage}
-                                            rowsPerPage={busRowsPerPage}
-                                            onRowsPerPageChange={handleChangeBusRowsPerPage}
-                                            labelRowsPerPage="Filas por página"
-                                        />
+                                        <AppTablePagination count={filteredBuses.length} {...busTable.paginationProps} />
                                     </>
                                 )}
                             </>
@@ -1256,128 +1043,62 @@ const ActivityLogPage = () => {
                                     <>
                                         {incPaginated.map((incident) => (
                                             <MobileCard key={incident.id}>
-                                                <MobileField>
-                                                    <MobileLabel>Fecha:</MobileLabel>
-                                                    <MobileValue>
-                                                        {formatGuatemalaDatetime(incident.fecha)}
-                                                    </MobileValue>
+                                                <MobileField label="Fecha">
+                                                    <div>
+                                                        {formatDateTime(incident.fecha, { utc: true })}
+                                                    </div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Piloto:</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="Piloto">
+                                                    <div>
                                                         {incident.piloto ? incident.piloto.name : '—'}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Tipo (Gravedad):</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="Tipo (Gravedad)">
+                                                    <div>
                                                         {incident.tipo === 'incidente'
                                                             ? 'Problema menor'
                                                             : 'Problema mayor'}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Tipo de Falla:</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="Tipo de Falla">
+                                                    <div>
                                                         {incident.tipoFalla || '—'}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
                                                 {incident.tipoFalla === 'otro' && incident.otroFallaDetalle && (
-                                                    <MobileField>
-                                                        <MobileLabel>Otro (Detalle):</MobileLabel>
-                                                        <MobileValue>{incident.otroFallaDetalle}</MobileValue>
+                                                    <MobileField label="Otro (Detalle)">
+                                                        <div>{incident.otroFallaDetalle}</div>
                                                     </MobileField>
                                                 )}
-                                                <MobileField>
-                                                    <MobileLabel>Descripción:</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="Descripción">
+                                                    <div>
                                                         {incident.descripcion || '—'}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>¿Pudo continuar la ruta?</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="¿Pudo continuar la ruta?">
+                                                    <div>
                                                         {incident.pudoContinuarRuta ? 'Sí' : 'No'}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>¿Bus Suplente?</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="¿Bus Suplente?">
+                                                    <div>
                                                         {incident.seUtilizoBusSuplente ? 'Sí' : 'No'}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
                                             </MobileCard>
                                         ))}
-                                        <TablePagination
-                                            component="div"
-                                            count={filteredIncidents.length}
-                                            page={incPage}
-                                            onPageChange={handleChangeIncPage}
-                                            rowsPerPage={incRowsPerPage}
-                                            onRowsPerPageChange={handleChangeIncRowsPerPage}
-                                            labelRowsPerPage="Filas por página"
-                                        />
+                                        <AppTablePagination count={filteredIncidents.length} {...incTable.paginationProps} />
                                     </>
                                 )}
                                 {filteredIncidents.length > 0 && !isMobile && (
-                                    <TableContainer sx={{ overflowX: 'auto' }}>
+                                    <AppTableContainer>
                                         <Table size="small">
-                                            <TableHead>
-                                                <TableRow>
-                                                    <TableHeaderCell sortDirection={incOrderBy === 'fecha' ? incOrder : false}>
-                                                        <TableSortLabel
-                                                            active={incOrderBy === 'fecha'}
-                                                            direction={incOrderBy === 'fecha' ? incOrder : 'asc'}
-                                                            onClick={() => handleRequestIncSort('fecha')}
-                                                            hideSortIcon={false}
-                                                            sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                        >
-                                                            Fecha
-                                                        </TableSortLabel>
-                                                    </TableHeaderCell>
-                                                    <TableHeaderCell sortDirection={incOrderBy === 'piloto' ? incOrder : false}>
-                                                        <TableSortLabel
-                                                            active={incOrderBy === 'piloto'}
-                                                            direction={incOrderBy === 'piloto' ? incOrder : 'asc'}
-                                                            onClick={() => handleRequestIncSort('piloto')}
-                                                            hideSortIcon={false}
-                                                            sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                        >
-                                                            Piloto
-                                                        </TableSortLabel>
-                                                    </TableHeaderCell>
-                                                    <TableHeaderCell>Tipo (Gravedad)</TableHeaderCell>
-                                                    <TableHeaderCell sortDirection={incOrderBy === 'tipoFalla' ? incOrder : false}>
-                                                        <TableSortLabel
-                                                            active={incOrderBy === 'tipoFalla'}
-                                                            direction={incOrderBy === 'tipoFalla' ? incOrder : 'asc'}
-                                                            onClick={() => handleRequestIncSort('tipoFalla')}
-                                                            hideSortIcon={false}
-                                                            sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                        >
-                                                            Tipo de Falla
-                                                        </TableSortLabel>
-                                                    </TableHeaderCell>
-                                                    <TableHeaderCell sortDirection={incOrderBy === 'descripcion' ? incOrder : false}>
-                                                        <TableSortLabel
-                                                            active={incOrderBy === 'descripcion'}
-                                                            direction={incOrderBy === 'descripcion' ? incOrder : 'asc'}
-                                                            onClick={() => handleRequestIncSort('descripcion')}
-                                                            hideSortIcon={false}
-                                                            sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                        >
-                                                            Descripción
-                                                        </TableSortLabel>
-                                                    </TableHeaderCell>
-                                                    <TableHeaderCell>¿Continuó?</TableHeaderCell>
-                                                    <TableHeaderCell>¿Bus Suplente?</TableHeaderCell>
-                                                </TableRow>
-                                            </TableHead>
+                                            <SortableTableHead columns={INCIDENT_COLUMNS} {...incTable.sortProps} cellSx={{ fontWeight: 600, backgroundColor: '#DCF3FF', color: '#333' }} />
                                             <TableBody>
                                                 {incPaginated.map((incident) => (
                                                     <TableRow key={incident.id} hover>
                                                         <TableCell>
-                                                            {formatGuatemalaDatetime(incident.fecha)}
+                                                            {formatDateTime(incident.fecha, { utc: true })}
                                                         </TableCell>
                                                         <TableCell>
                                                             {incident.piloto ? incident.piloto.name : '—'}
@@ -1405,7 +1126,7 @@ const ActivityLogPage = () => {
                                                 ))}
                                             </TableBody>
                                         </Table>
-                                    </TableContainer>
+                                    </AppTableContainer>
                                 )}
                             </Grid2>
 
@@ -1454,29 +1175,25 @@ const ActivityLogPage = () => {
                                     <>
                                         {emePaginated.map((eme) => (
                                             <MobileCard key={eme.id}>
-                                                <MobileField>
-                                                    <MobileLabel>Fecha:</MobileLabel>
-                                                    <MobileValue>
-                                                        {formatGuatemalaDatetime(eme.fecha)}
-                                                    </MobileValue>
+                                                <MobileField label="Fecha">
+                                                    <div>
+                                                        {formatDateTime(eme.fecha, { utc: true })}
+                                                    </div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Piloto:</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="Piloto">
+                                                    <div>
                                                         {eme.piloto ? eme.piloto.name : '—'}
-                                                    </MobileValue>
+                                                    </div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Mensaje:</MobileLabel>
-                                                    <MobileValue>{eme.mensaje}</MobileValue>
+                                                <MobileField label="Mensaje">
+                                                    <div>{eme.mensaje}</div>
                                                 </MobileField>
-                                                <MobileField>
-                                                    <MobileLabel>Ubicación (Lat,Lng):</MobileLabel>
-                                                    <MobileValue>
+                                                <MobileField label="Ubicación (Lat,Lng)">
+                                                    <div>
                                                         {eme.latitud && eme.longitud
                                                             ? `${Number.parseFloat(eme.latitud).toFixed(6)}, ${Number.parseFloat(eme.longitud).toFixed(6)}`
                                                             : '—'}
-                                                    </MobileValue>
+                                                    </div>
                                                     {eme.latitud && eme.longitud && (
                                                         <Tooltip title="Ver mapa">
                                                             <IconButton
@@ -1495,53 +1212,18 @@ const ActivityLogPage = () => {
                                                 </MobileField>
                                             </MobileCard>
                                         ))}
-                                        <TablePagination
-                                            component="div"
-                                            count={filteredEmergencies.length}
-                                            page={emePage}
-                                            onPageChange={handleChangeEmePage}
-                                            rowsPerPage={emeRowsPerPage}
-                                            onRowsPerPageChange={handleChangeEmeRowsPerPage}
-                                            labelRowsPerPage="Filas por página"
-                                        />
+                                        <AppTablePagination count={filteredEmergencies.length} {...emeTable.paginationProps} />
                                     </>
                                 )}
                                 {filteredEmergencies.length > 0 && !isMobile && (
-                                    <TableContainer sx={{ overflowX: 'auto' }}>
+                                    <AppTableContainer>
                                         <Table size="small">
-                                            <TableHead>
-                                                <TableRow>
-                                                    <TableHeaderCell sortDirection={emeOrderBy === 'fecha' ? emeOrder : false}>
-                                                        <TableSortLabel
-                                                            active={emeOrderBy === 'fecha'}
-                                                            direction={emeOrderBy === 'fecha' ? emeOrder : 'asc'}
-                                                            onClick={() => handleRequestEmeSort('fecha')}
-                                                            hideSortIcon={false}
-                                                            sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                        >
-                                                            Fecha
-                                                        </TableSortLabel>
-                                                    </TableHeaderCell>
-                                                    <TableHeaderCell sortDirection={emeOrderBy === 'piloto' ? emeOrder : false}>
-                                                        <TableSortLabel
-                                                            active={emeOrderBy === 'piloto'}
-                                                            direction={emeOrderBy === 'piloto' ? emeOrder : 'asc'}
-                                                            onClick={() => handleRequestEmeSort('piloto')}
-                                                            hideSortIcon={false}
-                                                            sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                        >
-                                                            Piloto
-                                                        </TableSortLabel>
-                                                    </TableHeaderCell>
-                                                    <TableHeaderCell>Mensaje</TableHeaderCell>
-                                                    <TableHeaderCell>Ubicación (Lat,Lng)</TableHeaderCell>
-                                                </TableRow>
-                                            </TableHead>
+                                            <SortableTableHead columns={EMERGENCY_COLUMNS} {...emeTable.sortProps} cellSx={{ fontWeight: 600, backgroundColor: '#DCF3FF', color: '#333' }} />
                                             <TableBody>
                                                 {emePaginated.map((eme) => (
                                                     <TableRow key={eme.id} hover>
                                                         <TableCell>
-                                                            {formatGuatemalaDatetime(eme.fecha)}
+                                                            {formatDateTime(eme.fecha, { utc: true })}
                                                         </TableCell>
                                                         <TableCell>
                                                             {eme.piloto ? eme.piloto.name : '—'}
@@ -1575,7 +1257,7 @@ const ActivityLogPage = () => {
                                                 ))}
                                             </TableBody>
                                         </Table>
-                                    </TableContainer>
+                                    </AppTableContainer>
                                 )}
                             </Grid2>
                         </Grid2>
@@ -1591,7 +1273,7 @@ const ActivityLogPage = () => {
                                     label="Próximo Pago Desde"
                                     type="date"
                                     value={payDateFrom}
-                                    onChange={(e) => { setPayDateFrom(e.target.value); setPayPage(0); }}
+                                    onChange={(e) => { setPayDateFrom(e.target.value); payTable.resetPage(); }}
                                     InputLabelProps={{ shrink: true }}
                                     size="small"
                                 />
@@ -1599,7 +1281,7 @@ const ActivityLogPage = () => {
                                     label="Próximo Pago Hasta"
                                     type="date"
                                     value={payDateTo}
-                                    onChange={(e) => { setPayDateTo(e.target.value); setPayPage(0); }}
+                                    onChange={(e) => { setPayDateTo(e.target.value); payTable.resetPage(); }}
                                     InputLabelProps={{ shrink: true }}
                                     size="small"
                                 />
@@ -1608,14 +1290,14 @@ const ActivityLogPage = () => {
                                     variant="outlined"
                                     size="small"
                                     value={payBalanceMin}
-                                    onChange={(e) => { setPayBalanceMin(e.target.value); setPayPage(0); }}
+                                    onChange={(e) => { setPayBalanceMin(e.target.value); payTable.resetPage(); }}
                                 />
                                 <TextField
                                     label="Saldo Máximo"
                                     variant="outlined"
                                     size="small"
                                     value={payBalanceMax}
-                                    onChange={(e) => { setPayBalanceMax(e.target.value); setPayPage(0); }}
+                                    onChange={(e) => { setPayBalanceMax(e.target.value); payTable.resetPage(); }}
                                 />
                             </FiltersRow>
 
@@ -1633,28 +1315,22 @@ const ActivityLogPage = () => {
                                 <>
                                     {payments.map((pay) => (
                                         <MobileCard key={pay.id}>
-                                            <MobileField>
-                                                <MobileLabel>Padre (Usuario):</MobileLabel>
-                                                <MobileValue>{pay.User ? pay.User.name : '—'}</MobileValue>
+                                            <MobileField label="Padre (Usuario)">
+                                                <div>{pay.User ? pay.User.name : '—'}</div>
                                             </MobileField>
-                                            <MobileField>
-                                                <MobileLabel>Email:</MobileLabel>
-                                                <MobileValue>{pay.User ? pay.User.email : '—'}</MobileValue>
+                                            <MobileField label="Email">
+                                                <div>{pay.User ? pay.User.email : '—'}</div>
                                             </MobileField>
-                                            <MobileField>
-                                                <MobileLabel>Estado:</MobileLabel>
-                                                <MobileValue>{pay.finalStatus || pay.status}</MobileValue>
+                                            <MobileField label="Estado">
+                                                <div>{pay.finalStatus || pay.status}</div>
                                             </MobileField>
-                                            <MobileField>
-                                                <MobileLabel>Próximo Pago:</MobileLabel>
-                                                <MobileValue>{formatGuatemalaDate(pay.nextPaymentDate)}</MobileValue>
+                                            <MobileField label="Próximo Pago">
+                                                <div>{formatDate(pay.nextPaymentDate, { utc: true })}</div>
                                             </MobileField>
-                                            <MobileField>
-                                                <MobileLabel>Saldo:</MobileLabel>
-                                                <MobileValue>Q {pay.leftover ?? 0}</MobileValue>
+                                            <MobileField label="Saldo">
+                                                <div>{formatQ(pay.leftover ?? 0)}</div>
                                             </MobileField>
-                                            <MobileField>
-                                                <MobileLabel>Acciones:</MobileLabel>
+                                            <MobileField label="Acciones">
                                                 {pay.User && (
                                                     <Tooltip title="Ver boletas de pago">
                                                         <IconButton
@@ -1672,68 +1348,13 @@ const ActivityLogPage = () => {
                                             </MobileField>
                                         </MobileCard>
                                     ))}
-                                    <TablePagination
-                                        component="div"
-                                        count={totalPaymentsCount}
-                                        page={payPage}
-                                        onPageChange={handleChangePayPage}
-                                        rowsPerPage={payRowsPerPage}
-                                        onRowsPerPageChange={handleChangePayRowsPerPage}
-                                        labelRowsPerPage="Filas por página"
-                                    />
+                                    <AppTablePagination count={totalPaymentsCount} {...payTable.paginationProps} />
                                 </>
                             )}
                             {!loadingPayments && payments.length > 0 && !isMobile && (
                                 <>
                                     <Table size="small">
-                                        <TableHead>
-                                            <TableRow>
-                                                <TableHeaderCell sortDirection={payOrderBy === 'userName' ? payOrder : false}>
-                                                    <TableSortLabel>
-                                                        Padre (Usuario)
-                                                    </TableSortLabel>
-                                                </TableHeaderCell>
-                                                <TableHeaderCell sortDirection={payOrderBy === 'userEmail' ? payOrder : false}>
-                                                    <TableSortLabel>
-                                                        Email
-                                                    </TableSortLabel>
-                                                </TableHeaderCell>
-                                                <TableHeaderCell sortDirection={payOrderBy === 'finalStatus' ? payOrder : false}>
-                                                    <TableSortLabel
-                                                        active={payOrderBy === 'finalStatus'}
-                                                        direction={payOrderBy === 'finalStatus' ? payOrder : 'asc'}
-                                                        onClick={() => handleRequestPaySort('finalStatus')}
-                                                        hideSortIcon={false}
-                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                    >
-                                                        Estado
-                                                    </TableSortLabel>
-                                                </TableHeaderCell>
-                                                <TableHeaderCell sortDirection={payOrderBy === 'nextPaymentDate' ? payOrder : false}>
-                                                    <TableSortLabel
-                                                        active={payOrderBy === 'nextPaymentDate'}
-                                                        direction={payOrderBy === 'nextPaymentDate' ? payOrder : 'asc'}
-                                                        onClick={() => handleRequestPaySort('nextPaymentDate')}
-                                                        hideSortIcon={false}
-                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                    >
-                                                        Próximo Pago
-                                                    </TableSortLabel>
-                                                </TableHeaderCell>
-                                                <TableHeaderCell sortDirection={payOrderBy === 'leftover' ? payOrder : false}>
-                                                    <TableSortLabel
-                                                        active={payOrderBy === 'leftover'}
-                                                        direction={payOrderBy === 'leftover' ? payOrder : 'asc'}
-                                                        onClick={() => handleRequestPaySort('leftover')}
-                                                        hideSortIcon={false}
-                                                        sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                    >
-                                                        Saldo
-                                                    </TableSortLabel>
-                                                </TableHeaderCell>
-                                                <TableHeaderCell>Acciones</TableHeaderCell>
-                                            </TableRow>
-                                        </TableHead>
+                                        <SortableTableHead columns={PAYMENT_COLUMNS} {...payTable.sortProps} cellSx={{ fontWeight: 600, backgroundColor: '#DCF3FF', color: '#333' }} />
                                         <TableBody>
                                             {payments.map((pay) => (
                                                 <TableRow key={pay.id} hover>
@@ -1747,9 +1368,9 @@ const ActivityLogPage = () => {
                                                         {pay.finalStatus || pay.status}
                                                     </TableCell>
                                                     <TableCell>
-                                                        {formatGuatemalaDate(pay.nextPaymentDate)}
+                                                        {formatDate(pay.nextPaymentDate, { utc: true })}
                                                     </TableCell>
-                                                    <TableCell>Q {pay.leftover ?? 0}</TableCell>
+                                                    <TableCell>{formatQ(pay.leftover ?? 0)}</TableCell>
                                                     <TableCell>
                                                         {pay.User && (
                                                             <Tooltip title="Ver boletas de pago">
@@ -1770,15 +1391,7 @@ const ActivityLogPage = () => {
                                             ))}
                                         </TableBody>
                                     </Table>
-                                    <TablePagination
-                                        component="div"
-                                        count={totalPaymentsCount}
-                                        page={payPage}
-                                        onPageChange={handleChangePayPage}
-                                        rowsPerPage={payRowsPerPage}
-                                        onRowsPerPageChange={handleChangePayRowsPerPage}
-                                        labelRowsPerPage="Filas por página"
-                                    />
+                                    <AppTablePagination count={totalPaymentsCount} {...payTable.paginationProps} />
                                 </>
                             )}
 
@@ -1881,246 +1494,183 @@ const ActivityLogPage = () => {
 
             {/* Dialog Boletas: requiere la llave de GET /parents/:id/receipts */}
             {puedeVerBoletas && (
-                <Dialog
+                <AppDialog
                     open={openBoletasDialog}
                     onClose={handleCloseBoletasDialog}
-                    maxWidth="md"
-                    fullWidth
+                    title="Boletas registradas"
+                    subtitle={currentParentName}
+                    icon={<ReceiptLongIcon />}
+                    size="md"
+                    readOnly
                 >
-                    <DialogTitle>Boletas registradas de {currentParentName}</DialogTitle>
-                    <DialogContent dividers>
-                        {loadingBoletas && (
-                            <div tw="flex justify-center p-4">
-                                <CircularProgress />
-                            </div>
-                        )}
-                        {!loadingBoletas && currentBoletas.length === 0 && (
-                            <Typography>No hay boletas para este padre.</Typography>
-                        )}
-                        {!loadingBoletas && currentBoletas.length > 0 && (
-                            <Grid2 container spacing={2}>
-                                {currentBoletas.map((b) => (
-                                    <Grid2 size={{ xs: 12, md: 4 }} key={b.id}>
-                                        <Paper elevation={2} sx={{ p: 2, borderRadius: '8px' }}>
-                                            {String(b.uploadSource || '').toUpperCase() === 'ADMIN' && (
-                                                <Chip size="small" variant="outlined" color="primary" label="Administrador" sx={{ mb: 1 }} />
-                                            )}
-                                            <Typography variant="body2">
-                                                <strong>Fecha:</strong>{' '}
-                                                {formatGuatemalaDatetime(b.displayDate || b.uploadedAt)}
-                                            </Typography>
-                                            <img
-                                                src={b.fileUrl}
-                                                alt="Boleta"
-                                                style={{
-                                                    maxWidth: '100%',
-                                                    border: '1px solid #ddd',
-                                                    borderRadius: '4px',
-                                                    marginTop: '8px'
-                                                }}
-                                            />
-                                        </Paper>
-                                    </Grid2>
-                                ))}
-                            </Grid2>
-                        )}
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCloseBoletasDialog} variant="outlined">
-                            Cerrar
-                        </Button>
-                    </DialogActions>
-                </Dialog>
+                    {loadingBoletas && (
+                        <div tw="flex justify-center p-4">
+                            <CircularProgress />
+                        </div>
+                    )}
+                    {!loadingBoletas && currentBoletas.length === 0 && (
+                        <Typography>No hay boletas para este padre.</Typography>
+                    )}
+                    {!loadingBoletas && currentBoletas.length > 0 && (
+                        <Grid2 container spacing={2}>
+                            {currentBoletas.map((b) => (
+                                <Grid2 size={{ xs: 12, md: 4 }} key={b.id}>
+                                    <Paper elevation={2} sx={{ p: 2, borderRadius: '8px' }}>
+                                        {String(b.uploadSource || '').toUpperCase() === 'ADMIN' && (
+                                            <Chip size="small" variant="outlined" color="primary" label="Administrador" sx={{ mb: 1 }} />
+                                        )}
+                                        <Typography variant="body2">
+                                            <strong>Fecha:</strong>{' '}
+                                            {formatDateTime(b.displayDate || b.uploadedAt, { utc: true })}
+                                        </Typography>
+                                        <img
+                                            src={b.fileUrl}
+                                            alt="Boleta"
+                                            style={{
+                                                maxWidth: '100%',
+                                                border: '1px solid #ddd',
+                                                borderRadius: '4px',
+                                                marginTop: '8px'
+                                            }}
+                                        />
+                                    </Paper>
+                                </Grid2>
+                            ))}
+                        </Grid2>
+                    )}
+                </AppDialog>
             )}
 
             {/* Dialog ver Mapa */}
-            <Dialog open={openMapDialog} onClose={handleCloseMap} maxWidth="md" fullWidth>
-                <DialogTitle>Ubicación en Mapa</DialogTitle>
-                <DialogContent dividers>
-                    {selectedCoords.lat && selectedCoords.lng ? (
-                        <iframe
-                            title={`Map showing location at ${selectedCoords.lat}, ${selectedCoords.lng}`}
-                            width="100%"
-                            height="450"
-                            style={{ border: 0 }}
-                            loading="lazy"
-                            allowFullScreen
-                            src={`https://www.google.com/maps?q=${selectedCoords.lat},${selectedCoords.lng}&z=15&output=embed`}
-                        />
-                    ) : (
-                        <Typography>Coordenadas no disponibles</Typography>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button variant="outlined" onClick={handleCloseMap}>
-                        Cerrar
+            <AppDialog
+                open={openMapDialog}
+                onClose={handleCloseMap}
+                title="Ubicación en mapa"
+                icon={<LocationOnIcon />}
+                size="md"
+                readOnly
+                extraActions={selectedCoords.lat && selectedCoords.lng ? (
+                    <Button variant="contained" color="primary" onClick={handleTraceRoute}>
+                        Trazar ruta
                     </Button>
-                    {selectedCoords.lat && selectedCoords.lng && (
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            onClick={() => {
-                                if (navigator.geolocation) {
-                                    navigator.geolocation.getCurrentPosition(
-                                        (pos) => {
-                                            const userLat = pos.coords.latitude;
-                                            const userLng = pos.coords.longitude;
-                                            window.open(
-                                                `https://www.google.com/maps/dir/?api=1&origin=${userLat},${userLng}&destination=${selectedCoords.lat},${selectedCoords.lng}`,
-                                                '_blank'
-                                            );
-                                        },
-                                        (err) => {
-                                            console.error('No se pudo obtener geolocalización =>', err);
-                                            window.open(
-                                                `https://www.google.com/maps/dir/?api=1&destination=${selectedCoords.lat},${selectedCoords.lng}`,
-                                                '_blank'
-                                            );
-                                        },
-                                        {
-                                            enableHighAccuracy: true,
-                                            timeout: 10000,
-                                            maximumAge: 0
-                                        }
-                                    );
-                                } else {
-                                    window.open(
-                                        `https://www.google.com/maps/dir/?api=1&destination=${selectedCoords.lat},${selectedCoords.lng}`,
-                                        '_blank'
-                                    );
-                                }
-                            }}
-                        >
-                            Trazar ruta
-                        </Button>
-                    )}
-                </DialogActions>
-            </Dialog>
+                ) : null}
+            >
+                {selectedCoords.lat && selectedCoords.lng ? (
+                    <iframe
+                        title={`Map showing location at ${selectedCoords.lat}, ${selectedCoords.lng}`}
+                        width="100%"
+                        height="450"
+                        style={{ border: 0 }}
+                        loading="lazy"
+                        allowFullScreen
+                        src={`https://www.google.com/maps?q=${selectedCoords.lat},${selectedCoords.lng}&z=15&output=embed`}
+                    />
+                ) : (
+                    <Typography>Coordenadas no disponibles</Typography>
+                )}
+            </AppDialog>
 
             {/* Dialog Reportar Incidente */}
-            <Dialog
+            <AppDialog
                 open={openIncidentDialog}
                 onClose={handleCloseIncidentDialog}
-                maxWidth="sm"
-                fullWidth
+                title="Reportar incidente"
+                icon={<ReportIcon />}
+                size="sm"
+                onSubmit={handleSubmitIncident}
+                submitLabel="Reportar"
+                submitting={loading}
+                readOnly={!puedeCrearIncidente}
             >
-                <DialogTitle>Reportar Incidente</DialogTitle>
-                <DialogContent dividers>
-                    <Grid2 container spacing={2}>
-                        <Grid2 size={{ xs: 12, sm: 6 }}>
-                            <FormControl fullWidth margin="normal">
-                                <InputLabel id="tipo-falla-label">Tipo de Falla</InputLabel>
-                                <Select
-                                    labelId="tipo-falla-label"
-                                    label="Tipo de Falla"
-                                    value={incidentForm.tipoFalla}
-                                    onChange={(e) => handleIncidentFormChange('tipoFalla', e.target.value)}
-                                >
-                                    <MenuItem value="mecánico">Mecánico</MenuItem>
-                                    <MenuItem value="eléctrico">Eléctrico</MenuItem>
-                                    <MenuItem value="choque">Choque</MenuItem>
-                                    <MenuItem value="otro">Otro</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Grid2>
+                <Grid2 container spacing={2}>
+                    <Grid2 size={{ xs: 12, sm: 6 }}>
+                        <FormControl fullWidth margin="normal">
+                            <InputLabel id="tipo-falla-label">Tipo de falla</InputLabel>
+                            <Select
+                                labelId="tipo-falla-label"
+                                label="Tipo de falla"
+                                value={incidentForm.tipoFalla}
+                                onChange={(e) => handleIncidentFormChange('tipoFalla', e.target.value)}
+                            >
+                                <MenuItem value="mecánico">Mecánico</MenuItem>
+                                <MenuItem value="eléctrico">Eléctrico</MenuItem>
+                                <MenuItem value="choque">Choque</MenuItem>
+                                <MenuItem value="otro">Otro</MenuItem>
+                            </Select>
+                        </FormControl>
+                    </Grid2>
 
-                        <Grid2 size={{ xs: 12, sm: 6 }}>
-                            <FormControl fullWidth margin="normal">
-                                <InputLabel id="tipo-incidente-label">Tipo de Incidente</InputLabel>
-                                <Select
-                                    labelId="tipo-incidente-label"
-                                    label="Tipo de Incidente"
-                                    value={incidentForm.tipo}
-                                    onChange={(e) => handleIncidentFormChange('tipo', e.target.value)}
-                                >
-                                    <MenuItem value="incidente">Problema menor</MenuItem>
-                                    <MenuItem value="accidente">Problema mayor</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Grid2>
+                    <Grid2 size={{ xs: 12, sm: 6 }}>
+                        <FormControl fullWidth margin="normal">
+                            <InputLabel id="tipo-incidente-label">Tipo de incidente</InputLabel>
+                            <Select
+                                labelId="tipo-incidente-label"
+                                label="Tipo de incidente"
+                                value={incidentForm.tipo}
+                                onChange={(e) => handleIncidentFormChange('tipo', e.target.value)}
+                            >
+                                <MenuItem value="incidente">Problema menor</MenuItem>
+                                <MenuItem value="accidente">Problema mayor</MenuItem>
+                            </Select>
+                        </FormControl>
+                    </Grid2>
 
-                        {incidentForm.tipoFalla === 'otro' && (
-                            <Grid2 size={{ xs: 12 }}>
-                                <TextField
-                                    label="Detalle de la Falla (Otro)"
-                                    value={incidentForm.otroFallaDetalle}
-                                    onChange={(e) => handleIncidentFormChange('otroFallaDetalle', e.target.value)}
-                                    fullWidth
-                                />
-                            </Grid2>
-                        )}
-
-                        <Grid2 size={{ xs: 12 }}>
-                            <FormControlLabel
-                                control={
-                                    <Switch
-                                        checked={incidentForm.pudoContinuarRuta}
-                                        onChange={(e) =>
-                                            handleIncidentFormChange('pudoContinuarRuta', e.target.checked)
-                                        }
-                                    />
-                                }
-                                label="¿Pudo continuar la ruta?"
-                            />
-                        </Grid2>
-
-                        <Grid2 size={{ xs: 12 }}>
-                            <FormControlLabel
-                                control={
-                                    <Switch
-                                        checked={incidentForm.seUtilizoBusSuplente}
-                                        onChange={(e) =>
-                                            handleIncidentFormChange('seUtilizoBusSuplente', e.target.checked)
-                                        }
-                                    />
-                                }
-                                label="¿Se utilizó bus suplente?"
-                            />
-                        </Grid2>
-
+                    {incidentForm.tipoFalla === 'otro' && (
                         <Grid2 size={{ xs: 12 }}>
                             <TextField
-                                label="Descripción"
-                                value={incidentForm.descripcion}
-                                onChange={(e) => handleIncidentFormChange('descripcion', e.target.value)}
-                                multiline
-                                rows={4}
+                                label="Detalle de la falla (otro)"
+                                value={incidentForm.otroFallaDetalle}
+                                onChange={(e) => handleIncidentFormChange('otroFallaDetalle', e.target.value)}
                                 fullWidth
                             />
                         </Grid2>
-                    </Grid2>
-                </DialogContent>
-                <DialogActions>
-                    <Button variant="outlined" onClick={handleCloseIncidentDialog}>
-                        Cancelar
-                    </Button>
-                    {puedeCrearIncidente && (
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            onClick={handleSubmitIncident}
-                            disabled={loading}
-                        >
-                            Reportar
-                        </Button>
                     )}
-                </DialogActions>
-            </Dialog>
 
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={5000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert
-                    severity={snackbar.severity}
-                    onClose={() => setSnackbar({ ...snackbar, open: false })}
-                    sx={{ width: '100%' }}
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
+                    <Grid2 size={{ xs: 12 }}>
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    checked={incidentForm.pudoContinuarRuta}
+                                    onChange={(e) =>
+                                        handleIncidentFormChange('pudoContinuarRuta', e.target.checked)
+                                    }
+                                />
+                            }
+                            label="¿Pudo continuar la ruta?"
+                        />
+                    </Grid2>
+
+                    <Grid2 size={{ xs: 12 }}>
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    checked={incidentForm.seUtilizoBusSuplente}
+                                    onChange={(e) =>
+                                        handleIncidentFormChange('seUtilizoBusSuplente', e.target.checked)
+                                    }
+                                />
+                            }
+                            label="¿Se utilizó bus suplente?"
+                        />
+                    </Grid2>
+
+                    <Grid2 size={{ xs: 12 }}>
+                        <TextField
+                            label="Descripción"
+                            name="descripcion"
+                            required
+                            error={Boolean(incidentErrors.descripcion)}
+                            helperText={incidentErrors.descripcion}
+                            value={incidentForm.descripcion}
+                            onChange={(e) => handleIncidentFormChange('descripcion', e.target.value)}
+                            multiline
+                            rows={4}
+                            fullWidth
+                        />
+                    </Grid2>
+                </Grid2>
+            </AppDialog>
+
         </PageContainer>
     );
 };

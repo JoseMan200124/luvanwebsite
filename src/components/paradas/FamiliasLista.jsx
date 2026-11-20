@@ -1,11 +1,11 @@
 // src/components/paradas/FamiliasLista.jsx
-// 25 familias por página, colapsadas; solo la expandida dibuja controles (rinde con 500+).
+// Familias paginadas con la paginación común, colapsadas; solo la expandida dibuja controles (rinde con 500+).
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, MenuItem, TablePagination, TextField, Typography } from '@mui/material';
+import { Box, MenuItem, TextField, Typography } from '@mui/material';
 import { revisarFamilia, sinTildes as normalizar } from './paradasModel';
 import FamiliaCard from './FamiliaCard';
-
-const POR_PAGINA = 25;
+import useTableState from '../../hooks/useTableState';
+import AppTablePagination from '../table/AppTablePagination';
 
 const FILTROS = [
     { valor: 'todas', texto: 'Todas las familias' },
@@ -18,7 +18,8 @@ const FILTROS = [
 export default function FamiliasLista({ familias, contexto, soloLectura, despachar, onQuitarFamilia }) {
     const [busqueda, setBusqueda] = useState('');
     const [filtro, setFiltro] = useState('todas');
-    const [pagina, setPagina] = useState(0);
+    const tabla = useTableState();
+    const { resetPage } = tabla;
     const [expandida, setExpandida] = useState(null);
 
     const filtradas = useMemo(() => {
@@ -38,8 +39,8 @@ export default function FamiliasLista({ familias, contexto, soloLectura, despach
         });
     }, [familias, contexto, busqueda, filtro]);
 
-    useEffect(() => { setPagina(0); }, [busqueda, filtro]);
-    const visibles = filtradas.slice(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA);
+    useEffect(() => { resetPage(); }, [busqueda, filtro, resetPage]);
+    const visibles = tabla.paginate(filtradas);
 
     return (
         <Box>
@@ -56,11 +57,7 @@ export default function FamiliasLista({ familias, contexto, soloLectura, despach
                     soloLectura={soloLectura} onExpandir={setExpandida} despachar={despachar} onQuitarFamilia={onQuitarFamilia}
                 />
             ))}
-            <TablePagination
-                component="div" count={filtradas.length} page={pagina} rowsPerPage={POR_PAGINA} rowsPerPageOptions={[POR_PAGINA]}
-                onPageChange={(_, p) => setPagina(p)}
-                labelDisplayedRows={({ from, to, count }) => `${from}–${to} de ${count} familias`}
-            />
+            <AppTablePagination count={filtradas.length} {...tabla.paginationProps} />
         </Box>
     );
 }

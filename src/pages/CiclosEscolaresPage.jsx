@@ -1,18 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    Alert,
     Box,
-    Button,
     Card,
     CardContent,
     Chip,
     CircularProgress,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
     IconButton,
-    Snackbar,
     Table,
     TableBody,
     TableCell,
@@ -33,6 +26,8 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { setSelectedCicloEscolarId } from '../utils/schoolContext';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import useNotify from '../hooks/useNotify';
+import AppDialog from '../components/dialogs/AppDialog';
 
 const emptyForm = {
     anio: ''
@@ -45,7 +40,7 @@ const CiclosEscolaresPage = () => {
     const [openDialog, setOpenDialog] = useState(false);
     const [selectedCiclo, setSelectedCiclo] = useState(null);
     const [form, setForm] = useState(emptyForm);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
 
     const fetchCiclosEscolares = useCallback(async () => {
         setLoading(true);
@@ -54,11 +49,11 @@ const CiclosEscolaresPage = () => {
             setCiclosEscolares(Array.isArray(data.ciclosEscolares) ? data.ciclosEscolares : []);
         } catch (error) {
             console.error('Error cargando ciclos escolares:', error);
-            setSnackbar({ open: true, message: 'Error al cargar ciclos escolares', severity: 'error' });
+            notify.error('Error al cargar ciclos escolares');
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [notify]);
 
     useEffect(() => {
         fetchCiclosEscolares();
@@ -101,7 +96,7 @@ const CiclosEscolaresPage = () => {
     const handleSave = async () => {
         const anio = Number.parseInt(form.anio, 10);
         if (!Number.isInteger(anio) || anio < 2000 || anio > 2100) {
-            setSnackbar({ open: true, message: 'Ingresa un año válido entre 2000 y 2100', severity: 'error' });
+            notify.error('Ingresa un año válido entre 2000 y 2100');
             return;
         }
 
@@ -115,16 +110,16 @@ const CiclosEscolaresPage = () => {
 
             if (selectedCiclo?.id) {
                 await updateCicloEscolar(selectedCiclo.id, payload);
-                setSnackbar({ open: true, message: 'Ciclo escolar actualizado', severity: 'success' });
+                notify.success('Ciclo escolar actualizado');
             } else {
                 await createCicloEscolar(payload);
-                setSnackbar({ open: true, message: 'Ciclo escolar creado', severity: 'success' });
+                notify.success('Ciclo escolar creado');
             }
             handleCloseDialog();
             fetchCiclosEscolares();
         } catch (error) {
             console.error('Error guardando ciclo escolar:', error);
-            setSnackbar({ open: true, message: error.response?.data?.message || 'Error al guardar ciclo escolar', severity: 'error' });
+            notify.fromError(error, 'Error al guardar ciclo escolar');
         } finally {
             setSaving(false);
         }
@@ -139,11 +134,11 @@ const CiclosEscolaresPage = () => {
             const data = await setDefaultCicloEscolar(cicloEscolar.id);
             const defaultCycle = data.cicloEscolar || cicloEscolar;
             setSelectedCicloEscolarId(defaultCycle.id);
-            setSnackbar({ open: true, message: 'Ciclo escolar predeterminado actualizado', severity: 'success' });
+            notify.success('Ciclo escolar predeterminado actualizado');
             fetchCiclosEscolares();
         } catch (error) {
             console.error('Error marcando ciclo escolar predeterminado:', error);
-            setSnackbar({ open: true, message: error.response?.data?.message || 'Error al actualizar ciclo predeterminado', severity: 'error' });
+            notify.fromError(error, 'Error al actualizar ciclo predeterminado');
         } finally {
             setSaving(false);
         }
@@ -217,23 +212,20 @@ const CiclosEscolaresPage = () => {
                 </CardContent>
             </Card>
 
-            <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-                <DialogTitle>{selectedCiclo ? 'Editar Ciclo Escolar' : 'Nuevo Ciclo Escolar'}</DialogTitle>
-                <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-                    <TextField name="anio" label="Año" value={form.anio} onChange={handleChange} slotProps={{ htmlInput: { inputMode: 'numeric' } }} fullWidth />
-                    <TextField label="Etiqueta" value={form.anio ? `Ciclo Escolar ${form.anio}` : ''} fullWidth disabled />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseDialog}>Cancelar</Button>
-                    <Button onClick={handleSave} variant="contained" disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</Button>
-                </DialogActions>
-            </Dialog>
+            <AppDialog
+                open={openDialog}
+                onClose={handleCloseDialog}
+                title={selectedCiclo ? 'Editar ciclo escolar' : 'Nuevo ciclo escolar'}
+                size="sm"
+                onSubmit={handleSave}
+                submitLabel="Guardar"
+                submitting={saving}
+                contentSx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}
+            >
+                <TextField name="anio" label="Año" value={form.anio} onChange={handleChange} slotProps={{ htmlInput: { inputMode: 'numeric' } }} fullWidth />
+                <TextField label="Etiqueta" value={form.anio ? `Ciclo Escolar ${form.anio}` : ''} fullWidth disabled />
+            </AppDialog>
 
-            <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}>
-                <Alert severity={snackbar.severity} onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))} sx={{ width: '100%' }}>
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </PageContainer>
     );
 };

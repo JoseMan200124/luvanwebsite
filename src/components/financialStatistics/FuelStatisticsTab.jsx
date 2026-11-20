@@ -1,22 +1,24 @@
 // src/components/financialStatistics/FuelStatisticsTab.jsx
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Box, Button, CircularProgress, Snackbar, Typography } from '@mui/material';
+import { Box, Button, CircularProgress, Typography } from '@mui/material';
 import { Download } from '@mui/icons-material';
-import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../../hooks/useRegisterPageRefresh';
 import FilterBar from '../filters/FilterBar';
 import useFilters from '../../hooks/useFilters';
 import { F } from '../filters/filterFields';
 import { getCurrentDateSync } from '../../hooks/useCurrentDate';
+import useNotify from '../../hooks/useNotify';
 import { getFuelFinancialStatistics, getFuelClients } from '../../services/fuelStatisticsService';
 import {
     ALL_OPTION, FUEL_TYPES, FUELING_REASONS, GRANULARITIES, DATE_PRESETS, computePresetRange, monthRangeToDates,
-    buildClientsParam, buildListParam, formatMoney, formatGallons, typesWithData
+    buildClientsParam, buildListParam, formatGallons, typesWithData
 } from './fuelStatsUtils';
 import FuelCharts from './FuelCharts';
 import FuelBreakdownTables from './FuelBreakdownTables';
 import { generateFuelStatsPdf } from './fuelStatsPdf';
+import { formatDate } from '../../utils/dateFormat';
+import { formatQ } from '../../utils/currency';
 
 const DEFAULT_PRESET = 'last6Months';
 
@@ -39,12 +41,11 @@ const FuelStatisticsTab = () => {
     const [clientOptions, setClientOptions] = useState({ schools: [], corporations: [], hasUnassigned: false });
     const [result, setResult] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const notify = useNotify();
 
     // Recibe los filtros aplicados. Listas vacías = todos.
     const fetchStats = useCallback(async (values) => {
         setLoading(true);
-        setError(null);
         try {
             const { from, to } = monthRangeToDates(values.months.from, values.months.to, getCurrentDateSync());
             const data = await getFuelFinancialStatistics({
@@ -58,12 +59,12 @@ const FuelStatisticsTab = () => {
             setResult(data);
         } catch (e) {
             console.error('fetchStats error', e);
-            setError(e?.response?.data?.error || 'Error al obtener las estadísticas de combustible. Por favor, inténtalo de nuevo más tarde.');
+            notify.fromError(e, 'Error al obtener las estadísticas de combustible');
             setResult(null);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [notify]);
 
     useEffect(() => {
         getFuelClients()
@@ -169,7 +170,7 @@ const FuelStatisticsTab = () => {
     }, [selectedClients, selectedFuelTypes, selectedReasons, clientName]);
 
     const rangeLabel = result
-        ? `${moment(result.from).format('DD/MM/YYYY')} — ${moment(result.to).format('DD/MM/YYYY')}`
+        ? `${formatDate(result.from)} — ${formatDate(result.to)}`
         : '';
 
     return (
@@ -199,7 +200,7 @@ const FuelStatisticsTab = () => {
 
                     {/* Tarjetas de resumen */}
                     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 2, mb: 2 }}>
-                        <KpiCard label="Gasto total" value={formatMoney(result.totals.amount)} color="#E65100" />
+                        <KpiCard label="Gasto total" value={formatQ(result.totals.amount, { nullText: 'N/A' })} color="#E65100" />
                         <KpiCard label="Galones" value={formatGallons(result.totals.gallons)} color="#1976D2" />
                         <KpiCard label="Registros" value={String(result.totals.records)} />
                     </Box>
@@ -212,7 +213,7 @@ const FuelStatisticsTab = () => {
                             <KpiCard
                                 key={t.key}
                                 label={`Precio/galón · ${t.label}`}
-                                value={formatMoney(result.totals.byType[t.key].price)}
+                                value={formatQ(result.totals.byType[t.key].price, { nullText: 'N/A' })}
                                 sub={`${formatGallons(result.totals.byType[t.key].gallons)}`}
                                 color={t.color}
                             />
@@ -224,9 +225,6 @@ const FuelStatisticsTab = () => {
                 </Box>
             ) : null}
 
-            <Snackbar open={Boolean(error)} autoHideDuration={6000} onClose={() => setError(null)}>
-                <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>{error}</Alert>
-            </Snackbar>
         </>
     );
 };

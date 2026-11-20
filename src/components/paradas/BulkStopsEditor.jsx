@@ -5,10 +5,10 @@
 //        | lectura (otro tiene el bloqueo, ciclo inactivo o bloqueo perdido) | procesando | procesado | error.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Alert, AppBar, Backdrop, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText,
-    DialogTitle, Snackbar, Toolbar, Tooltip, Typography,
+    Alert, AppBar, Backdrop, Box, Button, CircularProgress, Dialog, DialogContentText,
+    Snackbar, Toolbar, Tooltip, Typography,
 } from '@mui/material';
-import { Close, CloudDownload, CloudUpload, GroupAdd, PlayArrow, Redo, Undo } from '@mui/icons-material';
+import { Close, CloudDownload, CloudUpload, GroupAdd, HelpOutlineRounded, PlayArrow, Redo, Undo, WarningAmberRounded } from '@mui/icons-material';
 import paradasService, { codigoError, liberarAlCerrar, mensajeError } from '../../services/paradasService';
 import { paradasReducer, estadoInicial, familiasAfectadas } from './paradasReducer';
 import useHistorialParadas from './useHistorialParadas';
@@ -32,6 +32,7 @@ import ProcesarDialog from './ProcesarDialog';
 import DescargaObligatoriaDialog from './DescargaObligatoriaDialog';
 import BorradorProcesadoVista from './BorradorProcesadoVista';
 import GuiaParadas from './GuiaParadas';
+import AppDialog from '../dialogs/AppDialog';
 
 const conActuales = (familias) => familias.map(f => ({
     ...f,
@@ -720,19 +721,19 @@ export default function BulkStopsEditor({ open, onClose, schoolId }) {
                 <Typography>Procesando {resumen?.modificados || 0} estudiante(s)… no cierres esta ventana.</Typography>
             </Backdrop>
 
-            <Dialog open={!!confirmacion} onClose={() => setConfirmacion(null)} maxWidth="sm" fullWidth>
-                <DialogTitle>{confirmacion?.titulo}</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>{confirmacion?.texto}</DialogContentText>
-                    {confirmacion?.extra}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setConfirmacion(null)}>Cancelar</Button>
-                    <Button variant="contained" color={confirmacion?.color || 'primary'} onClick={() => { const fn = confirmacion.onAceptar; setConfirmacion(null); fn(); }}>
-                        {confirmacion?.textoAceptar}
-                    </Button>
-                </DialogActions>
-            </Dialog>
+            <AppDialog
+                open={!!confirmacion}
+                onClose={() => setConfirmacion(null)}
+                title={confirmacion?.titulo}
+                icon={confirmacion?.color === 'error' ? <WarningAmberRounded /> : <HelpOutlineRounded />}
+                tone={confirmacion?.color === 'error' ? 'danger' : 'default'}
+                size="sm"
+                onSubmit={() => { const fn = confirmacion.onAceptar; setConfirmacion(null); fn(); }}
+                submitLabel={confirmacion?.textoAceptar}
+            >
+                <DialogContentText>{confirmacion?.texto}</DialogContentText>
+                {confirmacion?.extra}
+            </AppDialog>
         </Dialog>
     );
 }
