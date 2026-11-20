@@ -136,6 +136,8 @@ const translateServiceStatus = (status) => {
 const ColaboradoresPage = () => {
     const { auth } = useContext(AuthContext);
     const { hasPermission, hasAnyPermission } = usePermissions();
+    // El chip de estado abre el diálogo de activar/desactivar: sin el permiso no debe parecer clicable.
+    const puedeCambiarEstado = hasPermission('usuarios-toggle-estado');
     // Pirámide de roles: el alta y la carga masiva de colaboradores solo para quien gestiona Colaboradores (rol 8)
     const { canManageRoleId } = useManageableRoles();
     const puedeGestionarColaboradores = canManageRoleId(8);
@@ -2069,16 +2071,16 @@ const ColaboradoresPage = () => {
                                                             label="Activo"
                                                             color="success"
                                                             size="small"
-                                                            clickable
-                                                            onClick={() => handleOpenToggleStateDialog(colaborador)}
+                                                            clickable={puedeCambiarEstado}
+                                                            onClick={puedeCambiarEstado ? () => handleOpenToggleStateDialog(colaborador) : undefined}
                                                         />
                                                     ) : getColaboradorStatus(colaborador) === 'Inactivo' ? (
                                                         <Chip
                                                             label={getColaboradorStatus(colaborador)}
                                                             color={getStatusColor(getColaboradorStatus(colaborador))}
                                                             size="small"
-                                                            clickable
-                                                            onClick={() => handleOpenToggleStateDialog(colaborador)}
+                                                            clickable={puedeCambiarEstado}
+                                                            onClick={puedeCambiarEstado ? () => handleOpenToggleStateDialog(colaborador) : undefined}
                                                         />
                                                     ) : (
                                                         <Chip

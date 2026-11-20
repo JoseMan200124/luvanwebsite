@@ -48,7 +48,10 @@ const ProtectedRoute = ({ children, roles = [], moduleKey = null, redirectTo = '
         ? (auth.user?.corporationId ? '/admin/corporaciones' : '/admin/colegios')
         : redirectTo;
 
-    if (requireSchoolContext && isSchoolContextRequiredRole(userRoleId) && !hasStoredSchoolContext()) {
+    // El Invitado de corporación no tiene colegio: nunca se le pide contexto de colegio.
+    const sinColegio = isInvitado && !!auth.user?.corporationId;
+
+    if (requireSchoolContext && !sinColegio && isSchoolContextRequiredRole(userRoleId) && !hasStoredSchoolContext()) {
         return <Navigate to="/select-context" replace state={{ nextPath: `${location.pathname}${location.search}` }} />;
     }
 
