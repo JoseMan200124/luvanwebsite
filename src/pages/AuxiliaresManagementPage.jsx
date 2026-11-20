@@ -25,31 +25,18 @@ import {
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { matchSearchTokens } from '../utils/clientFilter';
 import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
 import styled from 'styled-components';
-import tw from 'twin.macro';
 
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 
 // Container principal con estilos responsivos
-const AuxiliaresContainer = styled.div`
-    ${tw`bg-gray-100 min-h-screen w-full`}
-    padding: 2rem;
-    max-width: 1200px;
-    margin: 0 auto;
-
-    @media (max-width: 640px) {
-        padding: 1rem;
-    }
-
-    @media (max-width: 480px) {
-        padding: 0.5rem;
-    }
-`;
-
 // Helper para agrupar las monitoras asignadas por organización (colegio o corporación)
 // Usa una clave única combinando tipo y ID para evitar colisiones
 const groupByOrganization = (arr) => {
@@ -179,10 +166,11 @@ const AuxiliaresManagementPage = () => {
     };
 
     return (
-        <AuxiliaresContainer>
-            <Typography variant="h4" gutterBottom>
-                Gestión de Auxiliares
-            </Typography>
+        <PageContainer width="xl">
+            <PageHeader
+                eyebrow={MODULE_GROUPS.personal}
+                title="Gestión de Auxiliares"
+            />
 
             <FilterBar {...pageFilters.barProps} loading={loading} />
 
@@ -467,7 +455,7 @@ const AuxiliaresManagementPage = () => {
                     )}
                 </>
             )}
-        </AuxiliaresContainer>
+        </PageContainer>
     );
 };
 

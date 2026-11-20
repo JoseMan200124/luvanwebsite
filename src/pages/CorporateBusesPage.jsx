@@ -22,35 +22,24 @@ import {
     Autocomplete,
     Chip
 } from '@mui/material';
-import { DirectionsBus, Save, Clear, ArrowBack, Refresh, Schedule as ScheduleIcon } from '@mui/icons-material';
-import { useParams, useLocation, useNavigate } from 'react-router-dom';
+import { DirectionsBus, Save, Clear, Refresh, Schedule as ScheduleIcon } from '@mui/icons-material';
+import { useParams, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
 import ScheduleThresholdsDialog from '../components/ScheduleThresholdsDialog';
-import styled from 'styled-components';
-import tw from 'twin.macro';
-
-const PageContainer = styled.div`
-    ${tw`bg-gray-50 min-h-screen w-full`}
-    padding: 2rem;
-    max-width: 1200px;
-    margin: 0 auto;
-`;
-
-const HeaderCard = styled(Card)`
-    ${tw`mb-6 shadow-lg`}
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-`;
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
+import useClientScope from '../hooks/useClientScope';
 
 const CorporateBusesPage = () => {
     const { hasPermission } = usePermissions();
+    // Sin este permiso la tabla es solo de consulta: los selectores de bus/piloto no deben dejar editar un borrador que no se puede guardar.
+    const puedeAsignar = hasPermission('routes-assign-staff');
     const { auth } = useContext(AuthContext);
     const { fiscalYear, corporationId } = useParams();
     const location = useLocation();
-    const navigate = useNavigate();
 
     const stateCorporation = location.state?.corporation;
     const stateFiscalYear = location.state?.fiscalYear;
@@ -75,6 +64,7 @@ const CorporateBusesPage = () => {
     const [corporationScheduleNames, setCorporationScheduleNames] = useState({});
 
     const currentCorporation = stateCorporation;
+    const scope = useClientScope({ entity: currentCorporation });
     const currentFiscalYear = fiscalYear || stateFiscalYear;
 
     const fetchCorporationData = useCallback(async () => {
@@ -370,10 +360,6 @@ const CorporateBusesPage = () => {
         }
     };
 
-    const handleBack = () => {
-        navigate(-1);
-    };
-
     const getAvailableBuses = (currentRouteNumber) => {
         // Obtener IDs de buses ya asignados a otras rutas de esta corporación en el estado actual
         const busesAssignedToOtherRoutes = new Set();
@@ -430,40 +416,31 @@ const CorporateBusesPage = () => {
 
     return (
         <PageContainer>
-            <HeaderCard>
-                <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                        <Button
-                            startIcon={<ArrowBack />}
-                            onClick={handleBack}
-                            sx={{ color: 'white', '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
-                        >
-                            Volver
-                        </Button>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <DirectionsBus sx={{ fontSize: 40 }} />
-                        <Box>
-                            <Typography variant="h4">Asignación de Buses - {currentCorporation?.name || 'Cargando...'}</Typography>
-                            <Typography variant="body2">Año Fiscal {currentFiscalYear}</Typography>
-                        </Box>
-                    </Box>
-                </CardContent>
-            </HeaderCard>
+            <PageHeader
+                variant="hero"
+                tone={scope.tone}
+                icon={DirectionsBus}
+                title="Asignación de Buses"
+                name={currentCorporation?.name ?? null}
+                back={scope.back}
+                period={scope.periodLabel(currentFiscalYear)}
+            />
 
             <Card>
                 <CardContent>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                         <Typography variant="h6">Asignación de Rutas, Buses, Pilotos y Monitoras</Typography>
                         <Box sx={{ display: 'flex', gap: 2 }}>
-                            <Button 
-                                variant="outlined" 
-                                startIcon={<Clear />} 
-                                onClick={handleClearAssignments}
-                                disabled={saving}
-                            >
-                                Limpiar
-                            </Button>
+                            <PermissionGuard permission="routes-assign-staff">
+                                <Button
+                                    variant="outlined"
+                                    startIcon={<Clear />}
+                                    onClick={handleClearAssignments}
+                                    disabled={saving}
+                                >
+                                    Limpiar
+                                </Button>
+                            </PermissionGuard>
                             <Button
                                 variant="outlined"
                                 startIcon={<Refresh />}
@@ -528,6 +505,7 @@ const CorporateBusesPage = () => {
                                                 <TableCell>
                                                     <Autocomplete
                                                         disableClearable={false}
+                                                        disabled={!puedeAsignar}
                                                         options={availableBuses}
                                                         getOptionLabel={(option) => option ? `${option.plate} (${option.capacity || 'N/A'})` : ''}
                                                         isOptionEqualToValue={(option, value) => option && value && option.id === value.id}
@@ -549,7 +527,7 @@ const CorporateBusesPage = () => {
                                                 </TableCell>
                                                 <TableCell>
                                                     <Autocomplete
-                                                        disabled={false}
+                                                        disabled={!puedeAsignar}
                                                         options={availablePilotsForThisRoute}
                                                         getOptionLabel={(option) => option ? (option.name || option.email) : ''}
                                                         isOptionEqualToValue={(option, value) => option && value && option.id === value.id}

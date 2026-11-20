@@ -34,6 +34,7 @@ import api from '../utils/axiosConfig';
 import { getSocket } from '../services/socketService';
 import { getSelectedCicloEscolarId } from '../utils/schoolContext';
 import { shouldShowToast } from './notificationToastRules';
+import { LAYOUT_ACCENT } from '../theme/tokens';
 
 // Botón estilizado (twin.macro + styled-components)
 const NotificationIconButton = styled(IconButton)`
@@ -515,7 +516,10 @@ const NotificationsMenu = ({ authToken }) => {
     return (
         <>
             <NotificationIconButton onClick={handleMenuOpen} ref={menuRef}>
-                <Badge badgeContent={unreadCount} color="secondary">
+                <Badge
+                    badgeContent={unreadCount}
+                    sx={{ '& .MuiBadge-badge': { backgroundColor: LAYOUT_ACCENT.main, color: '#fff' } }}
+                >
                     <Notifications />
                 </Badge>
             </NotificationIconButton>

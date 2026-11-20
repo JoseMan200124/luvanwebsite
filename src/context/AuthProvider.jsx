@@ -10,6 +10,7 @@ import Alert from '@mui/material/Alert';
 import { loginUser } from '../services/authService';
 import { initSocket, closeSocket } from '../services/socketService';
 import { clearStoredSchoolContext } from '../utils/schoolContext';
+import { ahoraReal } from '../utils/relojReal';
 
 export const AuthContext = createContext();
 
@@ -29,8 +30,8 @@ const AuthProvider = ({ children }) => {
 
     // lastActivity se sincroniza entre pestañas vía localStorage
     const [lastActivity, setLastActivity] = useState(() => {
-        try { const stored = localStorage.getItem('lastActivity'); return stored ? Number(stored) : Date.now(); }
-        catch (e) { return Date.now(); }
+        try { const stored = localStorage.getItem('lastActivity'); return stored ? Number(stored) : ahoraReal(); }
+        catch (e) { return ahoraReal(); }
     });
 
     const setSharedLastActivity = useCallback((ts) => {
@@ -38,7 +39,7 @@ const AuthProvider = ({ children }) => {
         setLastActivity(ts);
     }, []);
 
-    const resetTimer = useCallback(() => setSharedLastActivity(Date.now()), [setSharedLastActivity]);
+    const resetTimer = useCallback(() => setSharedLastActivity(ahoraReal()), [setSharedLastActivity]);
 
     const logout = useCallback(() => {
         try { localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); clearStoredSchoolContext(); } catch (e) {}
@@ -55,7 +56,7 @@ const AuthProvider = ({ children }) => {
             const token = localStorage.getItem('token'); if (!token) {
                 return;
             }
-            const decoded = jwtDecode(token); const msLeft = decoded.exp * 1000 - Date.now();
+            const decoded = jwtDecode(token); const msLeft = decoded.exp * 1000 - ahoraReal();
             if (msLeft < SILENT_REFRESH_THRESHOLD_MS) {
                 const refreshToken = localStorage.getItem('refreshToken'); if (!refreshToken) {
                     return;
@@ -100,7 +101,7 @@ const AuthProvider = ({ children }) => {
     // Permisos ahora se cargan exclusivamente en PermissionsProvider
 
     useEffect(() => {
-        const checkIdle = () => { const now = Date.now(); if (auth.token && now - lastActivity > IDLE_TIMEOUT_MS) {
+        const checkIdle = () => { const now = ahoraReal(); if (auth.token && now - lastActivity > IDLE_TIMEOUT_MS) {
             logoutByIdle();
         } };
         const interval = setInterval(checkIdle, CHECK_INTERVAL_MS); return () => clearInterval(interval);
@@ -138,7 +139,7 @@ const AuthProvider = ({ children }) => {
                 const storedToken = localStorage.getItem('token');
                 if (storedToken) {
                     const decoded = jwtDecode(storedToken);
-                    if (decoded.exp * 1000 >= Date.now()) {
+                    if (decoded.exp * 1000 >= ahoraReal()) {
                         if (decoded.roleId === 9) {
                             await verifyToken(storedToken);
                         } else {

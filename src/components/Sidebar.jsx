@@ -117,7 +117,15 @@ export default function Sidebar({ isOpen, toggleSidebar }) {
 
     const isInvitado = user.role === 'Invitado';
     const isInvitadoCorporacion = isInvitado && Boolean(auth.user?.corporationId);
-    const invitedClientAllowedSubmodules = isInvitadoCorporacion ? ['corporaciones'] : ['colegios'];
+    // Invitado ve la página de su cliente y las de seguimiento (todas acotadas a su cliente en el servidor).
+    // Asistencias, conducta y horarios de ruta son de colegio: el Invitado de corporación no las ve.
+    const invitedTrackingSubmodules = ['historial-recorridos-rutas', 'incidentes-buses', 'emergencias-buses'];
+    const invitedSchoolTrackingSubmodules = ['asistencias', 'incidentes-conducta', 'horarios-rutas'];
+    // Historiales de envíos: el servidor solo deja ver los de su cliente.
+    const invitedHistorySubmodules = ['circulares-admin-listar', 'notificaciones-admin-listar', 'envios-programados-listar'];
+    const invitedClientAllowedSubmodules = isInvitadoCorporacion
+        ? ['corporaciones', ...invitedTrackingSubmodules, ...invitedHistorySubmodules]
+        : ['colegios', ...invitedTrackingSubmodules, ...invitedSchoolTrackingSubmodules, ...invitedHistorySubmodules];
     const canAccessDashboard = !!permissions['dashboard-ver'];
 
     /**

@@ -36,16 +36,12 @@ import {
     Edit as EditIcon,
     CloudUpload as CloudUploadIcon,
     Visibility as VisibilityIcon,
-    School as SchoolIcon,
     Add as AddIcon,
     GetApp as DownloadIcon,
-    Description as DocumentIcon,
-    ArrowBack as ArrowBackIcon,
-    CalendarToday
+    Description as DocumentIcon
 } from '@mui/icons-material';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import styled from 'styled-components';
-import tw from 'twin.macro';
 
 import api from '../utils/axiosConfig';
 import PermissionGuard from '../components/PermissionGuard';
@@ -55,39 +51,14 @@ import { getCicloEscolarYear } from '../services/cicloEscolarService';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
+import useClientScope from '../hooks/useClientScope';
 
 const PROTOCOL_TYPE_OPTIONS = [
     { value: 'protocolo', label: 'Protocolos' },
     { value: 'reglamento', label: 'Reglamentos' },
 ];
-
-// Styled components similares a SchoolUsersPage
-const PageContainer = styled.div`
-    ${tw`bg-gray-50 min-h-screen w-full`}
-    padding: 2rem;
-    max-width: 1400px;
-    margin: 0 auto;
-
-    @media (max-width: 640px) {
-        padding: 1rem;
-    }
-`;
-
-const HeaderCard = styled(Card)`
-    ${tw`mb-6 shadow-lg`}
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-`;
-
-// Contenedor principal responsive
-const Container = styled.div`
-    padding: 20px;
-    max-width: 1200px;
-    margin: 0 auto;
-    @media (max-width: 600px) {
-        padding: 10px;
-    }
-`;
 
 // Mobile view: Tarjeta para protocolo/reglamento
 const MobileProtocolCard = styled(Card)`
@@ -99,8 +70,7 @@ const SchoolProtocolsPage = () => {
     const { hasPermission } = usePermissions();
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-    const navigate = useNavigate();
-    const { cicloEscolarId: routeCicloEscolarId, schoolId } = useParams();
+    const { schoolId } = useParams();
     const location = useLocation();
 
     // Estados principales
@@ -148,10 +118,10 @@ const SchoolProtocolsPage = () => {
 
     // Obtener datos del estado de navegación si están disponibles
     const stateSchool = location.state?.school;
-    const stateCicloEscolarId = routeCicloEscolarId || location.state?.cicloEscolarId || stateSchool?.cicloEscolarId || '';
     const stateCicloEscolar = location.state?.cicloEscolar || stateSchool?.cicloEscolar || stateSchool?.CicloEscolar || null;
     const currentCicloEscolar = schoolData?.cicloEscolar || schoolData?.CicloEscolar || stateCicloEscolar;
     const currentCycleLabel = getCicloEscolarYear(currentCicloEscolar);
+    const scope = useClientScope({ entity: schoolData || stateSchool, cicloEscolar: currentCicloEscolar });
 
     // ---------------------------
     // Funciones para cargar datos
@@ -376,22 +346,11 @@ const SchoolProtocolsPage = () => {
     };
 
     // ---------------------------
-    // Navegación
+    // Acciones del encabezado
     // ---------------------------
-    const handleBackToDashboard = () => {
-        if (!stateCicloEscolarId) {
-            navigate(-1);
-            return;
-        }
-
-        navigate(`/admin/escuelas/ciclo/${stateCicloEscolarId}/${schoolId}`, {
-            state: {
-                cicloEscolarId: stateCicloEscolarId,
-                cicloEscolar: currentCicloEscolar,
-                school: schoolData || stateSchool
-            }
-        });
-    };
+    const headerActions = [
+        { key: 'create', label: 'Crear nuevo protocolo/reglamento', icon: <AddIcon />, primary: true, permission: 'protocolos-crear', onClick: handleCreate },
+    ];
 
     // ---------------------------
     // Renderizado
@@ -523,55 +482,18 @@ const SchoolProtocolsPage = () => {
 
     return (
         <PageContainer>
-            <HeaderCard>
-                <CardContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Button
-                            startIcon={<ArrowBackIcon />}
-                            onClick={handleBackToDashboard}
-                            sx={{ 
-                                color: 'white',
-                                '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' }
-                            }}
-                        >
-                            Volver al Dashboard
-                        </Button>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <SchoolIcon sx={{ fontSize: 40 }} />
-                        <Box>
-                            <Typography variant="h4" component="h1" gutterBottom>
-                                Protocolos y Reglamentos - {schoolData?.name || 'Cargando...'}
-                            </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                <Chip 
-                                    icon={<CalendarToday />}
-                                    label={`Ciclo Escolar ${currentCycleLabel || ''}`}
-                                    sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
-                                />
-                                <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                                    {protocols.length} protocolos encontrados
-                                </Typography>
-                            </Box>
-                        </Box>
-                    </Box>
-                </CardContent>
-            </HeaderCard>
+            <PageHeader
+                variant="hero"
+                tone={scope.tone}
+                title="Protocolos y Reglamentos"
+                name={(schoolData || stateSchool)?.name ?? null}
+                back={scope.back}
+                period={scope.periodLabel(currentCycleLabel)}
+                meta={[`${protocols.length} protocolos encontrados`]}
+                actions={headerActions}
+            />
 
-            <Container>
-                {/* Botón para crear nuevo protocolo */}
-                <PermissionGuard permission="protocolos-crear">
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={handleCreate}
-                        startIcon={<AddIcon />}
-                        style={{ marginBottom: '20px' }}
-                    >
-                        Crear Nuevo Protocolo/Reglamento
-                    </Button>
-                </PermissionGuard>
-
+            <>
                 {/* Filtros */}
                 <FilterBar {...pageFilters.barProps} loading={loading} />
 
@@ -739,7 +661,7 @@ const SchoolProtocolsPage = () => {
                         {snackbar.message}
                     </Alert>
                 </Snackbar>
-            </Container>
+            </>
         </PageContainer>
     );
 };
