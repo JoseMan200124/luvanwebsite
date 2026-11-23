@@ -21,9 +21,7 @@ import {
     DialogActions,
     useTheme,
     useMediaQuery,
-    Chip,
-    Card,
-    CardContent
+    Chip
 } from '@mui/material';
 import {
     Delete as DeleteIcon,
@@ -31,15 +29,15 @@ import {
     CloudUpload as CloudUploadIcon,
     ContentCopy as ContentCopyIcon,
     Visibility as VisibilityIcon,
-    School as SchoolIcon,
-    ArrowBack as ArrowBackIcon,
-    CalendarToday,
     Add as AddIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
+import useClientScope from '../hooks/useClientScope';
 
 import SimpleEditor from './SimpleEditor';
 import api from '../utils/axiosConfig';
@@ -54,35 +52,6 @@ import SignatureCanvas from 'react-signature-canvas';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import styled from 'styled-components';
-import tw from 'twin.macro';
-
-// Styled components similares a SchoolUsersPage
-const PageContainer = styled.div`
-    ${tw`bg-gray-50 min-h-screen w-full`}
-    padding: 2rem;
-    max-width: 1400px;
-    margin: 0 auto;
-
-    @media (max-width: 640px) {
-        padding: 1rem;
-    }
-`;
-
-const HeaderCard = styled(Card)`
-    ${tw`mb-6 shadow-lg`}
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-`;
-
-// Contenedor principal responsive
-const Container = styled.div`
-    padding: 20px;
-    max-width: 1200px;
-    margin: 0 auto;
-    @media (max-width: 600px) {
-        padding: 10px;
-    }
-`;
 
 // Mobile view: Tarjeta para contrato (contratos originales)
 const MobileContractCard = styled(Box)`
@@ -175,10 +144,10 @@ const SchoolContractsPage = () => {
 
     // Obtener datos del estado de navegación si están disponibles
     const stateSchool = location.state?.school;
-    const stateCicloEscolarId = routeCicloEscolarId || location.state?.cicloEscolarId || stateSchool?.cicloEscolarId || '';
     const stateCicloEscolar = location.state?.cicloEscolar || stateSchool?.cicloEscolar || stateSchool?.CicloEscolar || null;
     const currentCicloEscolar = schoolData?.cicloEscolar || schoolData?.CicloEscolar || stateCicloEscolar;
     const currentCycleLabel = getCicloEscolarYear(currentCicloEscolar);
+    const scope = useClientScope({ entity: schoolData || stateSchool, cicloEscolar: currentCicloEscolar });
 
     // ---------------------------
     // useEffect para cargar contratos del colegio específico
@@ -789,22 +758,11 @@ const SchoolContractsPage = () => {
     };
 
     // ---------------------------
-    // Navegación
+    // Acciones del encabezado
     // ---------------------------
-    const handleBackToDashboard = () => {
-        if (!stateCicloEscolarId) {
-            navigate(-1);
-            return;
-        }
-
-        navigate(`/admin/escuelas/ciclo/${stateCicloEscolarId}/${schoolId}`, {
-            state: {
-                cicloEscolarId: stateCicloEscolarId,
-                cicloEscolar: currentCicloEscolar,
-                school: schoolData || stateSchool
-            }
-        });
-    };
+    const headerActions = [
+        { key: 'create', label: 'Crear nuevo contrato', icon: <AddIcon />, primary: true, permission: 'contratos-crear', onClick: () => setOpenEditor(true) },
+    ];
 
     // Función de render para un filled contract (evita duplicación móvil/desktop).
     // No debe ser un componente (<RenderFilledContract />): declarado dentro de la página,
@@ -937,52 +895,18 @@ const SchoolContractsPage = () => {
 
     return (
         <PageContainer>
-            <HeaderCard>
-                <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                        <Button
-                            startIcon={<ArrowBackIcon />}
-                            onClick={handleBackToDashboard}
-                            sx={{ color: 'white', '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
-                        >
-                            Volver al Dashboard
-                        </Button>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <SchoolIcon sx={{ fontSize: 40 }} />
-                        <Box>
-                                        <Typography variant="h4" component="h1" gutterBottom>
-                                            Contratos - {schoolData?.name || 'Cargando...'}
-                                        </Typography>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                            <Chip 
-                                                icon={<CalendarToday />}
-                                                label={`Ciclo Escolar ${currentCycleLabel || ''}`}
-                                                sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
-                                            />
-                                            <Typography variant="body1" sx={{ opacity: 0.9, fontWeight: 700 }}>
-                                                {filledContractsTotalCount} {onlyUnfilled ? 'familias sin firmar contrato' : 'contratos firmados'}
-                                            </Typography>
-                                        </Box>
-                        </Box>
-                    </Box>
-                </CardContent>
-            </HeaderCard>
+            <PageHeader
+                variant="hero"
+                tone={scope.tone}
+                title="Contratos"
+                name={(schoolData || stateSchool)?.name ?? null}
+                back={scope.back}
+                period={scope.periodLabel(currentCycleLabel)}
+                meta={[`${filledContractsTotalCount} ${onlyUnfilled ? 'familias sin firmar contrato' : 'contratos firmados'}`]}
+                actions={headerActions}
+            />
 
-            <Container>
-                {/* Botón para crear contrato */}
-                <PermissionGuard permission="contratos-crear">
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={() => setOpenEditor(true)}
-                        startIcon={<AddIcon />}
-                        style={{ marginBottom: '20px' }}
-                    >
-                        Crear Nuevo Contrato
-                    </Button>
-                </PermissionGuard>
-
+            <>
                 {/* Lista de contratos */}
                 {isMobile ? (
                     <Box>
@@ -1292,7 +1216,7 @@ const SchoolContractsPage = () => {
                         {snackbar.message}
                     </Alert>
                 </Snackbar>
-            </Container>
+            </>
         </PageContainer>
     );
 };

@@ -28,7 +28,6 @@ import {
 import { Visibility as VisibilityIcon } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
-import tw from 'twin.macro';
 import { getAllStudentIncidents, getStudentIncidentById, INCIDENT_TYPES } from '../services/studentIncidentService';
 import api from '../utils/axiosConfig';
 import { getScheduleLabel, getScheduleColor, DEFAULT_SCHEDULE_CODES, SCHEDULE_LABELS } from '../utils/scheduleConfig';
@@ -37,10 +36,11 @@ import { getClientSchoolId } from '../utils/clientValue';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F, toPlateOptions, toRouteOptions } from '../components/filters/filterFields';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 
 moment.tz.setDefault('America/Guatemala');
-
-const Container = tw.div`p-8 bg-gray-100 min-h-screen`;
 
 const SCHEDULE_OPTIONS = DEFAULT_SCHEDULE_CODES.map((code) => ({ value: code, label: SCHEDULE_LABELS[code] || code }));
 
@@ -247,20 +247,17 @@ const StudentIncidentsPage = () => {
 
 
     return (
-            <Container>
-                <Box mb={3}>
-                    <Typography variant="h4" gutterBottom>
-                        Reportes de Conducta de Alumnos
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                        Visualiza y analiza los incidentes reportados por las monitoras
-                    </Typography>
-                </Box>
+            <PageContainer width="xl">
+                <PageHeader
+                    eyebrow={MODULE_GROUPS.monitoras}
+                    title="Reportes de Conducta de Alumnos"
+                    subtitle="Visualiza y analiza los incidentes reportados por las monitoras"
+                />
 
                 {/* Estadísticas */}
                 <Grid container spacing={3} mb={3}>
                     <Grid item xs={12} sm={6} md={4}>
-                        <Card>
+                        <Card sx={{ height: '100%' }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
                                     Total Incidentes
@@ -272,7 +269,7 @@ const StudentIncidentsPage = () => {
                         </Card>
                     </Grid>
                     <Grid item xs={12} sm={6} md={4}>
-                        <Card>
+                        <Card sx={{ height: '100%' }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
                                     Tipo Más Común
@@ -288,7 +285,7 @@ const StudentIncidentsPage = () => {
                         </Card>
                     </Grid>
                     <Grid item xs={12} sm={6} md={4}>
-                        <Card>
+                        <Card sx={{ height: '100%' }}>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
                                     Horario Más Incidentes
@@ -505,7 +502,7 @@ const StudentIncidentsPage = () => {
                         </Button>
                     </DialogActions>
                 </Dialog>
-            </Container>
+            </PageContainer>
     );
 };
 

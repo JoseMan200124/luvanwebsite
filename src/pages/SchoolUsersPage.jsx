@@ -15,7 +15,6 @@ import {
     Alert,
     Grid,
     Chip,
-    Tooltip,
     Table,
     TableBody,
     TableCell,
@@ -36,12 +35,9 @@ import {
     DialogContent,
     DialogActions,
     DialogContentText
-    ,Checkbox, FormControlLabel, Menu, ListItemText
+    ,Checkbox, FormControlLabel, ListItemText
 } from '@mui/material';
 import { 
-    School as SchoolIcon, 
-    CalendarToday,
-    ArrowBack,
     Email,
     Edit,
     Delete,
@@ -54,19 +50,17 @@ import {
     ToggleOn,
     ToggleOff
 } from '@mui/icons-material';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import api from '../utils/axiosConfig';
 import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
 import useManageableRoles from '../hooks/useManageableRoles';
-import styled from 'styled-components';
 import { normalizeKey } from '../utils/stringHelpers';
 import BulkFamilyDraftsReview, { BulkPendingSteps, getDraftIssues, getDuplicateRowsByEmail, getExistingChanges, hasNothingToUpdate } from '../components/BulkFamilyDraftsReview';
 import { getServerPairing, pruneStalePairing, normalizeStudentText } from '../utils/bulkStudentPairing';
 import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
-import tw from 'twin.macro';
 import StudentScheduleModal from '../components/modals/StudentScheduleModal';
 import BulkStopsEditor from '../components/paradas/BulkStopsEditor';
 import RetroactiveApplyModal from '../components/modals/RetroactiveApplyModal';
@@ -80,6 +74,9 @@ import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
 import { matchSearchTokens } from '../utils/clientFilter';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
+import useClientScope from '../hooks/useClientScope';
 
 const FAMILY_STATUS_OPTIONS = ['Nuevo', 'Duplicado', 'Actualizado', 'Sin asignaciones']
     .map((status) => ({ value: status, label: status }));
@@ -104,23 +101,6 @@ const DOWNLOAD_FAMILY_OPTION_LABELS = DOWNLOAD_FAMILY_OPTIONS.reduce((acc, o) =>
 const stripArchivedEmailPrefix = (email) => String(email || '').replace(/^ARCHIVED_ID:?\d+_/i, '');
 const getVisibleUserEmail = (user) => stripArchivedEmailPrefix(user?.email || user?.motherEmail || user?.fatherEmail || '');
 
-const PageContainer = styled.div`
-    ${tw`bg-gray-50 min-h-screen w-full`}
-    padding: 2rem;
-    max-width: 1400px;
-    margin: 0 auto;
-
-    @media (max-width: 640px) {
-        padding: 1rem;
-    }
-`;
-
-const HeaderCard = styled(Card)`
-    ${tw`mb-6 shadow-lg`}
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-`;
-
 // Familias por petición al guardar la carga masiva (el backend acepta hasta 100 por petición).
 const BULK_COMMIT_CHUNK_SIZE = 20;
 
@@ -139,7 +119,6 @@ const SchoolUsersPage = () => {
     // llaves para abrir el diálogo, y cada canal se decide adentro.
     const puedeEnviarMensajeFamilia = hasAnyPermission(['mail-enviar-familia', 'notificaciones-crear']);
     const { auth } = useContext(AuthContext);
-    const navigate = useNavigate();
     const location = useLocation();
     const { cicloEscolarId: routeCicloEscolarId, schoolId } = useParams();
 
@@ -180,7 +159,6 @@ const SchoolUsersPage = () => {
     const [familyMessageBody, setFamilyMessageBody] = useState('');
     const [familyMessageFile, setFamilyMessageFile] = useState(null);
     const [familyMessageSending, setFamilyMessageSending] = useState(false);
-    const [downloadMenuAnchor, setDownloadMenuAnchor] = useState(null);
 
     // Estados para diferentes operaciones
     const [bulkFile, setBulkFile] = useState(null);
@@ -1288,15 +1266,6 @@ const SchoolUsersPage = () => {
         setFilteredUsers(filtered);
     }, [users, searchQuery, statusFilter, serviceStatusFilter]);
 
-    const handleBackToDashboard = () => {
-        navigate(`/admin/escuelas/ciclo/${stateCicloEscolarId}/${schoolId}`, {
-            state: {
-                cicloEscolarId: stateCicloEscolarId,
-                cicloEscolar: stateCicloEscolar,
-                school: currentSchool
-            }
-        });
-    };
 
     
 
@@ -2268,6 +2237,9 @@ const SchoolUsersPage = () => {
     const schoolRecordFromList = Array.isArray(schools)
         ? schools.find(s => String(s.id) === String(schoolId || currentSchool?.id || ''))
         : null;
+    // En pestaña nueva no hay location.state: el nombre sale de la lista de colegios, que la página ya carga siempre.
+    const headerSchool = currentSchool || schoolRecordFromList || null;
+    const scope = useClientScope({ entity: headerSchool, cicloEscolar: stateCicloEscolar });
     const managedSchool = { ...(schoolRecordFromList || {}), ...(currentSchool || {}) };
     const canCreateUsersInManagedSchool = managedSchool.canCreateNewUsers !== false;
     const newUserCreationDisabledMessage = managedSchool.newUserCreationMessage || 'Este colegio pertenece a un ciclo anterior. Para crear nuevos usuarios, usa el colegio del ciclo más reciente.';
@@ -2480,206 +2452,105 @@ const SchoolUsersPage = () => {
     setPage(0);
     };
 
+    const totalStudentsLabel = (() => {
+        try {
+            return `${countStudents(users)} alumnos`;
+        } catch (e) {
+            return '0 alumnos';
+        }
+    })();
+
+    const headerActions = [
+        {
+            key: 'download',
+            label: 'Descargar',
+            group: 'download',
+            menu: [
+                { key: 'families', label: 'Descargar familias', onClick: () => setOpenDownloadDialog(true) },
+                { key: 'stops', label: 'Descargar reporte de paradas', disabled: routeReportLoading, onClick: () => handleDownloadRouteReport(currentSchool?.id || schoolId) },
+            ],
+        },
+        puedeGestionarPadres && { key: 'bulk', label: 'Carga masiva', group: 'upload', permission: 'padres-carga-masiva', disabled: !canCreateUsersInManagedSchool, onClick: () => setOpenBulkDialog(true) },
+        { key: 'stops-upload', label: 'Carga de paradas', group: 'upload', permission: 'horarios-carga-masiva', onClick: () => setOpenBulkStopsEditor(true) },
+        puedeGestionarPadres && { key: 'add', label: 'Añadir familia', icon: <Add />, primary: true, permission: 'usuarios-crear', disabled: !canCreateUsersInManagedSchool, onClick: handleAddUser },
+    ];
+
     return (
         <PageContainer>
-            {/* Header */}
-            <HeaderCard>
-                <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                        <Button
-                            startIcon={<ArrowBack />}
-                            onClick={handleBackToDashboard}
-                            sx={{ color: 'white', '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
+            <PageHeader
+                variant="hero"
+                tone={scope.tone}
+                title="Familias"
+                name={headerSchool?.name ?? null}
+                back={scope.back}
+                period={scope.periodLabel(currentCycleLabel)}
+                chips={[(managedSchool.cycleStatus || cycleStatusFila) === 'ARCHIVED' && { key: 'closed', label: 'Ciclo cerrado', tooltip: 'Este ciclo ya no está en operaciones. Los estados de servicio son los que tenía cada familia al cerrar el ciclo.', sx: { backgroundColor: 'rgba(255,255,255,0.85)', color: 'text.primary' } }]}
+                meta={[`${users.length} familias encontradas`, totalStudentsLabel]}
+                actions={headerActions}
+            />
+
+            {!canCreateUsersInManagedSchool && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                    {newUserCreationDisabledMessage}
+                </Alert>
+            )}
+
+            <Dialog open={openDownloadDialog} onClose={() => setOpenDownloadDialog(false)}>
+                <DialogTitle>Descargar Familias</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>Selecciona qué familias deseas descargar (puedes elegir varias opciones):</DialogContentText>
+                    <FormControl fullWidth sx={{ mt: 2 }}>
+                        <InputLabel id="parents-download-select-label">Opciones</InputLabel>
+                        <Select
+                            labelId="parents-download-select-label"
+                            multiple
+                            value={downloadChoice}
+                            label="Opciones"
+                            onChange={(e) => {
+                                const raw = typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value;
+                                // "Todas" es excluyente: no combina con los demás filtros
+                                if (raw.includes('all')) {
+                                    setDownloadChoice(downloadChoice.includes('all') ? raw.filter((v) => v !== 'all') : ['all']);
+                                } else {
+                                    setDownloadChoice(raw);
+                                }
+                            }}
+                            renderValue={(selected) => selected.map((v) => DOWNLOAD_FAMILY_OPTION_LABELS[v] || v).join(', ')}
                         >
-                            Volver al Dashboard
-                        </Button>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <SchoolIcon sx={{ fontSize: 40 }} />
-                        <Box>
-                            <Typography variant="h4" component="h1" gutterBottom>
-                                Familias - {currentSchool?.name || 'Cargando...'}
-                            </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                <Chip 
-                                    icon={<CalendarToday />}
-                                    label={`Ciclo Escolar ${currentCycleLabel || ''}`}
-                                    sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
-                                />
-                                {(managedSchool.cycleStatus || cycleStatusFila) === 'ARCHIVED' && (
-                                    <Tooltip title="Este ciclo ya no está en operaciones. Los estados de servicio son los que tenía cada familia al cerrar el ciclo.">
-                                        <Chip label="Ciclo cerrado" sx={{ backgroundColor: 'rgba(255,255,255,0.85)' }} />
-                                    </Tooltip>
-                                )}
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                    <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                                        {users.length} familias encontradas
-                                    </Typography>
-                                    <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                                        {(() => {
-                                            try {
-                                                const total = countStudents(users);
-                                                return `${total} alumnos`;
-                                            } catch (e) {
-                                                return `0 alumnos`;
-                                            }
-                                        })()}
-                                    </Typography>
-                                </Box>
-                            </Box>
-                        </Box>
-                    </Box>
-                </CardContent>
-            </HeaderCard>
+                            {DOWNLOAD_FAMILY_OPTIONS.map((opt) => {
+                                const allSelected = downloadChoice.includes('all');
+                                const disabled = opt.value === 'all'
+                                    ? (downloadChoice.length > 0 && !allSelected)
+                                    : allSelected;
+                                return (
+                                    <MenuItem key={opt.value} value={opt.value} disabled={disabled}>
+                                        <Checkbox checked={downloadChoice.indexOf(opt.value) > -1} />
+                                        <ListItemText primary={opt.label} />
+                                    </MenuItem>
+                                );
+                            })}
+                        </Select>
+                    </FormControl>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setOpenDownloadDialog(false)}>Cancelar</Button>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        startIcon={<GetApp />}
+                        disabled={downloadChoice.length === 0 || routeReportLoading}
+                        onClick={async () => {
+                            await handleDownloadCombinedFamilies(downloadChoice, currentSchool?.id || schoolId);
+                            setOpenDownloadDialog(false);
+                        }}
+                    >
+                        Descargar
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
             {/* Filtros y búsqueda */}
             <FilterBar {...pageFilters.barProps} loading={loading} />
-
-            {/* Botones de Acción */}
-            <Card sx={{ mb: 3 }}>
-                <CardContent>
-                    {!canCreateUsersInManagedSchool && (
-                        <Alert severity="warning" sx={{ mb: 2 }}>
-                            {newUserCreationDisabledMessage}
-                        </Alert>
-                    )}
-                    <Grid container spacing={2}>
-                        {puedeGestionarPadres && (
-                            <PermissionGuard permission="padres-carga-masiva">
-                                <Grid item xs={12} md={2}>
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        startIcon={<FileUpload />}
-                                        fullWidth
-                                        onClick={() => setOpenBulkDialog(true)}
-                                        disabled={!canCreateUsersInManagedSchool}
-                                    >
-                                        Carga Masiva
-                                    </Button>
-                                </Grid>
-                            </PermissionGuard>
-                        )}
-                        <PermissionGuard permission="horarios-carga-masiva">
-                        <Grid item xs={12} md={2}>
-                            <Button
-                                variant="outlined"
-                                color="primary"
-                                startIcon={<FileUpload />}
-                                fullWidth
-                                onClick={() => setOpenBulkStopsEditor(true)}
-                            >
-                                Carga de Paradas
-                            </Button>
-                        </Grid>
-                        </PermissionGuard>
-                        {puedeGestionarPadres && (
-                            <PermissionGuard permission="usuarios-crear">
-                                <Grid item xs={12} md={2}>
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        startIcon={<Add />}
-                                        fullWidth
-                                        onClick={handleAddUser}
-                                        disabled={!canCreateUsersInManagedSchool}
-                                    >
-                                        Añadir Familia
-                                    </Button>
-                                </Grid>
-                            </PermissionGuard>
-                        )}
-                        <Grid item xs={12} md={2}>
-                            <Button
-                                variant="contained"
-                                color="success"
-                                startIcon={<GetApp />}
-                                fullWidth
-                                onClick={(e) => setDownloadMenuAnchor(e.currentTarget)}
-                            >
-                                Descargar
-                            </Button>
-                            <Menu
-                                anchorEl={downloadMenuAnchor}
-                                open={Boolean(downloadMenuAnchor)}
-                                onClose={() => setDownloadMenuAnchor(null)}
-                            >
-                                <MenuItem
-                                    onClick={() => {
-                                        setDownloadMenuAnchor(null);
-                                        setOpenDownloadDialog(true);
-                                    }}
-                                >
-                                    Descargar Familias
-                                </MenuItem>
-                                <MenuItem
-                                    disabled={routeReportLoading}
-                                    onClick={() => {
-                                        setDownloadMenuAnchor(null);
-                                        handleDownloadRouteReport(currentSchool?.id || schoolId);
-                                    }}
-                                >
-                                    Descargar Reporte de Paradas
-                                </MenuItem>
-                            </Menu>
-                        </Grid>
-
-                        <Dialog open={openDownloadDialog} onClose={() => setOpenDownloadDialog(false)}>
-                            <DialogTitle>Descargar Familias</DialogTitle>
-                            <DialogContent>
-                                <DialogContentText>Selecciona qué familias deseas descargar (puedes elegir varias opciones):</DialogContentText>
-                                <FormControl fullWidth sx={{ mt: 2 }}>
-                                    <InputLabel id="parents-download-select-label">Opciones</InputLabel>
-                                    <Select
-                                        labelId="parents-download-select-label"
-                                        multiple
-                                        value={downloadChoice}
-                                        label="Opciones"
-                                        onChange={(e) => {
-                                            const raw = typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value;
-                                            // "Todas" es excluyente: no combina con los demás filtros
-                                            if (raw.includes('all')) {
-                                                setDownloadChoice(downloadChoice.includes('all') ? raw.filter((v) => v !== 'all') : ['all']);
-                                            } else {
-                                                setDownloadChoice(raw);
-                                            }
-                                        }}
-                                        renderValue={(selected) => selected.map((v) => DOWNLOAD_FAMILY_OPTION_LABELS[v] || v).join(', ')}
-                                    >
-                                        {DOWNLOAD_FAMILY_OPTIONS.map((opt) => {
-                                            const allSelected = downloadChoice.includes('all');
-                                            const disabled = opt.value === 'all'
-                                                ? (downloadChoice.length > 0 && !allSelected)
-                                                : allSelected;
-                                            return (
-                                                <MenuItem key={opt.value} value={opt.value} disabled={disabled}>
-                                                    <Checkbox checked={downloadChoice.indexOf(opt.value) > -1} />
-                                                    <ListItemText primary={opt.label} />
-                                                </MenuItem>
-                                            );
-                                        })}
-                                    </Select>
-                                </FormControl>
-                            </DialogContent>
-                            <DialogActions>
-                                <Button onClick={() => setOpenDownloadDialog(false)}>Cancelar</Button>
-                                <Button
-                                    variant="contained"
-                                    color="primary"
-                                    startIcon={<GetApp />}
-                                    disabled={downloadChoice.length === 0 || routeReportLoading}
-                                    onClick={async () => {
-                                        await handleDownloadCombinedFamilies(downloadChoice, currentSchool?.id || schoolId);
-                                        setOpenDownloadDialog(false);
-                                    }}
-                                >
-                                    Descargar
-                                </Button>
-                            </DialogActions>
-                        </Dialog>
-                    </Grid>
-                </CardContent>
-            </Card>
 
             {/* Tabla de usuarios */}
             <Card>

@@ -37,7 +37,6 @@ import {
 import TableSortLabel from '@mui/material/TableSortLabel';
 import moment from 'moment-timezone';
 import parse from 'html-react-parser';
-import tw from 'twin.macro';
 
 import api from '../utils/axiosConfig';
 import PermissionGuard from '../components/PermissionGuard';
@@ -48,10 +47,11 @@ import { getClientSchoolId } from '../utils/clientValue';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 
 moment.tz.setDefault('America/Guatemala');
-
-const Container = tw.div`p-8 bg-gray-100 min-h-screen`;
 
 const safeStr = (v) => (v == null ? '' : String(v)).trim();
 
@@ -489,23 +489,16 @@ const CircularHistoryPage = () => {
   };
 
   return (
-    <Container>
-      <Card sx={{ mb: 2, borderRadius: 2 }}>
-        <CardContent>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-            <Box>
-              <Typography variant="h5" sx={{ fontWeight: 800 }}>Historial de Circulares</Typography>
-              <Typography variant="body2" color="text.secondary">Circulares enviadas desde el sistema</Typography>
-            </Box>
+    <PageContainer width="xl">
+      <PageHeader
+        eyebrow={MODULE_GROUPS.clientes}
+        title="Historial de Circulares"
+        subtitle="Circulares enviadas desde el sistema"
+      />
 
-            
-          </Box>
-
-          {error && (
-            <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
-          )}
-        </CardContent>
-      </Card>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+      )}
 
       <FilterBar {...pageFilters.barProps} loading={loading} />
 
@@ -881,7 +874,7 @@ const CircularHistoryPage = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Container>
+    </PageContainer>
   );
 };
 

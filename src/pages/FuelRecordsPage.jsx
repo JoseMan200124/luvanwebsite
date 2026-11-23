@@ -45,10 +45,9 @@ import {
     Visibility as VisibilityIcon,
     LocalGasStation as GasIcon,
     InfoOutlined as InfoOutlinedIcon,
-    Download as DownloadIcon
+    Add as AddIcon
 } from '@mui/icons-material';
 import moment from 'moment-timezone';
-import tw from 'twin.macro';
 import {
     getFuelRecords,
     getFuelStatistics,
@@ -66,6 +65,9 @@ import ClientSelector from '../components/ClientSelector';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F, toRouteOptions } from '../components/filters/filterFields';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 
 moment.tz.setDefault('America/Guatemala');
 
@@ -80,7 +82,6 @@ const getBusClientId = (bus, type) => {
     return null;
 };
 
-const Container = tw.div`p-8 bg-gray-100 min-h-screen`;
 // Feature flag: mostrar la nueva métrica de consumo (activar manualmente cuando corresponda)
 const SHOW_NEW_FUEL_METRIC = false;
 
@@ -989,15 +990,16 @@ const FuelRecordsPage = () => {
 
     return (
         <LocalizationProvider dateAdapter={AdapterMoment}>
-            <Container>
-                <Box mb={3}>
-                    <Typography variant="h4" gutterBottom>
-                        Registros de Combustible
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                        Visualiza y gestiona los registros de abastecimiento de combustible
-                    </Typography>
-                </Box>
+            <PageContainer width="xl">
+                <PageHeader
+                    eyebrow={MODULE_GROUPS.buses}
+                    title="Registros de Combustible"
+                    subtitle="Visualiza y gestiona los registros de abastecimiento de combustible"
+                    actions={[
+                        { key: 'report', label: 'Generar reporte', group: 'download', loading: exporting, disabled: totalCount === 0, onClick: handleDownloadExcel },
+                        { key: 'create', label: 'Nuevo registro', icon: <AddIcon />, primary: true, permission: 'combustible-crear-registro', onClick: () => setCreateOpen(true) },
+                    ]}
+                />
 
                 {/* Estadísticas */}
                 <Grid container spacing={3} mb={3} alignItems="stretch">
@@ -1083,27 +1085,6 @@ const FuelRecordsPage = () => {
                         </Grid>
                     )}
                 </Grid>
-
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
-                    <PermissionGuard permission="combustible-crear-registro">
-                        <Button onClick={() => setCreateOpen(true)} variant="contained" color="primary">
-                            Nuevo Registro
-                        </Button>
-                    </PermissionGuard>
-                    <Button
-                        onClick={handleDownloadExcel}
-                        variant="outlined"
-                        startIcon={<DownloadIcon />}
-                        disabled={exporting || totalCount === 0}
-                        sx={{
-                            color: 'success.main',
-                            borderColor: 'success.main',
-                            '&:hover': { backgroundColor: 'rgba(33,115,70,0.08)', borderColor: 'success.dark' }
-                        }}
-                    >
-                        {exporting ? 'Generando...' : 'Generar reporte'}
-                    </Button>
-                </Box>
 
                 {/* Filtros */}
                 <FilterBar
@@ -1926,7 +1907,7 @@ const FuelRecordsPage = () => {
                         </DialogActions>
                     </Dialog>
                 )}
-            </Container>
+            </PageContainer>
         </LocalizationProvider>
     );
 };

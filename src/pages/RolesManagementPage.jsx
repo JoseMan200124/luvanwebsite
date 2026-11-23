@@ -36,11 +36,14 @@ import {
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
+import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { matchSearchTokens } from '../utils/clientFilter';
 import { Autocomplete } from '@mui/material';
 import { ListItemText } from '@mui/material';
 import { Snackbar, Alert } from '@mui/material';
-import { Edit, Delete, Add, FileUpload, FileDownload, Lock } from '@mui/icons-material';
+import { Edit, Delete, Add, FileUpload, Lock } from '@mui/icons-material';
 import styled from 'styled-components';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
@@ -80,10 +83,6 @@ const normalizeSchoolName = (value) => String(value || '').trim().replace(/\s+/g
 
 /* ================== Responsive Table & Mobile Cards =================== */
 // Contenedor principal de la página
-const RolesContainer = styled.div`
-    padding: 16px;
-`;
-
 const ResponsiveTableHead = styled(TableHead)`
     @media (max-width: 600px) {
         display: none;
@@ -1201,46 +1200,16 @@ const RolesManagementPage = () => {
     };
 
     return (
-        <RolesContainer>
-            <Typography variant="h4" gutterBottom>
-                Gestión de Usuarios y Roles
-            </Typography>
-            {/* Acciones */}
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
-                {puedeCargaMasiva && (
-                    <PermissionGuard permission="usuarios-carga-masiva">
-                        <Button
-                            variant="contained"
-                            color="info"
-                            startIcon={<FileUpload />}
-                            onClick={handleOpenBulkDialog}
-                        >
-                            Carga Masiva
-                        </Button>
-                    </PermissionGuard>
-                )}
-                {puedeCrearAlgunRol && (
-                    <PermissionGuard permission="usuarios-crear">
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            startIcon={<Add />}
-                            onClick={handleAddUser}
-                        >
-                            Añadir Usuario
-                        </Button>
-                    </PermissionGuard>
-                )}
-                <Button
-                    variant="outlined"
-                    color="primary"
-                    startIcon={<FileDownload />}
-                    onClick={() => setDownloadAllDialogOpen(true)}
-                >
-                    Descargar Todos
-                </Button>
-            </Box>
-
+        <PageContainer width="xl">
+            <PageHeader
+                eyebrow={MODULE_GROUPS.personal}
+                title="Gestión de Usuarios y Roles"
+                actions={[
+                    { key: 'download', label: 'Descargar todos', group: 'download', onClick: () => setDownloadAllDialogOpen(true) },
+                    puedeCargaMasiva && { key: 'bulk', label: 'Carga masiva', group: 'upload', permission: 'usuarios-carga-masiva', onClick: handleOpenBulkDialog },
+                    puedeCrearAlgunRol && { key: 'add', label: 'Añadir usuario', icon: <Add />, primary: true, permission: 'usuarios-crear', onClick: handleAddUser },
+                ]}
+            />
             {/* Filtros */}
             <FilterBar {...pageFilters.barProps} loading={loading} />
             {loading ? (
@@ -1955,7 +1924,7 @@ const RolesManagementPage = () => {
                     {snackbar.message}
                 </Alert>
             </Snackbar>
-        </RolesContainer>
+        </PageContainer>
     );
 };
 

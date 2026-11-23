@@ -66,7 +66,7 @@ const SchoolEnrollmentPage = () => {
     useEffect(() => {
         const fetchSchoolData = async () => {
             try {
-                const response = await api.get(`/schools/${schoolId}`, {
+                const response = await api.get(`/public/schools/enroll/${schoolId}`, {
                     skipAuth: true,
                     skipSchoolCycleContext: true
                 });

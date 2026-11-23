@@ -10,7 +10,6 @@ import {
     Card,
     CardContent,
     Button,
-    Menu,
     Paper,
     TablePagination,
     Grid,
@@ -51,9 +50,8 @@ import {
     Tooltip as RechartsTooltip,
     Legend
 } from 'recharts';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowBack, School as SchoolIcon, CalendarToday, InfoOutlined, People, ChevronLeft, ChevronRight } from '@mui/icons-material';
-import DownloadIcon from '@mui/icons-material/GetApp';
+import { useParams, useLocation } from 'react-router-dom';
+import { InfoOutlined, People, ChevronLeft, ChevronRight } from '@mui/icons-material';
 import { getCurrentDate, getCurrentDateSync } from '../hooks/useCurrentDate';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import styled from 'styled-components';
@@ -69,32 +67,15 @@ import ManagePaymentsModal from '../components/ManagePaymentsModal';
 import ManagePeriodsModal from '../components/modals/ManagePeriodsModal';
 import CreateSchoolPeriodModal from '../components/modals/CreateSchoolPeriodModal';
 import CreditRefundModal from '../components/modals/CreditRefundModal';
-import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
 import ExtraordinaryPaymentSection from '../components/ExtraordinaryPaymentSection';
 import ReceiptsPane from '../components/ReceiptsPane';
 import { getCicloEscolarYear } from '../services/cicloEscolarService';
+import PageContainer from '../components/layout/PageContainer';
+import PageHeader from '../components/layout/PageHeader';
+import useClientScope from '../hooks/useClientScope';
 
 moment.locale('es'); // Configurar moment en español
-const PageContainer = styled.div`
-    ${tw`bg-gray-50 min-h-screen w-full`}
-    padding: 2rem;
-    max-width: 1400px;
-    margin: 0 auto;
-
-    @media (max-width: 640px) {
-        padding: 1rem;
-    }
-`;
-
-const HeaderCard = styled(Card)`
-    ${tw`mb-6 shadow-lg`}
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border-radius: 12px;
-    padding: 8px 0;
-`;
-
 const SectionCard = styled(Card)`
     ${tw`mb-4`}
     border-radius: 10px;
@@ -152,10 +133,9 @@ const YES_NO_AUTO_DEBIT_OPTIONS = [
 const isServiceInactiveDraft = (values) => values.serviceStatus === 'INACTIVE';
 
 const SchoolPaymentsPage = () => {
-    const { hasPermission, hasAnyPermission } = usePermissions();
+    const { hasPermission } = usePermissions();
     const puedeRecalcular = hasPermission('pagos-recalcular');
     useContext(AuthContext); // keep context hook for future auth-based features
-    const navigate = useNavigate();
     const location = useLocation();
     const { cicloEscolarId: routeCicloEscolarId, schoolId } = useParams();
 
@@ -165,6 +145,7 @@ const SchoolPaymentsPage = () => {
     const schoolCycleYear = getCicloEscolarYear(school?.cicloEscolar) || getCicloEscolarYear(school?.CicloEscolar);
     const currentCycleYear = Number(stateCycleYear || schoolCycleYear || moment().year());
     const currentCycleLabel = stateCycleYear || schoolCycleYear || String(currentCycleYear || '');
+    const scope = useClientScope({ entity: school, cicloEscolar: school?.cicloEscolar || school?.CicloEscolar || location.state?.cicloEscolar || null });
     const buildPaymentParams = useCallback((extra = {}) => ({
         schoolId,
         ...(currentCicloEscolarId ? { cicloEscolarId: currentCicloEscolarId } : {}),
@@ -780,16 +761,6 @@ const SchoolPaymentsPage = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [search, statusFilter, paymentsAll, autoDebitFilter, showDeleted, showInactive, serviceStatusFilter, rowsPerPage, enrollmentFilter, enrollmentByUser]);
 
-    const handleBack = () => {
-        if (!currentCicloEscolarId) {
-            navigate(-1);
-            return;
-        }
-
-        const cicloEscolar = school?.cicloEscolar || school?.CicloEscolar || location.state?.cicloEscolar || null;
-        navigate(`/admin/escuelas/ciclo/${currentCicloEscolarId}/${schoolId}`, { state: { school, cicloEscolarId: currentCicloEscolarId, cicloEscolar } });
-    };
-
     const handleRequestSort = (property) => {
         const isAsc = orderBy === property && order === 'asc';
         setOrder(isAsc ? 'desc' : 'asc');
@@ -970,8 +941,6 @@ const SchoolPaymentsPage = () => {
     // Month filter for boletas (format: YYYY-MM)
     const [boletaMonth, setBoletaMonth] = useState('');
     // Extra actions: create school-wide period
-    const [openExtraAnchorEl, setOpenExtraAnchorEl] = useState(null);
-    const openExtraMenu = Boolean(openExtraAnchorEl);
     const [openCreateSchoolPeriodModal, setOpenCreateSchoolPeriodModal] = useState(false);
     const [openCreditRefundModal, setOpenCreditRefundModal] = useState(false);
 
@@ -2593,20 +2562,15 @@ const SchoolPaymentsPage = () => {
                 await api.post(`/payments/${payment.id}/exonerate-penalty`, { discountAmount: amount, type: 'EXONERATION' });
                 setSnackbar({ open: true, message: 'Mora exonerada', severity: 'success' });
             } else if (actionName === 'freezePenalty') {
-                // Congelar mora con fecha específica del backend (simulada o real)
-                let freezeDate;
-                if (payload?.freezeDate) {
-                    freezeDate = payload.freezeDate;
-                } else {
-                    // Obtener fecha actual del backend
-                    const currentDate = await getCurrentDate();
-                    freezeDate = currentDate.format('YYYY-MM-DD');
-                }
-                console.log('[FREEZE_PENALTY] Sending request:', { paymentId: payment.id, freezeDate });
-                const response = await api.post('/payments/penalties/freeze', { 
+                // Sin fecha elegida por el usuario no se manda freezeDate: el backend congela con su propia
+                // fecha de hoy (Guatemala). Así un reloj del navegador mal puesto no cambia la mora congelada.
+                const freezeDate = payload?.freezeDate || undefined;
+                const fechaNota = freezeDate ? moment(freezeDate) : await getCurrentDate();
+                console.log('[FREEZE_PENALTY] Sending request:', { paymentId: payment.id, freezeDate: freezeDate || '(backend)' });
+                const response = await api.post('/payments/penalties/freeze', {
                     paymentId: payment.id,
                     freezeDate,
-                    notes: `Mora congelada manualmente el ${moment(freezeDate).format('DD/MM/YYYY')}`
+                    notes: `Mora congelada manualmente el ${fechaNota.format('DD/MM/YYYY')}`
                 });
                 console.log('[FREEZE_PENALTY] Response received:', response.data);
                 setSnackbar({ open: true, message: 'Mora congelada', severity: 'success' });
@@ -2795,11 +2759,6 @@ const SchoolPaymentsPage = () => {
     const [exportByStateEnrollment, setExportByStateEnrollment] = useState('TODOS');
     const exportEnrollmentMode = exportByStateType === 'INSCRIPCION' && hasEnrollmentCharges;
 
-    // Download menu (unifies download actions to save space in the filters row)
-    const [downloadMenuAnchorEl, setDownloadMenuAnchorEl] = useState(null);
-    const downloadMenuOpen = Boolean(downloadMenuAnchorEl);
-    const handleOpenDownloadMenu = (event) => setDownloadMenuAnchorEl(event.currentTarget);
-    const handleCloseDownloadMenu = () => setDownloadMenuAnchorEl(null);
 
 
     // Export payments filtered by status and build Excel
@@ -3618,6 +3577,21 @@ const SchoolPaymentsPage = () => {
     const dialogTotalToPay = Math.max(0,
         dialogLeftover - dialogCredito - dialogExtraDiscount
     );
+    // "Enviar recordatorio" sigue oculto a pedido; restaurarlo como acción aquí cuando se necesite.
+    const headerActions = [
+        {
+            key: 'download',
+            label: 'Descargar',
+            group: 'download',
+            menu: [
+                { key: 'history', label: 'Descargar historial de pagos', onClick: () => setOpenExportStatusDialog(true) },
+                { key: 'by-state', label: 'Descargar pagos por estado', onClick: () => setOpenExportByStateDialog(true) },
+            ],
+        },
+        { key: 'period', label: 'Crear período extracurricular', group: 'other', permission: 'pagos-v2-crear-periodo-colegio', onClick: () => setOpenCreateSchoolPeriodModal(true) },
+        { key: 'refund', label: 'Reintegrar crédito a favor', group: 'other', permission: 'pagos-v2-reintegrar-credito', onClick: () => setOpenCreditRefundModal(true) },
+    ];
+
     if (!school && loading) {
         return (
             <PageContainer>
@@ -3632,16 +3606,7 @@ const SchoolPaymentsPage = () => {
     if (school?.paymentsEnabled === false) {
         return (
             <PageContainer>
-                <HeaderCard>
-                    <CardContent>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                            <Button startIcon={<ArrowBack />} onClick={handleBack}>
-                                Volver
-                            </Button>
-                            <Typography variant="h6">{school.name || 'Colegio'}</Typography>
-                        </Box>
-                    </CardContent>
-                </HeaderCard>
+                <PageHeader variant="hero" tone={scope.tone} title="Gestión de Pagos" name={school?.name ?? null} back={scope.back} />
                 <Box sx={{ p: 4, textAlign: 'center' }}>
                     <Typography variant="h6" gutterBottom>
                         Este colegio no utiliza el flujo de pagos
@@ -3664,77 +3629,20 @@ const SchoolPaymentsPage = () => {
                     <Typography sx={{ mt: 2 }}>Cargando datos...</Typography>
                 </Box>
             )}
-            <HeaderCard>
-                <CardContent sx={{ position: 'relative' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                        <Button
-                            startIcon={<ArrowBack />}
-                            onClick={handleBack}
-                            sx={{ color: 'white', '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' } }}
-                        >
-                            Volver al Dashboard
-                        </Button>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <SchoolIcon sx={{ fontSize: 40 }} />
-                        <Box>
-                            <Typography variant="h4" component="h1" gutterBottom>
-                                Gestión de Pagos - {school?.name || 'Cargando...'}
-                            </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                                <Chip
-                                    size="small"
-                                    icon={<CalendarToday />}
-                                    label={`Ciclo Escolar ${currentCycleLabel || ''}`}
-                                    sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
-                                />
-                                {school?.cycleStatus === 'ARCHIVED' && (
-                                    <Tooltip title="Este ciclo ya no está en operaciones. Los estados de servicio son los que tenía cada familia al cerrar el ciclo.">
-                                        <Chip size="small" color="default" label="Ciclo cerrado" sx={{ backgroundColor: 'rgba(255,255,255,0.85)' }} />
-                                    </Tooltip>
-                                )}
-                                <Chip
-                                    size="small"
-                                    icon={<People />}
-                                    label={`${totalFamiliesCount || 0} familias en sistema`}
-                                    sx={{ backgroundColor: 'rgba(255,255,255,0.12)', color: 'white', fontWeight: 600 }}
-                                />
-                                {/* Opciones Extra moved to bottom-right of header */}
-                            </Box>
-                        </Box>
-                    </Box>
-                    {hasAnyPermission(['pagos-v2-crear-periodo-colegio', 'pagos-v2-reintegrar-credito']) && (
-                    <Box sx={{ position: 'absolute', right: 16, bottom: 12 }}>
-                        <Button
-                            size="small"
-                            variant="contained"
-                            sx={{
-                                backgroundColor: 'rgba(255,255,255,0.18)',
-                                color: 'white',
-                                fontWeight: 700,
-                                boxShadow: '0 1px 6px rgba(0,0,0,0.12)',
-                                '&:hover': { backgroundColor: 'rgba(255,255,255,0.22)', boxShadow: '0 3px 10px rgba(0,0,0,0.15)' }
-                            }}
-                            onClick={(e) => setOpenExtraAnchorEl(e.currentTarget)}
-                        >
-                            Opciones Extra
-                        </Button>
-                        <Menu anchorEl={openExtraAnchorEl} open={openExtraMenu} onClose={() => setOpenExtraAnchorEl(null)}>
-                            <PermissionGuard permission="pagos-v2-crear-periodo-colegio">
-                                <MenuItem onClick={() => { setOpenCreateSchoolPeriodModal(true); setOpenExtraAnchorEl(null); }}>
-                                    Crear período extracurricular
-                                </MenuItem>
-                            </PermissionGuard>
-                            <PermissionGuard permission="pagos-v2-reintegrar-credito">
-                                <MenuItem onClick={() => { setOpenCreditRefundModal(true); setOpenExtraAnchorEl(null); }}>
-                                    Reintegrar crédito a favor
-                                </MenuItem>
-                            </PermissionGuard>
-                        </Menu>
-                    </Box>
-                    )}
-                </CardContent>
-            </HeaderCard>
+            <PageHeader
+                variant="hero"
+                tone={scope.tone}
+                title="Gestión de Pagos"
+                name={school?.name ?? null}
+                back={scope.back}
+                period={scope.periodLabel(currentCycleLabel)}
+                // Pagos conserva su chip de familias (con ícono), como antes de la unificación.
+                chips={[
+                    school?.cycleStatus === 'ARCHIVED' && { key: 'closed', label: 'Ciclo cerrado', tooltip: 'Este ciclo ya no está en operaciones. Los estados de servicio son los que tenía cada familia al cerrar el ciclo.', sx: { backgroundColor: 'rgba(255,255,255,0.85)', color: 'text.primary' } },
+                    { key: 'families', icon: <People />, label: `${totalFamiliesCount || 0} familias en sistema`, sx: { backgroundColor: 'rgba(255,255,255,0.12)', fontWeight: 600 } },
+                ]}
+                actions={headerActions}
+            />
 
             {/* Analysis General de Pagos (full from PaymentsManagementPage) */}
             <Grid container spacing={3}>
@@ -4253,47 +4161,6 @@ const SchoolPaymentsPage = () => {
 
                 <Grid item xs={12}>
                     <Paper sx={{ p: 2 }}>
-                        {/* Acciones */}
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 1, mb: 1.5, pr: { xs: 0, sm: 6 } }}>
-                            <Button
-                                startIcon={<DownloadIcon />}
-                                size="small"
-                                onClick={handleOpenDownloadMenu}
-                                sx={{ textTransform: 'none' }}
-                            >
-                                Descargar
-                            </Button>
-                            <Menu
-                                anchorEl={downloadMenuAnchorEl}
-                                open={downloadMenuOpen}
-                                onClose={handleCloseDownloadMenu}
-                                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-                            >
-                                <MenuItem
-                                    onClick={() => {
-                                        handleCloseDownloadMenu();
-                                        setOpenExportStatusDialog(true);
-                                    }}
-                                >
-                                    Descargar Historial
-                                </MenuItem>
-                                <MenuItem
-                                    onClick={() => {
-                                        handleCloseDownloadMenu();
-                                        setOpenExportByStateDialog(true);
-                                    }}
-                                >
-                                    Descargar por Estado
-                                </MenuItem>
-                            </Menu>
-                            {/* Enviar Recordatorio button hidden temporarily per request. Restore when needed:
-                                <Button startIcon={<SendIcon />} onClick={() => setSnackbar({ open: true, message: 'Enviar recordatorios (pendiente)', severity: 'info' })}>
-                                    Enviar Recordatorio
-                                </Button>
-                            */}
-                        </Box>
-
                         {/* Filtros */}
                         <FilterBar {...pageFilters.barProps} loading={loading} />
 
