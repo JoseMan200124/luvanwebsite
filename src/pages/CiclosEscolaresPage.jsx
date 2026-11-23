@@ -5,17 +5,14 @@ import {
     CardContent,
     Chip,
     CircularProgress,
-    IconButton,
     Table,
     TableBody,
     TableCell,
-    TableHead,
     TableRow,
     TextField,
-    Tooltip
+    Typography,
 } from '@mui/material';
 import { Add, CalendarToday, Edit, Star } from '@mui/icons-material';
-import PermissionGuard from '../components/PermissionGuard';
 import {
     createCicloEscolar,
     getCiclosEscolares,
@@ -28,12 +25,26 @@ import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import useNotify from '../hooks/useNotify';
 import AppDialog from '../components/dialogs/AppDialog';
+import AppTableContainer from '../components/table/AppTableContainer';
+import SortableTableHead from '../components/table/SortableTableHead';
+import RowActions from '../components/table/RowActions';
+import { MobileCard, MobileField } from '../components/table/MobileCard';
+import useIsMobile from '../hooks/useIsMobile';
 
 const emptyForm = {
     anio: ''
 };
 
+// Columnas de la tabla de ciclos escolares
+const CICLO_COLUMNS = [
+    { id: 'anio', label: 'Año' },
+    { id: 'etiqueta', label: 'Etiqueta' },
+    { id: 'estado', label: 'Estado' },
+    { id: 'acciones', label: 'Acciones', align: 'right' },
+];
+
 const CiclosEscolaresPage = () => {
+    const isMobile = useIsMobile();
     const [ciclosEscolares, setCiclosEscolares] = useState([]);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -144,6 +155,21 @@ const CiclosEscolaresPage = () => {
         }
     };
 
+    // Acciones por fila: editar y marcar como predeterminado, con los mismos permisos de antes.
+    const rowActions = (cicloEscolar) => [
+        { key: 'edit', kind: 'edit', label: 'Editar', icon: <Edit fontSize="small" />, permission: 'ciclos-escolares-editar', onClick: () => handleOpenEdit(cicloEscolar) },
+        {
+            key: 'default',
+            label: 'Marcar como predeterminado',
+            tooltip: cicloEscolar.predeterminado ? 'Ya es predeterminado' : 'Marcar como predeterminado',
+            // Como antes: azul en el predeterminado (aunque el botón esté deshabilitado) y gris en los demás.
+            icon: <Star fontSize="small" sx={{ color: cicloEscolar.predeterminado ? 'primary.main' : 'text.secondary' }} />,
+            permission: 'ciclos-escolares-activar',
+            disabled: cicloEscolar.predeterminado || saving,
+            onClick: () => handleSetDefault(cicloEscolar),
+        },
+    ];
+
     return (
         <PageContainer width="md">
             <PageHeader
@@ -161,53 +187,50 @@ const CiclosEscolaresPage = () => {
                         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
                             <CircularProgress />
                         </Box>
+                    ) : isMobile ? (
+                        <Box>
+                            {ciclosEscolares.map((cicloEscolar) => (
+                                <MobileCard key={cicloEscolar.id} actions={<RowActions actions={rowActions(cicloEscolar)} />}>
+                                    <MobileField label="Año">{cicloEscolar.anio}</MobileField>
+                                    <MobileField label="Etiqueta">{`Ciclo Escolar ${cicloEscolar.anio}`}</MobileField>
+                                    {cicloEscolar.predeterminado && (
+                                        <MobileField label="Estado">
+                                            <Chip label="Predeterminado" color="primary" size="small" />
+                                        </MobileField>
+                                    )}
+                                </MobileCard>
+                            ))}
+                            {ciclosEscolares.length === 0 && (
+                                <Typography align="center" color="text.secondary">No hay ciclos escolares configurados.</Typography>
+                            )}
+                        </Box>
                     ) : (
-                        <Table>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell>Año</TableCell>
-                                    <TableCell>Etiqueta</TableCell>
-                                    <TableCell>Estado</TableCell>
-                                    <TableCell align="right">Acciones</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {ciclosEscolares.map((cicloEscolar) => (
-                                    <TableRow key={cicloEscolar.id} hover>
-                                        <TableCell>{cicloEscolar.anio}</TableCell>
-                                        <TableCell>{`Ciclo Escolar ${cicloEscolar.anio}`}</TableCell>
-                                        <TableCell>
-                                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                                                {cicloEscolar.predeterminado && <Chip label="Predeterminado" color="primary" size="small" />}
-                                            </Box>
-                                        </TableCell>
-                                        <TableCell align="right">
-                                            <PermissionGuard permission="ciclos-escolares-editar">
-                                                <Tooltip title="Editar">
-                                                    <IconButton onClick={() => handleOpenEdit(cicloEscolar)}>
-                                                        <Edit />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            </PermissionGuard>
-                                            <PermissionGuard permission="ciclos-escolares-activar">
-                                                <Tooltip title={cicloEscolar.predeterminado ? 'Ya es predeterminado' : 'Marcar como predeterminado'}>
-                                                    <span>
-                                                        <IconButton disabled={cicloEscolar.predeterminado || saving} onClick={() => handleSetDefault(cicloEscolar)}>
-                                                            <Star sx={{ color: cicloEscolar.predeterminado ? 'primary.main' : 'text.secondary' }} />
-                                                        </IconButton>
-                                                    </span>
-                                                </Tooltip>
-                                            </PermissionGuard>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                                {ciclosEscolares.length === 0 && (
-                                    <TableRow>
-                                        <TableCell colSpan={4} align="center">No hay ciclos escolares configurados.</TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
+                        <AppTableContainer>
+                            <Table>
+                                <SortableTableHead columns={CICLO_COLUMNS} />
+                                <TableBody>
+                                    {ciclosEscolares.map((cicloEscolar) => (
+                                        <TableRow key={cicloEscolar.id} hover>
+                                            <TableCell>{cicloEscolar.anio}</TableCell>
+                                            <TableCell>{`Ciclo Escolar ${cicloEscolar.anio}`}</TableCell>
+                                            <TableCell>
+                                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                                    {cicloEscolar.predeterminado && <Chip label="Predeterminado" color="primary" size="small" />}
+                                                </Box>
+                                            </TableCell>
+                                            <TableCell align="right">
+                                                <RowActions actions={rowActions(cicloEscolar)} />
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {ciclosEscolares.length === 0 && (
+                                        <TableRow>
+                                            <TableCell colSpan={4} align="center">No hay ciclos escolares configurados.</TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </AppTableContainer>
                     )}
                 </CardContent>
             </Card>

@@ -8,18 +8,13 @@ import {
     Grid,
     Button,
     Chip,
-    Card,
-    CardContent,
     Divider,
     CircularProgress,
-    Pagination,
     Alert,
     Table,
-    TableHead,
     TableBody,
     TableRow,
     TableCell,
-    TableContainer,
     useTheme,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
@@ -49,13 +44,32 @@ import useIsMobile from '../hooks/useIsMobile';
 import { formatTime, formatDateLong, formatDate } from '../utils/dateFormat';
 import { loadCatalog } from '../services/catalogStore';
 import { StatCard, StatCardGrid } from '../components/StatCard';
+import AppTableContainer from '../components/table/AppTableContainer';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import { MobileCard } from '../components/table/MobileCard';
+import { DEFAULT_ROWS_PER_PAGE } from '../components/table/tableConfig';
+
+
+const HISTORY_COLUMNS = [
+    { id: 'fecha', label: 'Fecha' },
+    { id: 'ruta', label: 'Número de ruta', align: 'center' },
+    { id: 'placa', label: 'Placa' },
+    { id: 'piloto', label: 'Piloto' },
+    { id: 'cliente', label: 'Cliente' },
+    { id: 'inicio', label: 'Hora inicio' },
+    { id: 'fin', label: 'Hora fin' },
+    { id: 'duracion', label: 'Duración' },
+    { id: 'kilometraje', label: 'Kilometraje' },
+    { id: 'estado', label: 'Estado' },
+];
 
 const RouteHistoryPage = () => {
     const [loading, setLoading] = useState(false);
     const [routes, setRoutes] = useState([]);
     const [error, setError] = useState(null);
     const [page, setPage] = useState(1);
-    const pageSize = 10;
+    const [pageSize, setPageSize] = useState(DEFAULT_ROWS_PER_PAGE);
     const [total, setTotal] = useState(0);
     const [clientBreakdown, setClientBreakdown] = useState({ colegios: 0, corporativos: 0 });
     // Resumen de kilometraje del conjunto filtrado completo (no solo la página)
@@ -264,9 +278,9 @@ const RouteHistoryPage = () => {
     const historyApplied = historyFilters.applied;
     useEffect(() => {
         fetchRouteHistory(buildRouteHistoryParams(historyApplied, page));
-        // fetchRouteHistory se recrea en cada render; solo deben disparar los filtros aplicados y la página
+        // fetchRouteHistory se recrea en cada render; solo deben disparar los filtros aplicados, la página y las filas por página
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [historyApplied, page]);
+    }, [historyApplied, page, pageSize]);
 
     // El refresco global vuelve a pedir la página actual con los filtros aplicados
     useRegisterPageRefresh(async () => {
@@ -534,8 +548,10 @@ const RouteHistoryPage = () => {
                                     <Grid container spacing={2}>
                                         {routes.map((route, index) => (
                                             <Grid item xs={12} key={route.id || index}>
-                                                <Card variant="outlined" sx={{ borderRadius: 2, borderLeft: route.reporteFalla ? '4px solid #f44336' : '4px solid #4caf50', transition: 'all 0.3s', '&:hover': { boxShadow: 3, transform: 'translateY(-2px)' } }}>
-                                                    <CardContent>
+                                                <MobileCard
+                                                    elevation={0}
+                                                    sx={{ mb: 0, border: '1px solid', borderColor: 'divider', borderRadius: 2, borderLeft: route.reporteFalla ? '4px solid #f44336' : '4px solid #4caf50', transition: 'all 0.3s', '&:hover': { boxShadow: 3, transform: 'translateY(-2px)' } }}
+                                                >
                                                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                                                 <DirectionsBus color="primary" />
@@ -590,29 +606,14 @@ const RouteHistoryPage = () => {
                                                         <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
                                                             <Typography variant="caption" color="textSecondary">Registrado el {formatDateLong(route.createdAt)}</Typography>
                                                         </Box>
-                                                    </CardContent>
-                                                </Card>
+                                                </MobileCard>
                                             </Grid>
                                         ))}
                                     </Grid>
                                 ) : (
-                                    <TableContainer>
+                                    <AppTableContainer>
                                         <Table size="small">
-                                            <TableHead>
-                                                <TableRow>
-                                                    <TableCell>Fecha</TableCell>
-                                                    <TableCell align="center">Número de ruta</TableCell>
-                                                    <TableCell>Placa</TableCell>
-                                                    <TableCell>Piloto</TableCell>
-                                                    <TableCell>Cliente</TableCell>
-                                                    <TableCell>Hora inicio</TableCell>
-                                                    <TableCell>Hora fin</TableCell>
-                                                    <TableCell>Duración</TableCell>
-                                                    <TableCell>Kilometraje</TableCell>
-                                                    <TableCell>Estado</TableCell>
-                                                    {/* Acciones removidas: vista solo lectura */}
-                                                </TableRow>
-                                            </TableHead>
+                                            <SortableTableHead columns={HISTORY_COLUMNS} />
                                             <TableBody>
                                                 {routes.map((route, idx) => (
                                                     <TableRow key={route.id || idx} hover>
@@ -638,7 +639,7 @@ const RouteHistoryPage = () => {
                                                 ))}
                                             </TableBody>
                                         </Table>
-                                    </TableContainer>
+                                    </AppTableContainer>
                                 )}
 
                                 {loading && (
@@ -651,12 +652,16 @@ const RouteHistoryPage = () => {
                     </Grid>
 
                     <Grid item xs={12}>
-                        <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'nowrap' }}>
-                            <Box sx={{ width: 56 }} />
-                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflowX: 'auto' }}>
-                                <Pagination count={Math.max(1, Math.ceil((total || 0) / pageSize))} page={page} onChange={(e, p) => setPage(p)} color="primary" />
-                            </Box>
-                        </Box>
+                        <AppTablePagination
+                            count={total}
+                            page={page - 1}
+                            rowsPerPage={pageSize}
+                            onPageChange={(_event, newPage) => setPage(newPage + 1)}
+                            onRowsPerPageChange={(event) => {
+                                setPageSize(Number.parseInt(event.target.value, 10));
+                                setPage(1);
+                            }}
+                        />
                     </Grid>
                 </Grid>
             </Paper>

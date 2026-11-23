@@ -6,8 +6,6 @@ import {
     Button,
     CircularProgress,
     Box,
-    Select,
-    MenuItem,
     ToggleButton,
     ToggleButtonGroup,
     IconButton,
@@ -22,7 +20,7 @@ import {
     Paper,
     Collapse
 } from '@mui/material';
-import { InfoOutlined,  ChevronLeft, ChevronRight, Download, KeyboardArrowRight, KeyboardArrowDown } from '@mui/icons-material';
+import { InfoOutlined,  Download, KeyboardArrowRight, KeyboardArrowDown } from '@mui/icons-material';
 import api from '../../utils/axiosConfig';
 import useRegisterPageRefresh from '../../hooks/useRegisterPageRefresh';
 import FilterBar from '../filters/FilterBar';
@@ -38,11 +36,11 @@ import { formatMonth, formatDateTime } from '../../utils/dateFormat';
 import { formatQ } from '../../utils/currency';
 import { Payments as PaymentsIcon, TrendingUp as TrendingUpIcon, TrendingDown as TrendingDownIcon, FamilyRestroom as FamilyIcon, WarningAmber as WarningIcon } from '@mui/icons-material';
 import { StatCard, StatCardGrid } from '../StatCard';
+import AppTablePagination from '../table/AppTablePagination';
+import { DEFAULT_ROWS_PER_PAGE } from '../table/tableConfig';
 import { loadCatalog } from '../../services/catalogStore';
 import SearchInput from '../form/SearchInput';
 
-const ROWS_PER_PAGE_OPTIONS = [5, 8, 10, 15, 25, 50];
-const DEFAULT_ROWS_PER_PAGE = 8;
 
 // ----------------------------------------------------------------------------
 // Presentación: el backend calcula TODAS las métricas; el frontend sólo formatea.
@@ -946,32 +944,13 @@ const IncomeStatisticsTab = () => {
                         </Table>
                     </TableContainer>
 
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1.5, flexWrap: 'wrap', gap: 1.5 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                            <Typography variant="caption" color="text.secondary">Filas por página</Typography>
-                            <Select
-                                size="small"
-                                value={rowsPerPage}
-                                onChange={onRowsPerPageChange}
-                                sx={{ height: 30, fontSize: 12, bgcolor: '#fff', borderRadius: 1 }}
-                            >
-                                {ROWS_PER_PAGE_OPTIONS.map((n) => (
-                                    <MenuItem key={n} value={n} sx={{ fontSize: 12 }}>{n}</MenuItem>
-                                ))}
-                            </Select>
-                            <Typography variant="caption" color="text.secondary">
-                                Página {currentPage + 1} de {totalPages} · {totalRows} colegio{totalRows === 1 ? '' : 's'}
-                            </Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                            <IconButton size="small" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={currentPage <= 0} sx={{ border: '1px solid rgba(0,0,0,0.12)', borderRadius: 1, width: 32, height: 32 }}>
-                                <ChevronLeft fontSize="small" />
-                            </IconButton>
-                            <IconButton size="small" onClick={() => setPage((p) => p + 1)} disabled={currentPage >= totalPages - 1} sx={{ border: '1px solid rgba(0,0,0,0.12)', borderRadius: 1, width: 32, height: 32 }}>
-                                <ChevronRight fontSize="small" />
-                            </IconButton>
-                        </Box>
-                    </Box>
+                    <AppTablePagination
+                        count={totalRows}
+                        page={currentPage}
+                        rowsPerPage={rowsPerPage}
+                        onPageChange={(_event, newPage) => setPage(newPage)}
+                        onRowsPerPageChange={onRowsPerPageChange}
+                    />
                 </div>
             )}
 
