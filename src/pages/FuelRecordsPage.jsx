@@ -68,6 +68,8 @@ import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
 import AppDialog from '../components/dialogs/AppDialog';
+import { buildFileName } from '../utils/fileName';
+import { todayForFileName } from '../utils/download';
 import MoneyField from '../components/form/MoneyField';
 import { validate, hasErrors, focusFirstError, clearError } from '../utils/validators';
 
@@ -636,16 +638,7 @@ const FuelRecordsPage = () => {
                 filters.endDate = dates.to;
             }
 
-            const response = await exportFuelRecordsExcel(filters);
-            const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `registros_combustible_${moment().format('YYYYMMDD_HHmmss')}.xlsx`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            window.URL.revokeObjectURL(url);
+            await exportFuelRecordsExcel(filters, buildFileName({ object: 'registros combustible', date: todayForFileName(), extension: 'xlsx' }));
         } catch (error) {
             console.error('Error al generar el reporte de combustible:', error);
             notify.fromError(error, 'Error al generar el reporte');

@@ -1,6 +1,5 @@
 // src/pages/SchoolUsersPage.jsx
 import React, { useState, useEffect, useContext, useCallback, useMemo, useRef } from 'react';
-import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import { alpha } from '@mui/material/styles';
 import {
@@ -25,10 +24,6 @@ import {
     MenuItem,
     TextField,
     IconButton,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     DialogContentText
     ,Checkbox, FormControlLabel, ListItemText
 } from '@mui/material';
@@ -41,6 +36,7 @@ import {
     Mail,
     Add,
     FileUpload,
+    FileDownload,
     ToggleOn,
     ToggleOff,
     PersonAdd
@@ -81,6 +77,11 @@ import { SERVICE_STATUS } from '../constants/statuses';
 import StatusChip from '../components/StatusChip';
 import { isEmail, validate, hasErrors, focusFirstError, clearError } from '../utils/validators';
 import AppDialog from '../components/dialogs/AppDialog';
+import FileField from '../components/form/FileField';
+import { BulkInstructions } from '../components/dialogs/BulkUploadDialog';
+import { buildWorkbook, downloadWorkbook } from '../utils/excel';
+import { buildFileName } from '../utils/fileName';
+import { todayForFileName } from '../utils/download';
 
 const FAMILY_STATUS_OPTIONS = ['Nuevo', 'Duplicado', 'Actualizado', 'Sin asignaciones']
     .map((status) => ({ value: status, label: status }));
@@ -189,7 +190,6 @@ const SchoolUsersPage = () => {
     // Familias ya guardadas a las que les quedó un paso por completar (pagos, estado de servicio o correo).
     const [bulkPendingFamilies, setBulkPendingFamilies] = useState([]);
     const [bulkCompleting, setBulkCompleting] = useState(false);
-    const [bulkConfirmCancelOpen, setBulkConfirmCancelOpen] = useState(false);
     // Dialogo de descarga de familias (selección múltiple de filtros)
     const [openDownloadDialog, setOpenDownloadDialog] = useState(false);
     const [downloadChoice, setDownloadChoice] = useState([]); // ('all' | 'new' | 'ACTIVE' | 'PAUSED' | 'SUSPENDED' | 'INACTIVE')[]
@@ -246,17 +246,6 @@ const SchoolUsersPage = () => {
     const [selectedSupervisorPilots, setSelectedSupervisorPilots] = useState([]);
     const [selectedAuxiliarMonitoras, setSelectedAuxiliarMonitoras] = useState([]);
 
-    const getFormattedDateTime = () => {
-        const currentDate = new Date();
-        const year = currentDate.getFullYear();
-        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-        const day = String(currentDate.getDate()).padStart(2, '0');
-        const hours = String(currentDate.getHours()).padStart(2, '0');
-        const minutes = String(currentDate.getMinutes()).padStart(2, '0');
-        const seconds = String(currentDate.getSeconds()).padStart(2, '0');
-        return `${year}${month}${day}_${hours}${minutes}${seconds}`;
-    };
-
     const translateServiceStatus = (status) => SERVICE_STATUS[status]?.label || '';
 
     // Obtener datos del estado de navegación
@@ -297,12 +286,8 @@ const SchoolUsersPage = () => {
                 return;
             }
 
-            const optionsSlug = choices
-                .map((v) => (DOWNLOAD_FAMILY_OPTION_LABELS[v] || v))
-                .join('_')
-                .replace(/[^a-zA-Z0-9]+/g, '_')
-                .toLowerCase();
-            await buildParentsWorkbookAndDownload(parents, schoolIdToUse, `familias_${optionsSlug}`);
+            const optionsLabel = choices.map((v) => (DOWNLOAD_FAMILY_OPTION_LABELS[v] || v)).join(' ');
+            await buildParentsWorkbookAndDownload(parents, schoolIdToUse, `familias ${optionsLabel}`);
         } catch (error) {
             console.error('[handleDownloadCombinedFamilies] Error:', error);
             notify.error('Error al generar el archivo de familias');
@@ -587,17 +572,7 @@ const SchoolUsersPage = () => {
 
             const selectedSchool = schools.find(s => s.id === Number.parseInt(schoolIdToUse));
             const schoolName = selectedSchool ? selectedSchool.name : 'Colegio';
-            const fileName = `reporte_rutas_${schoolName.replace(/[^a-zA-Z0-9]/g, '_')}_${getFormattedDateTime()}.xlsx`;
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            await downloadWorkbook(workbook, buildFileName({ object: 'reporte rutas', client: schoolName, date: todayForFileName(), extension: 'xlsx' }));
 
             notify.success(`Reporte de rutas para ${schoolName} descargado exitosamente`);
         } catch (error) {
@@ -731,19 +706,9 @@ const SchoolUsersPage = () => {
                 });
             });
 
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
             const selectedSchool = schools.find(s => s.id === Number.parseInt(schoolIdToUse));
             const schoolName = selectedSchool ? selectedSchool.name : 'Colegio';
-            const fileName = `${prefix}_${schoolName.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`;
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            await downloadWorkbook(workbook, buildFileName({ object: prefix, client: schoolName, date: todayForFileName(), extension: 'xlsx' }));
 
             notify.success(`Archivo con padres de ${schoolName} descargado.`);
         } catch (err) {
@@ -1721,7 +1686,7 @@ const SchoolUsersPage = () => {
     };
 
     // Descargar plantilla sólo para padres. Si hay un colegio seleccionado, prefill del campo Colegio (ID)
-    const handleDownloadParentsTemplate = () => {
+    const handleDownloadParentsTemplate = async () => {
 
         const headers = [
             "Apellido Familia",
@@ -1830,26 +1795,28 @@ const SchoolUsersPage = () => {
             managedGrades.forEach(g => wsListasData.push([g]));
         }
 
-        const wsPadres = XLSX.utils.aoa_to_sheet([headers, example]);
-        wsPadres['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 2, 15) }));
-        const wsListas = XLSX.utils.aoa_to_sheet(wsListasData);
-        wsListas['!cols'] = [{ wch: 30 }];
-
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, wsPadres, 'Padres');
-        XLSX.utils.book_append_sheet(wb, wsListas, 'Listas');
-
-        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-        const blob = new Blob([wbout], { type: 'application/octet-stream' });
-        const fileName = `plantilla_padres_${getFormattedDateTime()}.xlsx`;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        const [listaHeader, ...listaRows] = wsListasData;
+        try {
+            await downloadWorkbook(
+                buildWorkbook({
+                    sheets: [
+                        {
+                            name: 'Padres',
+                            columns: headers.map((header, index) => ({ header, key: `c${index}`, width: Math.max(header.length + 2, 15) })),
+                            rows: [example],
+                        },
+                        {
+                            name: 'Listas',
+                            columns: [{ header: listaHeader[0], key: 'grado', width: 30 }],
+                            rows: listaRows,
+                        },
+                    ],
+                }),
+                buildFileName({ object: 'plantilla padres', client: currentSchool?.name, date: todayForFileName(), extension: 'xlsx' })
+            );
+        } catch (err) {
+            notify.fromError(err, 'Error al descargar la plantilla');
+        }
     };
 
     
@@ -1882,20 +1849,42 @@ const SchoolUsersPage = () => {
     };
 
     const closeBulkDialog = () => {
-        setBulkConfirmCancelOpen(false);
         setOpenBulkDialog(false);
         resetBulkState();
     };
 
     // Con familias sin guardar, cerrar el dialogo pide confirmacion: cancelar descarta toda la carga.
-    const handleRequestCloseBulkDialog = () => {
+    const handleRequestCloseBulkDialog = async () => {
         if (bulkSaving || bulkCompleting) {
             return;
         }
-        if (bulkHasDrafts || bulkPendingFamilies.length > 0) {
-            setBulkConfirmCancelOpen(true);
+        if (!(bulkHasDrafts || bulkPendingFamilies.length > 0)) {
+            closeBulkDialog();
+            return;
         }
-        else {
+        const ok = await confirm({
+            title: '¿Cancelar la carga masiva?',
+            tone: 'danger',
+            confirmLabel: 'Sí, descartar carga',
+            cancelLabel: 'Seguir revisando',
+            message: (
+                <>
+                    {bulkDrafts.length > 0 && (
+                        <Typography variant="body1">
+                            Hay {bulkDrafts.length} familia(s) sin guardar{bulkUnresolvedCount > 0 ? `, ${bulkUnresolvedCount} de ellas con datos pendientes por corregir` : ''}.
+                            Si cancelas, <strong>no se guardará ninguna de ellas</strong> y tendrás que volver a subir el archivo.
+                        </Typography>
+                    )}
+                    {bulkPendingFamilies.length > 0 && (
+                        <Typography variant="body1" sx={{ mt: bulkDrafts.length > 0 ? 1.5 : 0 }}>
+                            {bulkPendingFamilies.length} familia(s) ya guardada(s) tienen pasos por completar (pagos o correo).
+                            Si cancelas, <strong>se perderá este seguimiento</strong>: esas familias quedan guardadas, pero tendrás que completar a mano lo que falte.
+                        </Typography>
+                    )}
+                </>
+            ),
+        });
+        if (ok) {
             closeBulkDialog();
         }
     };
@@ -2676,148 +2665,118 @@ const SchoolUsersPage = () => {
                 </CardContent>
             </Card>
 
-            <Dialog open={openBulkDialog} onClose={handleRequestCloseBulkDialog} maxWidth={bulkHasDrafts ? 'md' : 'sm'} fullWidth>
-                <DialogTitle>Carga Masiva de Familias</DialogTitle>
-                <DialogContent>
-                    <Typography variant="body1" sx={{ mb: 1 }}>
-                        Sube un archivo Excel. Usa la plantilla oficial.<br />
-                        <br />
-                        La lista de Grados se encuentra en la hoja "Listas" de la plantilla.<br />
-                        <br />
-                        El límite de archivo es 5 MB.
-                    </Typography>
-                    <Box sx={{ mt: 2 }}>
-                        <Button
-                            variant="outlined"
-                            sx={{ mr: 2 }}
-                            color="success"
-                            onClick={handleDownloadParentsTemplate}
-                        >
-                            Descargar Plantilla
-                        </Button>
-                        <Button variant="outlined" component="label" startIcon={<FileUpload />} disabled={bulkLoading || bulkSaving}>
-                            Seleccionar Archivo
-                            <input
-                                type="file"
-                                hidden
-                                onChange={(e) => {
-                                    setBulkFile(e.target.files[0]);
-                                    setBulkDrafts([]);
-                                }}
-                                accept=".xlsx,.xls,.csv"
-                            />
-                        </Button>
-                    </Box>
-                    {bulkFile && (
-                        <Typography variant="body2" sx={{ mt: 1 }}>
-                            Archivo seleccionado: {bulkFile.name}
+            <AppDialog
+                open={openBulkDialog}
+                onClose={handleRequestCloseBulkDialog}
+                title="Carga masiva de familias"
+                icon={<FileUpload />}
+                size={bulkHasDrafts ? 'md' : 'sm'}
+                actions={(
+                    <>
+                        <Button onClick={handleRequestCloseBulkDialog} disabled={bulkSaving}>Cancelar</Button>
+                        {hasPermission('padres-carga-masiva') && (bulkHasDrafts ? (
+                            <Button
+                                variant="contained"
+                                color="primary"
+                                disabled={bulkSaving || bulkIncludedDrafts.length === 0 || bulkUnresolvedCount > 0}
+                                onClick={handleSaveBulkDrafts}
+                            >
+                                {bulkSaving
+                                    ? `Guardando ${bulkSaveProgress.done} de ${bulkSaveProgress.total}...`
+                                    : bulkIncludedDrafts.length === 0
+                                        ? 'No hay familias por guardar'
+                                        : bulkUnresolvedCount > 0
+                                            ? `Faltan ${bulkUnresolvedCount} por corregir`
+                                            : `Guardar ${bulkIncludedDrafts.length} familia(s)`}
+                            </Button>
+                        ) : (
+                            <Button
+                                variant="contained"
+                                color="primary"
+                                disabled={!bulkFile || bulkLoading}
+                                onClick={handleBulkUpload}
+                            >
+                                Subir
+                            </Button>
+                        ))}
+                    </>
+                )}
+            >
+                <BulkInstructions
+                    items={[
+                        'Sube un archivo Excel usando la plantilla.',
+                        'La lista de grados está en la hoja "Listas" de la plantilla.',
+                    ]}
+                />
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1.5 }}>
+                    <Button variant="outlined" startIcon={<FileDownload />} onClick={handleDownloadParentsTemplate}>
+                        Descargar plantilla
+                    </Button>
+                    <FileField
+                        accept="excel"
+                        file={bulkFile}
+                        onChange={(file) => {
+                            setBulkFile(file);
+                            setBulkDrafts([]);
+                        }}
+                        maxSizeMb={5}
+                        disabled={bulkLoading || bulkSaving}
+                    />
+                </Box>
+                {bulkLoading && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
+                        <CircularProgress size={24} />
+                        <Typography variant="body2" sx={{ ml: 2 }}>
+                            Procesando archivo...
                         </Typography>
-                    )}
-                    {bulkLoading && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
-                            <CircularProgress size={24} />
-                            <Typography variant="body2" sx={{ ml: 2 }}>
-                                Procesando archivo...
-                            </Typography>
-                        </Box>
-                    )}
-                    <Box sx={{ mt: bulkPendingFamilies.length > 0 ? 2 : 0 }}>
-                        <BulkPendingSteps
-                            families={bulkPendingFamilies}
+                    </Box>
+                )}
+                <Box sx={{ mt: bulkPendingFamilies.length > 0 ? 2 : 0 }}>
+                    <BulkPendingSteps
+                        families={bulkPendingFamilies}
+                        canResetPassword={hasPermission('padres-restablecer-password')}
+                        completing={bulkCompleting}
+                        onComplete={handleCompletePendingSteps}
+                        onDismiss={() => setBulkPendingFamilies([])}
+                    />
+                </Box>
+                {bulkSaving && (
+                    <Box sx={{ mt: 2 }}>
+                        <LinearProgress
+                            variant="determinate"
+                            value={bulkSaveProgress.total > 0 ? (bulkSaveProgress.done / bulkSaveProgress.total) * 100 : 0}
+                        />
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                            Guardando familias: {bulkSaveProgress.done} de {bulkSaveProgress.total}. No cierres esta ventana hasta que termine.
+                        </Typography>
+                    </Box>
+                )}
+                {bulkHasDrafts && (
+                    <Box sx={{ mt: 3 }}>
+                        <Alert severity={bulkProblemCount > 0 ? 'warning' : 'info'} sx={{ mb: 1 }}>
+                            Aún no se guardó ninguna familia{bulkCicloLabel ? ` (ciclo escolar ${bulkCicloLabel})` : ''}. Se encontraron {bulkDrafts.length} familia(s)
+                            {bulkProblemCount > 0
+                                ? `; ${bulkProblemCount} tienen datos por corregir (abajo). Corrígelas u omítelas para poder guardar.`
+                                : ' y todas están listas para guardar.'}
+                            {bulkExistingCount > 0 && ` ${bulkExistingCount} ya existen y se actualizarán: revisa sus cambios con "Ver cambios".`}
+                            {bulkAutoSkippedCount > 0 && ` ${bulkAutoSkippedCount} ya existen sin cambios y se omiten automáticamente.`}
+                        </Alert>
+                        <BulkFamilyDraftsReview
+                            drafts={bulkDrafts}
+                            allowedGrades={bulkAllowedGrades}
+                            allowedRouteTypes={bulkAllowedRouteTypes}
+                            passwordMinLength={bulkPasswordMinLength}
                             canResetPassword={hasPermission('padres-restablecer-password')}
-                            completing={bulkCompleting}
-                            onComplete={handleCompletePendingSteps}
-                            onDismiss={() => setBulkPendingFamilies([])}
+                            canChangeStudentState={hasPermission('alumnos-cambiar-estado')}
+                            canDeleteStudents={hasPermission('alumnos-eliminar')}
+                            cicloLabel={bulkCicloLabel}
+                            onChangeDraft={handleChangeBulkDraft}
+                            onToggleSkip={handleToggleBulkDraftSkip}
+                            onEmailBlur={handleBulkDraftEmailBlur}
                         />
                     </Box>
-                    {bulkSaving && (
-                        <Box sx={{ mt: 2 }}>
-                            <LinearProgress
-                                variant="determinate"
-                                value={bulkSaveProgress.total > 0 ? (bulkSaveProgress.done / bulkSaveProgress.total) * 100 : 0}
-                            />
-                            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                                Guardando familias: {bulkSaveProgress.done} de {bulkSaveProgress.total}. No cierres esta ventana hasta que termine.
-                            </Typography>
-                        </Box>
-                    )}
-                    {bulkHasDrafts && (
-                        <Box sx={{ mt: 3 }}>
-                            <Alert severity={bulkProblemCount > 0 ? 'warning' : 'info'} sx={{ mb: 1 }}>
-                                Aún no se guardó ninguna familia{bulkCicloLabel ? ` (ciclo escolar ${bulkCicloLabel})` : ''}. Se encontraron {bulkDrafts.length} familia(s)
-                                {bulkProblemCount > 0
-                                    ? `; ${bulkProblemCount} tienen datos por corregir (abajo). Corrígelas u omítelas para poder guardar.`
-                                    : ' y todas están listas para guardar.'}
-                                {bulkExistingCount > 0 && ` ${bulkExistingCount} ya existen y se actualizarán: revisa sus cambios con "Ver cambios".`}
-                                {bulkAutoSkippedCount > 0 && ` ${bulkAutoSkippedCount} ya existen sin cambios y se omiten automáticamente.`}
-                            </Alert>
-                            <BulkFamilyDraftsReview
-                                drafts={bulkDrafts}
-                                allowedGrades={bulkAllowedGrades}
-                                allowedRouteTypes={bulkAllowedRouteTypes}
-                                passwordMinLength={bulkPasswordMinLength}
-                                canResetPassword={hasPermission('padres-restablecer-password')}
-                                canChangeStudentState={hasPermission('alumnos-cambiar-estado')}
-                                canDeleteStudents={hasPermission('alumnos-eliminar')}
-                                cicloLabel={bulkCicloLabel}
-                                onChangeDraft={handleChangeBulkDraft}
-                                onToggleSkip={handleToggleBulkDraftSkip}
-                                onEmailBlur={handleBulkDraftEmailBlur}
-                            />
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleRequestCloseBulkDialog} disabled={bulkSaving}>Cancelar</Button>
-                    {hasPermission('padres-carga-masiva') && (bulkHasDrafts ? (
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            disabled={bulkSaving || bulkIncludedDrafts.length === 0 || bulkUnresolvedCount > 0}
-                            onClick={handleSaveBulkDrafts}
-                        >
-                            {bulkSaving
-                                ? `Guardando ${bulkSaveProgress.done} de ${bulkSaveProgress.total}...`
-                                : bulkIncludedDrafts.length === 0
-                                    ? 'No hay familias por guardar'
-                                    : bulkUnresolvedCount > 0
-                                        ? `Faltan ${bulkUnresolvedCount} por corregir`
-                                        : `Guardar ${bulkIncludedDrafts.length} familia(s)`}
-                        </Button>
-                    ) : (
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            disabled={!bulkFile || bulkLoading}
-                            onClick={handleBulkUpload}
-                        >
-                            Subir
-                        </Button>
-                    ))}
-                </DialogActions>
-            </Dialog>
-
-            <Dialog open={bulkConfirmCancelOpen} onClose={() => setBulkConfirmCancelOpen(false)}>
-                <DialogTitle>¿Cancelar la carga masiva?</DialogTitle>
-                <DialogContent>
-                    {bulkDrafts.length > 0 && (
-                        <Typography variant="body1">
-                            Hay {bulkDrafts.length} familia(s) sin guardar{bulkUnresolvedCount > 0 ? `, ${bulkUnresolvedCount} de ellas con datos pendientes por corregir` : ''}.
-                            Si cancelas, <strong>no se guardará ninguna de ellas</strong> y tendrás que volver a subir el archivo.
-                        </Typography>
-                    )}
-                    {bulkPendingFamilies.length > 0 && (
-                        <Typography variant="body1" sx={{ mt: bulkDrafts.length > 0 ? 1.5 : 0 }}>
-                            {bulkPendingFamilies.length} familia(s) ya guardada(s) tienen pasos por completar (pagos o correo).
-                            Si cancelas, <strong>se perderá este seguimiento</strong>: esas familias quedan guardadas, pero tendrás que completar a mano lo que falte.
-                        </Typography>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setBulkConfirmCancelOpen(false)}>Seguir revisando</Button>
-                    <Button color="error" variant="contained" onClick={closeBulkDialog}>Sí, descartar carga</Button>
-                </DialogActions>
-            </Dialog>
+                )}
+            </AppDialog>
 
             {/* Editor de carga masiva de paradas */}
             {openBulkStopsEditor && (
@@ -2976,33 +2935,14 @@ const SchoolUsersPage = () => {
                         </Grid>
                         {familyMessageChannel === 'email' && (
                             <Grid item xs={12}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-                                    <Button
-                                        size="small"
-                                        variant="outlined"
-                                        component="label"
-                                        sx={{ textTransform: 'none', borderRadius: 2, fontWeight: 700, height: 36 }}
-                                    >
-                                        Adjuntar archivo
-                                        <input
-                                            type="file"
-                                            hidden
-                                            onChange={(e) => setFamilyMessageFile(e.target.files?.[0] || null)}
-                                        />
-                                    </Button>
-                                    {familyMessageFile ? (
-                                        <Chip
-                                            size="small"
-                                            label={familyMessageFile.name}
-                                            onDelete={() => setFamilyMessageFile(null)}
-                                            sx={{ maxWidth: '100%' }}
-                                        />
-                                    ) : (
-                                        <Typography variant="caption" color="text.secondary">
-                                            Sin archivo adjunto
-                                        </Typography>
-                                    )}
-                                </Box>
+                                <FileField
+                                    accept=""
+                                    label="Adjuntar archivo"
+                                    file={familyMessageFile}
+                                    onChange={setFamilyMessageFile}
+                                    maxSizeMb={null}
+                                    clearable
+                                />
                             </Grid>
                         )}
                     </Grid>

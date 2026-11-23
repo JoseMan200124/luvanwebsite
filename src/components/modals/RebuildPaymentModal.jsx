@@ -14,6 +14,7 @@ import RotateRightIcon from '@mui/icons-material/RotateRight';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import api from '../../utils/axiosConfig';
 import useNotify from '../../hooks/useNotify';
+import { downloadBlob } from '../../utils/download';
 import { formatDateTime } from '../../utils/dateFormat';
 import { formatQ } from '../../utils/currency';
 import AppDialog from '../dialogs/AppDialog';
@@ -97,14 +98,7 @@ function isEqualLoose(a, b) {
 
 function downloadJson(obj, filename) {
     const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.append(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, filename);
 }
 
 function applyOverrides(target, overrides) {

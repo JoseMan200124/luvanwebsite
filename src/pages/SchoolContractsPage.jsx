@@ -18,7 +18,6 @@ import {
 import {
     Delete as DeleteIcon,
     Edit as EditIcon,
-    CloudUpload as CloudUploadIcon,
     ContentCopy as ContentCopyIcon,
     Visibility as VisibilityIcon,
     Add as AddIcon,
@@ -51,6 +50,7 @@ import useIsMobile from '../hooks/useIsMobile';
 import { MobileCard } from '../components/table/MobileCard';
 import { formatDateTime } from '../utils/dateFormat';
 import AppDialog from '../components/dialogs/AppDialog';
+import FileField from '../components/form/FileField';
 
 // Tarjeta móvil de contratos: borde gris fino sin sombra, como antes del bloque B
 const CONTRACT_CARD_SX = { p: 2, mb: 1.5, backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: '8px' };
@@ -347,8 +347,7 @@ const SchoolContractsPage = () => {
     // ---------------------------
     // Función para subir archivo Word y convertirlo a HTML (igual que ContractsManagementPage)
     // ---------------------------
-    const handleWordUpload = async (event) => {
-        const file = event.target.files[0];
+    const handleWordUpload = async (file) => {
         if (file?.name.endsWith('.docx')) {
             try {
                 const arrayBuffer = await file.arrayBuffer();
@@ -361,7 +360,6 @@ const SchoolContractsPage = () => {
         } else {
             notify.warning('Por favor, sube un archivo de Word (.docx)');
         }
-        event.target.value = null;
     };
 
     // ---------------------------
@@ -1038,24 +1036,9 @@ const SchoolContractsPage = () => {
                                 margin="normal"
                             />
 
-                            <div style={{ marginBottom: '10px' }}>
-                                <input
-                                    accept=".docx"
-                                    style={{ display: 'none' }}
-                                    id="upload-word"
-                                    type="file"
-                                    onChange={handleWordUpload}
-                                />
-                                <label htmlFor="upload-word">
-                                    <Button
-                                        variant="outlined"
-                                        component="span"
-                                        startIcon={<CloudUploadIcon />}
-                                    >
-                                        Subir Word
-                                    </Button>
-                                </label>
-                            </div>
+                            <Box sx={{ mb: 1.25 }}>
+                                <FileField accept=".docx" label="Subir Word" onChange={handleWordUpload} maxSizeMb={null} hideSelection />
+                            </Box>
 
                             <ErrorBoundary>
                                 <SimpleEditor editorData={editorData} setEditorData={setEditorData} />

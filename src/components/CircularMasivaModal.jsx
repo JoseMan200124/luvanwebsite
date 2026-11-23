@@ -4,7 +4,7 @@ import {
     Button, TextField,
     Alert, Box, Checkbox, FormControl, FormHelperText, Typography, Stack, Divider,
 } from '@mui/material';
-import { FileUpload, Notifications as NotificationsIcon, Schedule as ScheduleIcon } from '@mui/icons-material';
+import { Notifications as NotificationsIcon, Schedule as ScheduleIcon } from '@mui/icons-material';
 import api from '../utils/axiosConfig';
 import AudienceTargetingPanel from './audience/AudienceTargetingPanel';
 import { EMPTY_AUDIENCE, validateAudience } from './audience/audienceModel';
@@ -15,8 +15,7 @@ import {
 } from './scheduling/scheduleModel';
 import { createScheduledCircular, updateScheduledSend } from '../services/scheduledSendService';
 import AppDialog from './dialogs/AppDialog';
-
-const MAX_FILE_SIZE = 5 * 1024 * 1024;
+import FileField from './form/FileField';
 
 const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = null, onSuccess, editing = null }) => {
     const [audience, setAudience] = useState(EMPTY_AUDIENCE);
@@ -49,17 +48,6 @@ const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = nul
     const scheduleValidation = validateSchedule(schedule);
     const isScheduled = schedule.mode === 'scheduled';
     const currentAttachment = editing?.attachment && !removeAttachment ? editing.attachment : null;
-
-    const handleFileChange = (e) => {
-        const selectedFile = e.target.files[0];
-        if (selectedFile && selectedFile.size > MAX_FILE_SIZE) {
-            notify.error('El archivo no puede superar los 5 MB');
-            e.target.value = null;
-            setFile(null);
-            return;
-        }
-        setFile(selectedFile);
-    };
 
     const resetAndClose = () => {
         setAudience(EMPTY_AUDIENCE);
@@ -204,11 +192,14 @@ const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = nul
                     />
 
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                        <Button variant="outlined" component="label" startIcon={<FileUpload />} size="small">
-                            {currentAttachment ? 'Reemplazar archivo' : 'Seleccionar archivo'}
-                            <input type="file" hidden accept="application/pdf,image/*" onChange={handleFileChange} />
-                        </Button>
-                        {file && <Typography variant="body2">{file.name}</Typography>}
+                        <FileField
+                            accept="application/pdf,image/*"
+                            label={currentAttachment ? 'Reemplazar archivo' : 'Elegir archivo'}
+                            file={file}
+                            onChange={setFile}
+                            hideSelection={!file && Boolean(currentAttachment)}
+                            clearable
+                        />
                         {!file && currentAttachment && (
                             <>
                                 <Typography variant="body2">Adjunto actual: {currentAttachment.name}</Typography>

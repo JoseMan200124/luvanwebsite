@@ -3,9 +3,10 @@
 // comparar hojas visibles con la vista regenerada desde el payload → si difieren, flujo de Excel
 // editado. Devuelve familias listas para reconciliar; el editor reemplaza el borrador completo.
 import React, { useEffect, useState } from 'react';
-import { Alert, Box, Button, Typography } from '@mui/material';
+import { Alert, Box, Typography } from '@mui/material';
 import { UploadFile } from '@mui/icons-material';
 import AppDialog from '../dialogs/AppDialog';
+import FileField from '../form/FileField';
 import paradasService, { mensajeError } from '../../services/paradasService';
 import { leerExcel } from './excelPuntoGuardado';
 import { filasDeVista, mismasFilas } from './excelNormalizar';
@@ -58,11 +59,7 @@ export default function CargarPuntoGuardadoDialog({ open, schoolId, reemplaza, o
                 </Typography>
                 {reemplaza && <Alert severity="warning" sx={{ my: 2 }}>{reemplaza.texto}</Alert>}
                 <Box sx={{ my: 2 }}>
-                    <Button variant="outlined" component="label" startIcon={<UploadFile />}>
-                        Elegir archivo
-                        <input hidden type="file" accept=".xlsx" onChange={e => setArchivo(e.target.files?.[0] || null)} />
-                    </Button>
-                    <Typography variant="body2" sx={{ mt: 1 }}>{archivo ? archivo.name : 'Ningún archivo elegido'}</Typography>
+                    <FileField accept=".xlsx" file={archivo} onChange={setArchivo} maxSizeMb={null} />
                 </Box>
                 {error && <Alert severity="error">{error}</Alert>}
             </AppDialog>

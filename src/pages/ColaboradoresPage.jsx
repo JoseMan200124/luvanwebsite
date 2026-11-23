@@ -6,7 +6,6 @@ import {
     Box,
     Card,
     CardContent,
-    Button,
     CircularProgress,
     Grid,
     Chip,
@@ -16,10 +15,6 @@ import {
     TableRow,
     TextField,
     IconButton,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     DialogContentText,
     FormControl,
     InputLabel,
@@ -34,7 +29,6 @@ import {
     Delete,
     Add,
     ExpandMore,
-    FileUpload,
     Mail,
     DirectionsBus,
     ToggleOn,
@@ -48,7 +42,10 @@ import styled from 'styled-components';
 import ColaboradorScheduleModal from '../components/modals/ColaboradorScheduleModal';
 import BulkScheduleColaboradoresModal from '../components/modals/BulkScheduleColaboradoresModal';
 import ExcelJS from 'exceljs';
-import moment from 'moment-timezone';
+import BulkUploadDialog from '../components/dialogs/BulkUploadDialog';
+import { downloadWorkbook } from '../utils/excel';
+import { buildFileName } from '../utils/fileName';
+import { todayForFileName } from '../utils/download';
 import { normalizeKey } from '../utils/stringHelpers';
 import UserServiceStatusModal from '../components/UserServiceStatusModal';
 import PermissionGuard from '../components/PermissionGuard';
@@ -174,10 +171,6 @@ const ColaboradoresPage = () => {
     const [openDownloadDialog, setOpenDownloadDialog] = useState(false);
     const [downloadChoice, setDownloadChoice] = useState('new'); // 'new' | 'all'
     
-    // Estados para carga masiva
-    const [bulkFile, setBulkFile] = useState(null);
-    const [bulkLoading, setBulkLoading] = useState(false);
-    
     // Estados para circular
     const [circularSubject, setCircularSubject] = useState('');
     const [circularMessage, setCircularMessage] = useState('');
@@ -217,18 +210,6 @@ const ColaboradoresPage = () => {
         schedules: false,
         extraFields: false
     });
-
-    // Función para obtener fecha/hora formateada para nombres de archivo
-    const getFormattedDateTime = () => {
-        const currentDate = new Date();
-        const year = currentDate.getFullYear();
-        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-        const day = String(currentDate.getDate()).padStart(2, '0');
-        const hours = String(currentDate.getHours()).padStart(2, '0');
-        const minutes = String(currentDate.getMinutes()).padStart(2, '0');
-        const seconds = String(currentDate.getSeconds()).padStart(2, '0');
-        return `${year}${month}${day}_${hours}${minutes}${seconds}`;
-    };
 
     // Descargar colaboradores filtrados por estado de servicio explícito
     const handleDownloadByServiceStatusColaboradores = async (serviceStatus) => {
@@ -285,14 +266,7 @@ const ColaboradoresPage = () => {
             worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
             addSchedulesSheet(workbook);
 
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Colaboradores_${serviceStatus}_${currentCorporation?.name || 'Corporativo'}_${moment().format('YYYYMMDD')}.xlsx`;
-            a.click();
-            window.URL.revokeObjectURL(url);
+            await downloadWorkbook(workbook, buildFileName({ object: `colaboradores ${serviceStatus}`, client: currentCorporation?.name, date: todayForFileName(), extension: 'xlsx' }));
 
             notify.success('Archivo descargado');
         } catch (err) {
@@ -894,14 +868,7 @@ const ColaboradoresPage = () => {
             // Añadir hoja 'Horarios' antes de generar el archivo
             addSchedulesSheet(workbook);
 
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Colaboradores_Nuevos_${currentCorporation?.name || 'Corporativo'}_${moment().format('YYYYMMDD')}.xlsx`;
-            a.click();
-            window.URL.revokeObjectURL(url);
+            await downloadWorkbook(workbook, buildFileName({ object: 'colaboradores nuevos', client: currentCorporation?.name, date: todayForFileName(), extension: 'xlsx' }));
             
             notify.success('Archivo descargado');
         } catch (err) {
@@ -919,7 +886,7 @@ const ColaboradoresPage = () => {
                 notify.warning('No hay colaboradores para descargar');
                 return;
             }
-            await buildColaboradoresWorkbookAndDownload(allCols, `Colaboradores_Todos_${currentCorporation?.name || 'Corporativo'}`);
+            await buildColaboradoresWorkbookAndDownload(allCols, 'colaboradores todos');
         } catch (err) {
             console.error('Error downloading all colaboradores:', err);
             notify.error('Error al descargar colaboradores');
@@ -983,14 +950,7 @@ const ColaboradoresPage = () => {
             worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
             addSchedulesSheet(workbook);
 
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${filePrefix}_${moment().format('YYYYMMDD')}.xlsx`;
-            a.click();
-            window.URL.revokeObjectURL(url);
+            await downloadWorkbook(workbook, buildFileName({ object: filePrefix, client: currentCorporation?.name, date: todayForFileName(), extension: 'xlsx' }));
 
             notify.success('Archivo descargado');
         } catch (err) {
@@ -1000,87 +960,72 @@ const ColaboradoresPage = () => {
     };
 
     // Función para descargar plantilla de carga masiva (incluye campos extra de la corporación)
-    const handleDownloadTemplate = async () => {
-        try {
-            const workbook = new ExcelJS.Workbook();
-            const worksheet = workbook.addWorksheet('Plantilla Colaboradores');
+    // Plantilla de la carga masiva (exceljs: encabezado azul y hoja Horarios con los horarios de la corporación).
+    const buildColaboradoresTemplate = () => {
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Plantilla Colaboradores');
 
-            const standardColumns = [
-                { header: 'Nombres', key: 'firstName', width: 25 },
-                { header: 'Apellidos', key: 'lastName', width: 25 },
-                { header: 'Nombre de Usuario', key: 'username', width: 25 },
-                { header: 'Email', key: 'email', width: 30 },
-                { header: 'Contraseña', key: 'password', width: 20 },
-                { header: 'Teléfono', key: 'phoneNumber', width: 15 },
-                { header: 'Número Empleado', key: 'employeeNumber', width: 20 },
-                { header: 'Horario (nombre)', key: 'selectedSchedule', width: 17 },
-                { header: 'Dirección Servicio', key: 'serviceAddress', width: 40 },
-                { header: 'Zona/Sector', key: 'zoneOrSector', width: 20 },
-                { header: 'Tipo Ruta', key: 'routeType', width: 15 },
-                { header: 'Contacto Emergencia', key: 'emergencyContact', width: 25 },
-                { header: 'Parentesco Emergencia', key: 'emergencyRelationship', width: 30 },
-                { header: 'Teléfono Emergencia', key: 'emergencyPhone', width: 20 }
-            ];
+        const standardColumns = [
+            { header: 'Nombres', key: 'firstName', width: 25 },
+            { header: 'Apellidos', key: 'lastName', width: 25 },
+            { header: 'Nombre de Usuario', key: 'username', width: 25 },
+            { header: 'Email', key: 'email', width: 30 },
+            { header: 'Contraseña', key: 'password', width: 20 },
+            { header: 'Teléfono', key: 'phoneNumber', width: 15 },
+            { header: 'Número Empleado', key: 'employeeNumber', width: 20 },
+            { header: 'Horario (nombre)', key: 'selectedSchedule', width: 17 },
+            { header: 'Dirección Servicio', key: 'serviceAddress', width: 40 },
+            { header: 'Zona/Sector', key: 'zoneOrSector', width: 20 },
+            { header: 'Tipo Ruta', key: 'routeType', width: 15 },
+            { header: 'Contacto Emergencia', key: 'emergencyContact', width: 25 },
+            { header: 'Parentesco Emergencia', key: 'emergencyRelationship', width: 30 },
+            { header: 'Teléfono Emergencia', key: 'emergencyPhone', width: 20 }
+        ];
 
-            const extraFields = Array.isArray(currentCorporation?.extraEnrollmentFields) ? currentCorporation.extraEnrollmentFields : [];
-            const extraColumns = extraFields.map((f, idx) => {
-                const fieldName = f.fieldName || f.label || f.name || f.key || `extra_${idx}`;
-                return { header: fieldName, key: fieldName, width: 25 };
-            });
+        const extraFields = Array.isArray(currentCorporation?.extraEnrollmentFields) ? currentCorporation.extraEnrollmentFields : [];
+        const extraColumns = extraFields.map((f, idx) => {
+            const fieldName = f.fieldName || f.label || f.name || f.key || `extra_${idx}`;
+            return { header: fieldName, key: fieldName, width: 25 };
+        });
 
-            worksheet.columns = [...standardColumns, ...extraColumns];
+        worksheet.columns = [...standardColumns, ...extraColumns];
 
-            // Fila de ejemplo (mapear a los campos del formulario)
-            const example = {};
-            worksheet.columns.forEach(col => {
-                switch (col.key) {
-                    case 'firstName': example[col.key] = 'Juan'; break;
-                    case 'lastName': example[col.key] = 'Pérez'; break;
-                    case 'username': example[col.key] = 'juan.perez'; break;
-                    case 'email': example[col.key] = 'colaboradorprueba@ejemplo.com'; break;
-                    case 'password': example[col.key] = 'Password123'; break;
-                    case 'phoneNumber': example[col.key] = '50241234567'; break;
-                    case 'employeeNumber': example[col.key] = 'EMP001'; break;
-                    case 'serviceAddress': example[col.key] = 'Calle Falsa 123, Zona 1'; break;
-                    case 'zoneOrSector': example[col.key] = 'Zona 1'; break;
-                    case 'routeType': example[col.key] = 'Completa'; break;
-                    case 'selectedSchedule': example[col.key] = ''; break;
-                    case 'emergencyContact': example[col.key] = 'María López'; break;
-                    case 'emergencyRelationship': example[col.key] = 'Madre'; break;
-                    case 'emergencyPhone': example[col.key] = '50241239876'; break;
-                    default: example[col.key] = '';
-                }
-            });
-            // Añadir valores de ejemplo para campos extras si existen
-            extraFields.forEach((f, idx) => {
-                const fname = f.fieldName || f.label || f.name || f.key || `extra_${idx}`;
-                example[fname] = f.default !== undefined ? f.default : '';
-            });
-            worksheet.addRow(example);
+        // Fila de ejemplo (mapear a los campos del formulario)
+        const example = {};
+        worksheet.columns.forEach(col => {
+            switch (col.key) {
+                case 'firstName': example[col.key] = 'Juan'; break;
+                case 'lastName': example[col.key] = 'Pérez'; break;
+                case 'username': example[col.key] = 'juan.perez'; break;
+                case 'email': example[col.key] = 'colaboradorprueba@ejemplo.com'; break;
+                case 'password': example[col.key] = 'Password123'; break;
+                case 'phoneNumber': example[col.key] = '50241234567'; break;
+                case 'employeeNumber': example[col.key] = 'EMP001'; break;
+                case 'serviceAddress': example[col.key] = 'Calle Falsa 123, Zona 1'; break;
+                case 'zoneOrSector': example[col.key] = 'Zona 1'; break;
+                case 'routeType': example[col.key] = 'Completa'; break;
+                case 'selectedSchedule': example[col.key] = ''; break;
+                case 'emergencyContact': example[col.key] = 'María López'; break;
+                case 'emergencyRelationship': example[col.key] = 'Madre'; break;
+                case 'emergencyPhone': example[col.key] = '50241239876'; break;
+                default: example[col.key] = '';
+            }
+        });
+        // Añadir valores de ejemplo para campos extras si existen
+        extraFields.forEach((f, idx) => {
+            const fname = f.fieldName || f.label || f.name || f.key || `extra_${idx}`;
+            example[fname] = f.default !== undefined ? f.default : '';
+        });
+        worksheet.addRow(example);
 
-            // Estilos header
-            worksheet.getRow(1).font = { bold: true };
-            worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1976D2' } };
-            worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        // Estilos header
+        worksheet.getRow(1).font = { bold: true };
+        worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1976D2' } };
+        worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
 
-            // Añadir hoja 'Horarios' con schedules de la corporación
-            addSchedulesSheet(workbook);
-
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            const corpName = currentCorporation?.name || 'Corporativo';
-            a.download = `Plantilla_Colaboradores_${corpName}_${moment().format('YYYYMMDD')}.xlsx`;
-            a.click();
-            window.URL.revokeObjectURL(url);
-
-            notify.success('Plantilla descargada');
-        } catch (err) {
-            console.error('Error descargando plantilla:', err);
-            notify.error('Error al descargar plantilla');
-        }
+        // Añadir hoja 'Horarios' con schedules de la corporación
+        addSchedulesSheet(workbook);
+        return workbook;
     };
 
     // Agregar hoja con lista de horarios de la corporación
@@ -1112,36 +1057,25 @@ const ColaboradoresPage = () => {
         sheet.getRow(1).font = { bold: true };
     };
 
-    // Función para manejar carga masiva
-    const handleBulkUpload = async () => {
-        if (!bulkFile) {
-            notify.warning('Por favor seleccione un archivo');
-            return;
-        }
-        
-        setBulkLoading(true);
-        
+    const toBulkResult = (data, created = 0) => ({
+        successCount: data?.created ?? created,
+        errorsCount: data?.details?.length ?? 0,
+        errorsList: (data?.details || []).map((detail) => ({ row: detail.row, errorMessage: detail.error })),
+    });
+
+    const uploadColaboradores = async (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
         try {
-            const formData = new FormData();
-            formData.append('file', bulkFile);
-            
-            await api.post(`/corporations/${corporationId}/colaboradores/bulk`, formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                    Authorization: `Bearer ${auth.token}`,
-                }
+            const response = await api.post(`/corporations/${corporationId}/colaboradores/bulk`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
             });
-            
-            notify.success('Carga masiva completada');
-            
-            setOpenBulkDialog(false);
-            setBulkFile(null);
-            fetchColaboradores();
+            return toBulkResult(response.data);
         } catch (err) {
-            console.error('Error in bulk upload:', err);
-            notify.fromError(err, 'Error en la carga masiva');
-        } finally {
-            setBulkLoading(false);
+            if (err?.response?.status === 400 && Array.isArray(err.response.data?.details)) {
+                return toBulkResult(err.response.data);
+            }
+            throw err;
         }
     };
 
@@ -1397,17 +1331,7 @@ const ColaboradoresPage = () => {
             });
 
             const corpName = currentCorporation?.name || 'Corporativo';
-            const fileName = `reporte_paradas_${corpName.replace(/[^a-zA-Z0-9]/g, '_')}_${getFormattedDateTime()}.xlsx`;
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            await downloadWorkbook(workbook, buildFileName({ object: 'reporte paradas', client: currentCorporation?.name, date: todayForFileName(), extension: 'xlsx' }));
 
             notify.success(`Reporte de paradas para ${corpName} descargado exitosamente`);
         } catch (error) {
@@ -1899,7 +1823,7 @@ const ColaboradoresPage = () => {
                                                             color="success"
                                                             size="small"
                                                             clickable={puedeCambiarEstado}
-                                                            onClick={puedeCambiarEstado ? () => handleOpenToggleStateDialog(colaborador) : undefined}
+                                                            onClick={puedeCambiarEstado ? () => handleToggleState(colaborador) : undefined}
                                                         />
                                                     ) : getColaboradorStatus(colaborador) === 'Inactivo' ? (
                                                         <Chip
@@ -1907,7 +1831,7 @@ const ColaboradoresPage = () => {
                                                             color={getStatusColor(getColaboradorStatus(colaborador))}
                                                             size="small"
                                                             clickable={puedeCambiarEstado}
-                                                            onClick={puedeCambiarEstado ? () => handleOpenToggleStateDialog(colaborador) : undefined}
+                                                            onClick={puedeCambiarEstado ? () => handleToggleState(colaborador) : undefined}
                                                         />
                                                     ) : (
                                                         <Chip
@@ -2009,75 +1933,29 @@ const ColaboradoresPage = () => {
             />
 
             {/* Diálogo de Carga Masiva */}
-            <Dialog open={openBulkDialog} onClose={() => setOpenBulkDialog(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Carga Masiva de Colaboradores</DialogTitle>
-                <DialogContent>
-                    <Box sx={{ mt: 2 }}>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                            Sube un archivo Excel con las columnas necesarias. Usa la plantilla oficial.<br/>
-                            <br/>
-                            La lista de Horarios se encuentra en la hoja "Horarios" de la plantilla.<br/>
-                            <br/>
-                            El límite de archivo es 5 MB.
-                        </Typography>
-
-                        <Button
-                            variant="outlined"
-                            sx={{ mr: 2 }}
-                            color="success"
-                            onClick={handleDownloadTemplate}
-                        >
-                            Descargar Plantilla
-                        </Button>
-                        <Button variant="outlined" component="label" startIcon={<FileUpload />}>
-                            Seleccionar Archivo
-                            <input
-                                type="file"
-                                hidden
-                                onChange={(e) => setBulkFile(e.target.files[0])}
-                                accept=".xlsx,.xls"
-                            />
-                        </Button>
-
-                        {bulkFile && (
-                            <Typography variant="body2" sx={{ mt: 1 }}>
-                                Archivo seleccionado: {bulkFile.name}
-                            </Typography>
-                        )}
-                        
-                        {bulkLoading && (
-                            <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
-                                <CircularProgress size={24} />
-                                <Typography variant="body2" sx={{ ml: 2 }}>
-                                    Procesando archivo...
-                                </Typography>
-                            </Box>
-                        )}
-                    </Box>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => {
-                        setOpenBulkDialog(false);
-                        setBulkFile(null);
-                    }}>
-                        Cancelar
-                    </Button>
-                    <PermissionGuard permission="corporaciones-carga-masiva-colaboradores">
-                        <Button
-                            onClick={handleBulkUpload}
-                            variant="contained"
-                            disabled={!bulkFile || bulkLoading}
-                        >
-                            {bulkLoading ? <CircularProgress size={24} /> : 'Cargar'}
-                        </Button>
-                    </PermissionGuard>
-                </DialogActions>
-            </Dialog>
+            <BulkUploadDialog
+                open={openBulkDialog}
+                onClose={() => setOpenBulkDialog(false)}
+                title="Carga masiva de colaboradores"
+                description={[
+                    'Sube un archivo Excel con las columnas necesarias, usando la plantilla.',
+                    'La lista de horarios está en la hoja "Horarios" de la plantilla.',
+                ]}
+                templateObject="colaboradores"
+                templateClient={currentCorporation?.name}
+                accept="excelSinCsv"
+                maxSizeMb={10}
+                successLabel="Colaboradores creados"
+                buildTemplate={buildColaboradoresTemplate}
+                upload={uploadColaboradores}
+                onUploaded={() => fetchColaboradores()}
+            />
 
             <BulkScheduleColaboradoresModal
                 open={openBulkScheduleDialog}
                 onClose={() => setOpenBulkScheduleDialog(false)}
                 corporationId={corporationId}
+                corporationName={currentCorporation?.name}
             />
 
             {/* Diálogo de Enviar Circular */}

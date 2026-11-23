@@ -5,12 +5,7 @@ import {
     TableBody,
     TableCell,
     TableRow,
-    Button,
     Paper,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     DialogContentText,
     CircularProgress,
     Grid,
@@ -34,16 +29,13 @@ import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { matchSearchTokens } from '../utils/clientFilter';
 import { Autocomplete } from '@mui/material';
 import { ListItemText } from '@mui/material';
-import { Alert } from '@mui/material';
-import { Edit, Delete, Add, FileUpload, Lock, PersonAdd as PersonAddIcon, FileDownload as FileDownloadIcon } from '@mui/icons-material';
+import { Edit, Delete, Add, Lock, PersonAdd as PersonAddIcon, FileDownload as FileDownloadIcon } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
-import * as XLSX from 'xlsx';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
 import { validate, hasErrors, focusFirstError, clearError } from '../utils/validators';
-import PermissionGuard from '../components/PermissionGuard';
 import useTableState from '../hooks/useTableState';
 import useIsMobile from '../hooks/useIsMobile';
 import AppTablePagination from '../components/table/AppTablePagination';
@@ -56,6 +48,10 @@ import usePermissions from '../hooks/usePermissions';
 import useManageableRoles from '../hooks/useManageableRoles';
 import { formatDateTime } from '../utils/dateFormat';
 import AppDialog from '../components/dialogs/AppDialog';
+import BulkUploadDialog from '../components/dialogs/BulkUploadDialog';
+import { buildWorkbook, downloadWorkbook } from '../utils/excel';
+import { buildFileName } from '../utils/fileName';
+import { todayForFileName } from '../utils/download';
 
 // Fallback static role list (used as initial value, backend will provide authoritative list)
 const roleOptionsStatic = [
@@ -69,7 +65,7 @@ const roleOptionsStatic = [
 ];
 
 // Roles con hoja en la plantilla de carga masiva (nombre de hoja → roleId). Cada hoja de
-// handleDownloadUserTemplate se busca aquí por su nombre: solo se generan las de roles que el
+// buildUserTemplate se busca aquí por su nombre: solo se generan las de roles que el
 // actor puede gestionar, y una hoja cuyo nombre no esté en esta lista no se genera.
 const BULK_SHEET_ROLE_IDS = Object.freeze({
     Gestor: 1,
@@ -188,10 +184,7 @@ const RolesManagementPage = () => {
         }
     }, [openDialog]);
 
-    const [openBulkDialog, setOpenBulkDialog] = useState(false);
-    const [bulkFile, setBulkFile] = useState(null);
-    const [bulkResults, setBulkResults] = useState(null);
-    const [bulkLoading, setBulkLoading] = useState(false);
+    const [bulkOpen, setBulkOpen] = useState(false);
 
     // bulk editors removed
 
@@ -737,54 +730,6 @@ const RolesManagementPage = () => {
     // Keep sorting client-side for the current page only.
     const displayedUsers = sortedUsers;
 
-    const handleOpenBulkDialog = () => {
-        setBulkFile(null);
-        setBulkResults(null);
-        setOpenBulkDialog(true);
-    };
-
-    const handleCloseBulkDialog = () => {
-        setOpenBulkDialog(false);
-    };
-
-    const handleFileChange = (e) => {
-        const file = e.target.files[0];
-        setBulkFile(file);
-    };
-
-    const handleUploadBulk = async () => {
-        if (!bulkFile) {
-            return;
-        }
-        setBulkLoading(true);
-        setBulkResults(null);
-        const formData = new FormData();
-        formData.append('file', bulkFile);
-        try {
-            const resp = await api.post('/users/bulk-upload', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
-            setBulkResults(resp.data);
-            fetchUsers();
-        } catch (error) {
-            console.error('[handleUploadBulk] Error:', error);
-            notify.error('Ocurrió un error al procesar la carga masiva');
-        }
-        setBulkLoading(false);
-    };
-
-    const getFormattedDateTime = () => {
-        const currentDate = new Date();
-        const year = currentDate.getFullYear();
-        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-        const day = String(currentDate.getDate()).padStart(2, '0');
-        const hours = String(currentDate.getHours()).padStart(2, '0');
-        const minutes = String(currentDate.getMinutes()).padStart(2, '0');
-        const seconds = String(currentDate.getSeconds()).padStart(2, '0');
-        return `${year}${month}${day}_${hours}${minutes}${seconds}`;
-    };
-        
-
         
 
     const handleDownloadAllUsers = async (category, clientObj) => {
@@ -919,41 +864,24 @@ const RolesManagementPage = () => {
                 ];
                 data.push(row);
             });
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.aoa_to_sheet(data);
-
-            // Auto-ajustar ancho de columnas
-            const colWidths = headers.map((header, headerIndex) => {
-                let maxWidth = header.length;
-                data.slice(1).forEach(row => {
-                    if (row[headerIndex] !== undefined) {
-                        const cellLength = String(row[headerIndex] || "").length;
-                        if (cellLength > maxWidth) {
-                            maxWidth = cellLength;
-                        }
-                    }
-                });
-                return { wch: Math.min(Math.max(maxWidth, 10), 50) };
-            });
-            ws['!cols'] = colWidths;
-            XLSX.utils.book_append_sheet(wb, ws, "Usuarios");
-            const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-            const blob = new Blob([wbout], { type: "application/octet-stream" });
-            const fileName = `usuarios_${getFormattedDateTime()}.xlsx`;
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            const clientName = clientObj?.name || (category === 'Sin afiliación' ? 'sin afiliacion' : '');
+            await downloadWorkbook(
+                buildWorkbook({
+                    sheets: [{
+                        name: 'Usuarios',
+                        columns: headers.map((header, index) => ({ header, key: `c${index}` })),
+                        rows: data.slice(1),
+                    }],
+                }),
+                buildFileName({ object: 'usuarios', client: clientName, date: todayForFileName(), extension: 'xlsx' })
+            );
         } catch (error) {
             notify.fromError(error, 'Error al descargar todos los usuarios');
         }
     };
 
-    const handleDownloadUserTemplate = () => {
+    // Plantilla de la carga masiva: hoja Listas y una hoja por rol que el actor puede gestionar.
+    const buildUserTemplate = () => {
         // 1. Prepara listas de referencia. `assignableSchools` (no `schools`) porque no debe
         // verse afectada por el filtro de Ciclo Escolar de la página: es una lista fija,
         // un id canónico por colegio, cargada una sola vez al montar.
@@ -1085,38 +1013,28 @@ const RolesManagementPage = () => {
                 corporaciones[i]?.[0] ?? "", corporaciones[i]?.[1] ?? ""
             ]);
         }
-
-        const wsListas = XLSX.utils.aoa_to_sheet(wsListasData);
-
-        // Ajusta el ancho de cada columna de la hoja Listas
-        wsListas['!cols'] = [
-            { wch: Math.max("Colegios (ID)".length + 2, 15) },
-            { wch: Math.max("Colegios (Nombre)".length + 2, 20) },
-            { wch: 2 },
-            { wch: Math.max("Corporaciones (ID)".length + 2, 15) },
-            { wch: Math.max("Corporaciones (Nombre)".length + 2, 20) }
+        const [listasHeaders, ...listasRows] = wsListasData;
+        const listasWidths = [
+            Math.max("Colegios (ID)".length + 2, 15),
+            Math.max("Colegios (Nombre)".length + 2, 20),
+            2,
+            Math.max("Corporaciones (ID)".length + 2, 15),
+            Math.max("Corporaciones (Nombre)".length + 2, 20)
         ];
-
-        // 4. Generar el archivo (Listas primero, para que el usuario vea los IDs de referencia al abrir)
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, wsListas, "Listas");
-        sheets.filter(sheet => canManageRoleId(BULK_SHEET_ROLE_IDS[sheet.name])).forEach(sheet => {
-            const ws = XLSX.utils.aoa_to_sheet([sheet.headers, sheet.example]);
-            ws['!cols'] = sheet.headers.map(h => ({ wch: Math.max(h.length + 2, 15) }));
-            XLSX.utils.book_append_sheet(wb, ws, sheet.name);
+        return buildWorkbook({
+            sheets: [
+                {
+                    name: 'Listas',
+                    columns: listasHeaders.map((header, index) => ({ header, key: `c${index}`, width: listasWidths[index] })),
+                    rows: listasRows,
+                },
+                ...sheets.filter(sheet => canManageRoleId(BULK_SHEET_ROLE_IDS[sheet.name])).map(sheet => ({
+                    name: sheet.name,
+                    columns: sheet.headers.map((header, index) => ({ header, key: `c${index}`, width: Math.max(header.length + 2, 15) })),
+                    rows: [sheet.example],
+                })),
+            ],
         });
-
-        const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-        const blob = new Blob([wbout], { type: "application/octet-stream" });
-        const fileName = `plantilla_usuarios_${getFormattedDateTime()}.xlsx`;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
     };
 
     return (
@@ -1126,7 +1044,7 @@ const RolesManagementPage = () => {
                 title="Gestión de Usuarios y Roles"
                 actions={[
                     { key: 'download', label: 'Descargar todos', group: 'download', onClick: () => setDownloadAllDialogOpen(true) },
-                    puedeCargaMasiva && { key: 'bulk', label: 'Carga masiva', group: 'upload', permission: 'usuarios-carga-masiva', onClick: handleOpenBulkDialog },
+                    puedeCargaMasiva && { key: 'bulk', label: 'Carga masiva', group: 'upload', permission: 'usuarios-carga-masiva', onClick: () => setBulkOpen(true) },
                     puedeCrearAlgunRol && { key: 'add', label: 'Añadir usuario', icon: <Add />, primary: true, permission: 'usuarios-crear', onClick: handleAddUser },
                 ]}
             />
@@ -1564,74 +1482,27 @@ const RolesManagementPage = () => {
             </AppDialog>
 
             {/* Diálogo Carga Masiva */}
-            <Dialog open={openBulkDialog} onClose={handleCloseBulkDialog} maxWidth="sm" fullWidth>
-                <DialogTitle>Carga Masiva de Usuarios</DialogTitle>
-                <DialogContent>
-                    <Typography variant="body1" sx={{ mb: 1 }}>
-                            Sube un archivo Excel/CSV con las columnas necesarias. Usa la plantilla oficial.<br />
-                            <br />
-                            Las listas de Colegios y Corporaciones están en la hoja "Listas" de la plantilla.<br />
-                            <br />
-                            El límite de archivo es 5 MB.
-                    </Typography>
-                    <Box sx={{ mt: 2 }}>
-                        <Button
-                            variant="outlined"
-                            sx={{ mr: 2 }}
-                            color="success"
-                            onClick={handleDownloadUserTemplate}
-                        >
-                            Descargar Plantilla
-                        </Button>
-                        <Button variant="outlined" component="label" startIcon={<FileUpload />}>
-                            Seleccionar Archivo
-                            <input type="file" hidden onChange={handleFileChange} accept=".xlsx, .xls, .csv" />
-                        </Button>
-                        {bulkFile && (
-                            <Typography variant="body2" sx={{ mt: 1 }}>
-                                {bulkFile.name}
-                            </Typography>
-                        )}
-                    </Box>
-                    {bulkLoading && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
-                            <CircularProgress size={24} />
-                            <Typography variant="body2" sx={{ ml: 2 }}>
-                                Procesando archivo...
-                            </Typography>
-                        </Box>
-                    )}
-                    {bulkResults && (
-                        <Box sx={{ mt: 2 }}>
-                            <Alert severity="info">
-                                <Typography>
-                                    <strong>Usuarios creados/actualizados:</strong> {bulkResults.successCount}
-                                </Typography>
-                                <Typography>
-                                    <strong>Errores:</strong> {bulkResults.errorsCount}
-                                </Typography>
-                                {bulkResults.errorsList && bulkResults.errorsList.length > 0 && (
-                                    <ul>
-                                        {bulkResults.errorsList.map((err, idx) => (
-                                            <li key={idx}>
-                                                Fila {err.row}: {err.errorMessage}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </Alert>
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseBulkDialog}>Cerrar</Button>
-                    <PermissionGuard permission="usuarios-carga-masiva">
-                        <Button onClick={handleUploadBulk} variant="contained" color="primary" disabled={!bulkFile || bulkLoading}>
-                            Subir
-                        </Button>
-                    </PermissionGuard>
-                </DialogActions>
-            </Dialog>
+            <BulkUploadDialog
+                open={bulkOpen}
+                onClose={() => setBulkOpen(false)}
+                title="Carga masiva de usuarios"
+                description={[
+                    'Sube un archivo Excel o CSV con las columnas necesarias, usando la plantilla.',
+                    'Las listas de colegios y corporaciones están en la hoja "Listas" de la plantilla.',
+                ]}
+                templateObject="usuarios"
+                successLabel="Usuarios creados o actualizados"
+                buildTemplate={buildUserTemplate}
+                upload={async (file) => {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    const response = await api.post('/users/bulk-upload', formData, {
+                        headers: { 'Content-Type': 'multipart/form-data' },
+                    });
+                    return response.data;
+                }}
+                onUploaded={() => fetchUsers()}
+            />
 
             {/* Reporte de rutas eliminado */}
 

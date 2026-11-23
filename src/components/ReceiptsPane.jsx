@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import { Box, Typography, FormControl, InputLabel, Select, MenuItem, Button, IconButton, Chip, TextField } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -8,6 +8,7 @@ import moment from 'moment';
 import { formatDateTime, formatMonth } from '../utils/dateFormat';
 import { RECEIPT_STATUS } from '../constants/statuses';
 import AppDialog from './dialogs/AppDialog';
+import FileField from './form/FileField';
 
 // ReceiptsPane: reusable Boletas UI used by Registrar Pago and ManagePaymentsModal
 // Props:
@@ -52,7 +53,6 @@ const ReceiptsPane = ({
     const [uploadDisplayDate, setUploadDisplayDate] = useState(() => moment().format('YYYY-MM-DDTHH:mm'));
     const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
     const [uploadPreviewFile, setUploadPreviewFile] = useState(null);
-    const fileInputRef = useRef(null);
     const [receiptRotation, setReceiptRotation] = useState(0);
     const [rejectDialogReceipt, setRejectDialogReceipt] = useState(null);
     const [rejectReason, setRejectReason] = useState('');
@@ -102,13 +102,9 @@ const ReceiptsPane = ({
         }
         setUploadPreviewFile(null);
         setUploadDialogOpen(false);
-        if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-        }
     };
 
-    const handleDialogFileChange = (event) => {
-        const file = event.target.files?.[0];
+    const handleDialogFileChange = (file) => {
         if (!file) {
             return;
         }
@@ -117,7 +113,6 @@ const ReceiptsPane = ({
             if (onReceiptError) {
                 onReceiptError('Solo se permite subir una imagen JPG o PNG.');
             }
-            event.target.value = '';
             return;
         }
 
@@ -164,21 +159,14 @@ const ReceiptsPane = ({
                 submitDisabled={!uploadPreviewFile || uploadReceiptLoading}
             >
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <Button
-                        variant="outlined"
-                        component="label"
-                        startIcon={<UploadFileIcon />}
-                        size="small"
-                    >
-                        <span>Seleccionar imagen</span>
-                        <input
-                            hidden
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/jpeg,image/png"
-                            onChange={handleDialogFileChange}
-                        />
-                    </Button>
+                    <FileField
+                        accept="imagen"
+                        label="Elegir imagen"
+                        file={uploadPreviewFile?.file}
+                        onChange={handleDialogFileChange}
+                        maxSizeMb={5}
+                        hideSelection
+                    />
 
                     {uploadPreviewFile?.previewUrl && (
                         <Box sx={{ textAlign: 'center', border: '1px solid #e0e0e0', borderRadius: 1, p: 1 }}>

@@ -1,6 +1,6 @@
 // src/services/familiasActivasService.js
-import { saveAs } from 'file-saver';
 import api from '../utils/axiosConfig';
+import { downloadFromApi } from '../utils/download';
 
 const BASE = '/familias-activas';
 
@@ -15,7 +15,6 @@ export const getDetalleFamiliasActivas = async ({ schoolId, anio, mes }) => {
 };
 
 export const descargarExcelFamiliasActivas = async ({ schoolId, anio, mes, nombreArchivo }) => {
-    const res = await api.get(`${BASE}/excel`, { params: { schoolId, anio, mes }, responseType: 'blob' });
-    saveAs(res.data, nombreArchivo);
+    return downloadFromApi(`${BASE}/excel`, { params: { schoolId, anio, mes }, fallbackName: nombreArchivo });
 };
 

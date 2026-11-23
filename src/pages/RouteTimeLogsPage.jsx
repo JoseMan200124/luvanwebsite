@@ -17,9 +17,11 @@ import {
     Chip,
 } from '@mui/material';
 import { Delete as DeleteIcon } from '@mui/icons-material';
-import moment from 'moment-timezone';
 import { getRouteTimeLogs, getAllRouteTimeLogs, deleteRouteTimeLog } from '../services/routeTimeLogService';
 import ExcelJS from 'exceljs';
+import { downloadWorkbook } from '../utils/excel';
+import { buildFileName } from '../utils/fileName';
+import { todayForFileName } from '../utils/download';
 import api from '../utils/axiosConfig';
 import { getScheduleLabel, getScheduleColor, DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool } from '../utils/scheduleConfig';
 import { getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
@@ -451,16 +453,7 @@ const RouteTimeLogsPage = () => {
             const lastCol = String.fromCharCode(64 + headers.length);
             sheet.autoFilter = { from: 'A1', to: `${lastCol}1` };
 
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `horarios_rutas_${moment().format('YYYYMMDD_HHmmss')}.xlsx`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            window.URL.revokeObjectURL(url);
+            await downloadWorkbook(workbook, buildFileName({ object: 'horarios rutas', date: todayForFileName(), extension: 'xlsx' }));
 
         } catch (err) {
             console.error('Error generando Excel:', err);

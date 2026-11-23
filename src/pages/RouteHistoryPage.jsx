@@ -47,6 +47,8 @@ import {
 // RouteIcon removed; using a simple numeral adornment for route number filter
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import api from '../utils/axiosConfig';
+import { downloadBlob, readBlobError } from '../utils/download';
+import { buildFileName } from '../utils/fileName';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
@@ -643,24 +645,15 @@ const RouteHistoryPage = () => {
                 return;
             }
 
-            const url = window.URL.createObjectURL(blob);
-
             const start = statsLastLoadedParams.startDate || '';
             const end = statsLastLoadedParams.endDate || '';
             const safeStart = start ? String(start).replace(/[^0-9-]/g, '_') : 'sin-inicio';
             const safeEnd = end ? String(end).replace(/[^0-9-]/g, '_') : 'sin-fin';
-            const filename = `reporte_kilometros_${groupByToUse}_${safeStart}_${safeEnd}.pdf`;
-
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            window.URL.revokeObjectURL(url);
+            downloadBlob(blob, buildFileName({ object: `reporte kilometros ${groupByToUse}`, date: `${safeStart}_${safeEnd}`, extension: 'pdf' }));
         } catch (err) {
             console.error('Error generando PDF:', err);
-            setStatsError(err.response?.data?.message || err.message || 'No se pudo generar el PDF');
+            const error = await readBlobError(err);
+            setStatsError(error.response?.data?.message || error.message || 'No se pudo generar el PDF');
         } finally {
             setStatsReportLoading(false);
         }

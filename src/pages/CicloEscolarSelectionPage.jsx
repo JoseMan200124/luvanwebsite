@@ -16,10 +16,6 @@ import {
     Grid,
     IconButton,
     Tooltip,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     DialogContentText,
     Table,
     TableHead,
@@ -63,7 +59,7 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import SubmissionPreview from './SubmissionPreview';
 import EnrollmentFeeTiersEditor from '../components/EnrollmentFeeTiersEditor';
 import ExcelJS from 'exceljs';
-import moment from 'moment';
+import BulkUploadDialog, { DefaultResult } from '../components/dialogs/BulkUploadDialog';
 import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
 import { DEFAULT_SCHEDULE_CODES, ensureSchedules } from '../utils/scheduleConfig';
@@ -233,11 +229,8 @@ const CicloEscolarSelectionPage = () => {
     const [openSubmissionDialog, setOpenSubmissionDialog] = useState(false);
     const [submissions, setSubmissions] = useState([]);
     const [submissionDetail, setSubmissionDetail] = useState(null);
-    // Bulk upload states
-    const [openBulkDialog, setOpenBulkDialog] = useState(false);
-    const [bulkFile, setBulkFile] = useState(null);
-    const [bulkResults, setBulkResults] = useState(null);
-    const [bulkLoading, setBulkLoading] = useState(false);
+    // Carga masiva
+    const [bulkOpen, setBulkOpen] = useState(false);
     
     // Estados para edición de colegio
     const [schoolSchedules, setSchoolSchedules] = useState([]);
@@ -834,50 +827,63 @@ const CicloEscolarSelectionPage = () => {
             setLoading(false);
         }
     };
-    // Bulk upload handlers
-    const handleOpenBulkUpload = () => {
-        setBulkFile(null);
-        setBulkResults(null);
-        setOpenBulkDialog(true);
+    // Plantilla de la carga masiva de colegios (exceljs: conserva los formatos de número y texto de cada columna).
+    const buildSchoolsTemplate = () => {
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Plantilla Colegios');
+        worksheet.columns = [
+            { header: 'Nombre', key: 'name', width: 30 },
+            { header: 'Dirección', key: 'address', width: 40 },
+            { header: 'Ciudad', key: 'city', width: 20 },
+            { header: 'Persona de Contacto', key: 'contactPerson', width: 25 },
+            { header: 'Correo de Contacto', key: 'contactEmail', width: 30 },
+            { header: 'Teléfono de Contacto', key: 'contactPhone', width: 20 },
+            { header: 'Enlace Whatsapp', key: 'whatsapp', width: 20 },
+            // Dynamic schedule columns
+            ...DEFAULT_SCHEDULE_CODES.map(code => ({
+                header: `Horario ${code}`, key: `schedule${code}`, width: 14, style: { numFmt: '@' }
+            })),
+            { header: 'Grados', key: 'grades', width: 30 },
+            { header: 'Tarifa Completa', key: 'transportFeeComplete', width: 18, style: { numFmt: '0.00' } },
+            { header: 'Tarifa Media', key: 'transportFeeHalf', width: 18, style: { numFmt: '0.00' } },
+            { header: 'Dia de Pago', key: 'duePaymentDay', width: 12, style: { numFmt: '0' } },
+            { header: 'Banco', key: 'bankName', width: 20 },
+            { header: 'Cuenta Bancaria', key: 'bankAccount', width: 25 },
+            { header: 'Numeros Ruta', key: 'routeNumbers', width: 25, style: { numFmt: '@' } },
+            { header: 'Penalidad Diaria', key: 'dailyPenalty', width: 16, style: { numFmt: '0.00' } },
+            { header: 'Inicio Ciclo', key: 'schoolYearStart', width: 14, style: { numFmt: '@' } },
+            { header: 'Fin Ciclo', key: 'schoolYearEnd', width: 14, style: { numFmt: '@' } }
+        ];
+
+        const templateYear = Number.parseInt(selectedCycleYear, 10) || new Date().getFullYear();
+
+        // Example row to guide users
+        worksheet.addRow({
+            name: 'Colegio Ejemplo',
+            address: 'Calle 123',
+            city: 'Ciudad',
+            contactPerson: 'Nombre',
+            contactEmail: 'contacto@colegio.com',
+            contactPhone: '12345678',
+            whatsapp: '',
+            ...Object.fromEntries(DEFAULT_SCHEDULE_CODES.map((code, i) => [
+                `schedule${code}`, ['07:00', '12:00', '13:00', '15:00'][i] || 'N/A'
+            ])),
+            grades: 'Kinder,1ero,2do',
+            transportFeeComplete: 0.00,
+            transportFeeHalf: 0.00,
+            duePaymentDay: 1,
+            bankName: '',
+            bankAccount: '',
+            routeNumbers: '12,15',
+            dailyPenalty: 10.00,
+            schoolYearStart: `01-03-${templateYear}`,
+            schoolYearEnd: `28-02-${templateYear + 1}`
+        });
+
+        worksheet.getRow(1).font = { bold: true };
+        return workbook;
     };
-    const handleCloseBulkDialog = () => {
-        setOpenBulkDialog(false);
-    };
-    const handleFileChange = (e) => {
-        const file = e.target.files?.[0];
-        setBulkFile(file || null);
-        setBulkResults(null);
-    };
-    const submitBulkUpload = async () => {
-        if (!bulkFile) {
-            return;
-        }
-        setBulkLoading(true);
-        setBulkResults(null);
-        try {
-            const formData = new FormData();
-            formData.append('file', bulkFile);
-            if (selectedCicloEscolarId) {
-                formData.append('cicloEscolarId', selectedCicloEscolarId);
-            }
-            const resp = await api.post('/schools/bulk-upload', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                    Authorization: `Bearer ${auth.token}`
-                }
-            });
-            setBulkResults(resp.data || null);
-            // Refresh list after upload
-            fetchSchoolsByYear();
-            notify.success('Carga masiva procesada');
-        } catch (err) {
-            console.error('Error al subir colegios masivamente:', err);
-            notify.error('Error al procesar la carga masiva');
-        } finally {
-            setBulkLoading(false);
-        }
-    };
-    const handleUploadBulk = () => submitBulkUpload();
 
     // Limpieza de mora del período actual del colegio que se está editando.
     const handleQuickClear = async () => {
@@ -1497,7 +1503,7 @@ const CicloEscolarSelectionPage = () => {
     };
 
     const headerActions = [
-        { key: 'bulk', label: 'Carga masiva', group: 'upload', permission: 'colegios-crear', onClick: handleOpenBulkUpload },
+        { key: 'bulk', label: 'Carga masiva', group: 'upload', permission: 'colegios-crear', onClick: () => setBulkOpen(true) },
         { key: 'circular', label: 'Enviar circular', group: 'send', permission: 'mail-enviar-circular', onClick: () => setOpenCircularModal(true) },
         { key: 'notification', label: 'Enviar notificación', group: 'send', permission: 'notificaciones-crear', onClick: () => setOpenSendNotifModal(true) },
         { key: 'levels', label: 'Niveles educativos', group: 'other', permission: 'niveles-listar', onClick: () => setOpenNivelesModal(true) },
@@ -1548,166 +1554,49 @@ const CicloEscolarSelectionPage = () => {
                 </CardContent>
             </Card>
 
-            {/* Bulk upload dialog copied/adapted from SchoolsManagementPage */}
-            <Dialog open={openBulkDialog} onClose={handleCloseBulkDialog} maxWidth="sm" fullWidth>
-                <DialogTitle>Carga Masiva de Colegios</DialogTitle>
-                <DialogContent>
-                    <Typography variant="body1" sx={{ mb: 1 }}>
-                        Subir un archivo Excel utilizando la plantilla.
-                        <br />
-                        <br />
-                        Para los horarios, escribir tiempos en formato <code>HH:MM</code> (ej. <code>13:00</code>). <br /> <br />
-                        Las fechas de Inicio Ciclo / Fin Ciclo deben ir en formato <code>dd-mm-aaaa</code>.
-                    </Typography>
-                    <Button
-                        variant="outlined"
-                        color="success"
-                        onClick={async () => {
-                            try {
-                                const workbook = new ExcelJS.Workbook();
-                                const worksheet = workbook.addWorksheet('Plantilla Colegios');
-                                worksheet.columns = [
-                                    { header: 'Nombre', key: 'name', width: 30 },
-                                    { header: 'Dirección', key: 'address', width: 40 },
-                                    { header: 'Ciudad', key: 'city', width: 20 },
-                                    { header: 'Persona de Contacto', key: 'contactPerson', width: 25 },
-                                    { header: 'Correo de Contacto', key: 'contactEmail', width: 30 },
-                                    { header: 'Teléfono de Contacto', key: 'contactPhone', width: 20 },
-                                    { header: 'Enlace Whatsapp', key: 'whatsapp', width: 20 },
-                                    // Dynamic schedule columns
-                                    ...DEFAULT_SCHEDULE_CODES.map(code => ({
-                                        header: `Horario ${code}`, key: `schedule${code}`, width: 14, style: { numFmt: '@' }
-                                    })),
-                                    { header: 'Grados', key: 'grades', width: 30 },
-                                    { header: 'Tarifa Completa', key: 'transportFeeComplete', width: 18, style: { numFmt: '0.00' } },
-                                    { header: 'Tarifa Media', key: 'transportFeeHalf', width: 18, style: { numFmt: '0.00' } },
-                                    { header: 'Dia de Pago', key: 'duePaymentDay', width: 12, style: { numFmt: '0' } },
-                                    { header: 'Banco', key: 'bankName', width: 20 },
-                                    { header: 'Cuenta Bancaria', key: 'bankAccount', width: 25 },
-                                    { header: 'Numeros Ruta', key: 'routeNumbers', width: 25, style: { numFmt: '@' } },
-                                    { header: 'Penalidad Diaria', key: 'dailyPenalty', width: 16, style: { numFmt: '0.00' } },
-                                    { header: 'Inicio Ciclo', key: 'schoolYearStart', width: 14, style: { numFmt: '@' } },
-                                    { header: 'Fin Ciclo', key: 'schoolYearEnd', width: 14, style: { numFmt: '@' } }
-                                ];
-
-                                const templateYear = Number.parseInt(selectedCycleYear, 10) || new Date().getFullYear();
-
-                                // Example row to guide users
-                                worksheet.addRow({
-                                    name: 'Colegio Ejemplo',
-                                    address: 'Calle 123',
-                                    city: 'Ciudad',
-                                    contactPerson: 'Nombre',
-                                    contactEmail: 'contacto@colegio.com',
-                                    contactPhone: '12345678',
-                                    whatsapp: '',
-                                    // Dynamic schedule example values
-                                    ...Object.fromEntries(DEFAULT_SCHEDULE_CODES.map((code, i) => [
-                                        `schedule${code}`, ['07:00', '12:00', '13:00', '15:00'][i] || 'N/A'
-                                    ])),
-                                    grades: 'Kinder,1ero,2do',
-                                    transportFeeComplete: 0.00,
-                                    transportFeeHalf: 0.00,
-                                    duePaymentDay: 1,
-                                    bankName: '',
-                                    bankAccount: '',
-                                    routeNumbers: '12,15',
-                                    dailyPenalty: 10.00,
-                                    schoolYearStart: `01-03-${templateYear}`,
-                                    schoolYearEnd: `28-02-${templateYear + 1}`
-                                });
-
-                                worksheet.getRow(1).font = { bold: true };
-
-                                const buffer = await workbook.xlsx.writeBuffer();
-                                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                                const url = window.URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = `Plantilla_Colegios_${moment().format('YYYYMMDD')}.xlsx`;
-                                a.click();
-                                window.URL.revokeObjectURL(url);
-                            } catch (err) {
-                                console.error('Error generando plantilla:', err);
-                            }
-                        }}
-                        sx={{ mr: 2 }}
-                    >
-                        Descargar Plantilla
-                    </Button>
-                    <Button variant="outlined" component="label" startIcon={<Add />}>
-                        Seleccionar Archivo
-                        <input
-                            type="file"
-                            hidden
-                            onChange={handleFileChange}
-                            accept=".xlsx, .xls, .csv"
-                        />
-                    </Button>
-                    {bulkFile && (
-                        <Typography variant="body2" sx={{ mt: 1 }}>
-                            {bulkFile.name}
-                        </Typography>
-                    )}
-                    {bulkLoading && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
-                            <CircularProgress size={24} />
-                            <Typography variant="body2" sx={{ ml: 2 }}>
-                                Procesando archivo...
-                            </Typography>
-                        </Box>
-                    )}
-                    {bulkResults && (
-                        <Box sx={{ mt: 2 }}>
-                            <Alert severity="info">
-                                <Typography>
-                                    <strong>Colegios creados:</strong> {bulkResults.successCount || 0}
-                                </Typography>
-                                <Typography>
-                                    <strong>Duplicados ignorados:</strong> {bulkResults.duplicateCount || 0}
-                                </Typography>
-                                <Typography>
-                                    <strong>Errores:</strong> {bulkResults.errorsCount || 0}
-                                </Typography>
-                                {bulkResults.duplicateRows && bulkResults.duplicateRows.length > 0 && (
-                                    <>
-                                        <Typography sx={{ mt: 1 }}>
-                                            <strong>Duplicados:</strong>
-                                        </Typography>
-                                        <ul>
-                                            {bulkResults.duplicateRows.map((duplicate) => (
-                                                <li key={`duplicate-${duplicate.row}`}>
-                                                    Fila {duplicate.row}: {duplicate.name || 'Sin nombre'} - {duplicate.reason}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </>
-                                )}
-                                {bulkResults.errorsList && bulkResults.errorsList.length > 0 && (
-                                    <ul>
-                                        {bulkResults.errorsList.map((err) => (
-                                            <li key={`error-${err.row}`}>
-                                                Fila {err.row}: {err.errorMessage}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </Alert>
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseBulkDialog}>Cerrar</Button>
-                    <Button
-                        onClick={handleUploadBulk}
-                        variant="contained"
-                        color="primary"
-                        disabled={!bulkFile || bulkLoading}
-                    >
-                        Subir
-                    </Button>
-                </DialogActions>
-            </Dialog>
+            <BulkUploadDialog
+                open={bulkOpen}
+                onClose={() => setBulkOpen(false)}
+                title="Carga masiva de colegios"
+                description={[
+                    'Sube un archivo Excel usando la plantilla.',
+                    <>Los horarios van en formato <code>HH:MM</code> (ej. <code>13:00</code>).</>,
+                    <>Las fechas de Inicio Ciclo / Fin Ciclo van en formato <code>dd-mm-aaaa</code>.</>,
+                ]}
+                templateObject="colegios"
+                buildTemplate={buildSchoolsTemplate}
+                upload={async (file) => {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    if (selectedCicloEscolarId) {
+                        formData.append('cicloEscolarId', selectedCicloEscolarId);
+                    }
+                    const response = await api.post('/schools/bulk-upload', formData, {
+                        headers: { 'Content-Type': 'multipart/form-data' },
+                    });
+                    return response.data || {};
+                }}
+                onUploaded={() => fetchSchoolsByYear()}
+                renderResult={(result) => (
+                    <>
+                        <DefaultResult result={result} successLabel="Colegios creados" />
+                        {result.duplicateRows?.length > 0 ? (
+                            <Box sx={{ mt: 1.5 }}>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Duplicados ignorados</Typography>
+                                <Box component="ul" sx={{ pl: 3, my: 0.5 }}>
+                                    {result.duplicateRows.map((duplicate) => (
+                                        <li key={`duplicate-${duplicate.row}`}>
+                                            <Typography variant="body2">
+                                                Fila {duplicate.row}: {duplicate.name || 'Sin nombre'} - {duplicate.reason}
+                                            </Typography>
+                                        </li>
+                                    ))}
+                                </Box>
+                            </Box>
+                        ) : null}
+                    </>
+                )}
+            />
 
             {/* Lista de Colegios */}
             <Card>

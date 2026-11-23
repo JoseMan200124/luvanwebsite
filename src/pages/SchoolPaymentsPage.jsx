@@ -29,6 +29,9 @@ import {
     FormControlLabel
 } from '@mui/material';
 import ExcelJS from 'exceljs';
+import { downloadWorkbook } from '../utils/excel';
+import { buildFileName } from '../utils/fileName';
+import { todayForFileName } from '../utils/download';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { IconButton, Collapse } from '@mui/material';
@@ -2965,36 +2968,20 @@ const SchoolPaymentsPage = () => {
                 column.width = Math.min(Math.max(maxLength + 2, 10), 60);
             });
 
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            // Build filename with school and period (year or year-month)
             const monthNames = {
                 '01': 'Enero','02': 'Febrero','03': 'Marzo','04': 'Abril','05': 'Mayo','06': 'Junio',
                 '07': 'Julio','08': 'Agosto','09': 'Septiembre','10': 'Octubre','11': 'Noviembre','12': 'Diciembre'
             };
-            // Build filename in requested format:
-            // "Historial Pagos estadoFinal nombreColegio Mes Año"
             const periodYear = year || exportYear || moment(currentDate).year();
             const monthPadded = (month && String(month).toUpperCase() !== 'TODOS') ? String(month).padStart(2, '0') : '';
             const monthName = monthPadded ? (monthNames[monthPadded] || monthPadded) : '';
-            // sanitize school name for filenames (remove newlines/slashes, collapse spaces)
-            const rawSchoolName = school?.name ? String(school.name) : String(schoolId || '');
-            const schoolClean = rawSchoolName.replace(/[\n\r/\\]+/g, ' ').replace(/\s+/g, ' ').trim();
             const statusPart = exportFinalStatus ? String(exportFinalStatus).toUpperCase() : '';
-            let fileName;
-            if (monthName) {
-                fileName = `Historial Pagos ${statusPart} ${schoolClean} ${monthName} ${periodYear}.xlsx`;
-            } else {
-                fileName = `Historial Pagos ${statusPart} ${schoolClean} ${periodYear}.xlsx`;
-            }
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            await downloadWorkbook(workbook, buildFileName({
+                object: `historial pagos ${statusPart} ${monthName} ${periodYear}`,
+                client: school?.name || String(schoolId || ''),
+                date: todayForFileName(),
+                extension: 'xlsx',
+            }));
             notify.success('Descarga iniciada');
         } catch (err) {
             console.error('handleDownloadPaymentsByStatus', err);
@@ -3153,17 +3140,12 @@ const SchoolPaymentsPage = () => {
                 column.width = Math.min(Math.max(maxLength + 2, 10), 60);
             });
 
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const fileName = `Pagos_por_estado_${(estadoNorm || 'TODOS')}_servicio_${(serviceFilter || 'TODOS')}_${school?.name ? school.name.replace(/[^a-z0-9]/gi,'_') : schoolId}.xlsx`;
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            await downloadWorkbook(workbook, buildFileName({
+                object: `pagos por estado ${estadoNorm || 'TODOS'} servicio ${serviceFilter || 'TODOS'}`,
+                client: school?.name || String(schoolId || ''),
+                date: todayForFileName(),
+                extension: 'xlsx',
+            }));
 
             notify.success('Descarga iniciada');
         } catch (err) {
@@ -3257,17 +3239,12 @@ const SchoolPaymentsPage = () => {
                 column.width = Math.min(Math.max(maxLength + 2, 10), 60);
             });
 
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const fileName = `Inscripcion_${estadoNorm}_servicio_${serviceFilter}_${school?.name ? school.name.replace(/[^a-z0-9]/gi, '_') : schoolId}.xlsx`;
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            await downloadWorkbook(workbook, buildFileName({
+                object: `inscripcion ${estadoNorm} servicio ${serviceFilter}`,
+                client: school?.name || String(schoolId || ''),
+                date: todayForFileName(),
+                extension: 'xlsx',
+            }));
 
             notify.success('Descarga iniciada');
         } catch (err) {

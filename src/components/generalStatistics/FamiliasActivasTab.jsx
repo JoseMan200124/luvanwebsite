@@ -9,6 +9,9 @@ import {
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import useRegisterPageRefresh from '../../hooks/useRegisterPageRefresh';
+import useNotify from '../../hooks/useNotify';
+import { buildFileName } from '../../utils/fileName';
+import { todayForFileName } from '../../utils/download';
 import CicloEscolarFilter, { getInitialCicloEscolarFilter, ALL_CYCLES_VALUE } from '../CicloEscolarFilter';
 import {
     getFamiliasActivas, getDetalleFamiliasActivas, descargarExcelFamiliasActivas
@@ -37,6 +40,7 @@ const abreviar = (nombreMes) => `${nombreMes.slice(0, 3)} ${nombreMes.slice(-2)}
 
 const FamiliasActivasTab = () => {
     const inicial = getInitialCicloEscolarFilter();
+    const notify = useNotify();
     const [cicloEscolar, setCicloEscolar] = useState(inicial === ALL_CYCLES_VALUE ? '' : inicial);
     const [datos, setDatos] = useState(null);
     const [cargando, setCargando] = useState(false);
@@ -112,12 +116,18 @@ const FamiliasActivasTab = () => {
         }
     };
 
-    const descargar = () => descargarExcelFamiliasActivas({
-        schoolId: detalle.schoolId,
-        anio: detalle.anio,
-        mes: detalle.mes,
-        nombreArchivo: `Familias activas - ${detalle.nombre} - ${detalle.nombreMes}.xlsx`
-    });
+    const descargar = async () => {
+        try {
+            await descargarExcelFamiliasActivas({
+                schoolId: detalle.schoolId,
+                anio: detalle.anio,
+                mes: detalle.mes,
+                nombreArchivo: buildFileName({ object: `familias activas ${detalle.nombreMes}`, client: detalle.nombre, date: todayForFileName(), extension: 'xlsx' })
+            });
+        } catch (err) {
+            notify.fromError(err, 'Error al descargar el Excel de familias activas');
+        }
+    };
 
     const tinteCalculado = (tema) => alpha(tema.palette.warning.main, 0.07);
 

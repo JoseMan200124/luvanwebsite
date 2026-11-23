@@ -63,6 +63,8 @@ import AppDialog from '../components/dialogs/AppDialog';
 import { AuthContext } from '../context/AuthProvider';
 import { formatDate, formatDateTime } from '../utils/dateFormat';
 import { useCurrentDate } from '../hooks/useCurrentDate';
+import { downloadBlob, readBlobError } from '../utils/download';
+import { buildFileName } from '../utils/fileName';
 
 const NO_FAILURES_FILTER_VALUE = 'sin_fallas';
 
@@ -471,22 +473,14 @@ const FailureMappingPage = () => {
                 return;
             }
 
-            const url = window.URL.createObjectURL(blob);
             const clientName = pdfModalSchoolId
                 ? (pdfModalSchools.find(s => String(s.id) === pdfModalSchoolId)?.name || 'cliente')
                 : (corporations.find(c => String(c.id) === pdfModalCorporationId)?.name || 'cliente');
-            const filename = `mapeo_fallas_${clientName.replace(/\s+/g, '_')}_${pdfModalMonth.format('YYYY-MM')}.pdf`;
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            window.URL.revokeObjectURL(url);
+            downloadBlob(blob, buildFileName({ object: 'mapeo fallas', client: clientName, date: pdfModalMonth.format('YYYY-MM'), extension: 'pdf' }));
             setPdfModalOpen(false);
         } catch (error) {
             console.error('Error descargando PDF:', error);
-            notify.fromError(error, 'Error al descargar el PDF');
+            notify.fromError(await readBlobError(error), 'Error al descargar el PDF');
         } finally {
             setExportingPdf(false);
         }

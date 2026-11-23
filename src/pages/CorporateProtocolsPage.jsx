@@ -23,7 +23,6 @@ import {
 import {
     Delete as DeleteIcon,
     Edit as EditIcon,
-    CloudUpload as CloudUploadIcon,
     Visibility as VisibilityIcon,
     Add as AddIcon,
     GetApp as DownloadIcon,
@@ -48,6 +47,7 @@ import PageHeader from '../components/layout/PageHeader';
 import useClientScope from '../hooks/useClientScope';
 import { formatDate } from '../utils/dateFormat';
 import AppDialog from '../components/dialogs/AppDialog';
+import FileField from '../components/form/FileField';
 import { MESSAGES, focusFirstError } from '../utils/validators';
 
 const PROTOCOL_TYPE_OPTIONS = [
@@ -189,25 +189,17 @@ const CorporateProtocolsPage = () => {
     // ---------------------------
     // Funciones para manejo de archivos
     // ---------------------------
-    const handleFileChange = (event) => {
-        const file = event.target.files[0];
+    const handleFileChange = (file) => {
         setFileError('');
-
-        if (file) {
-            if (file.type !== 'application/pdf') {
-                setFileError('Solo se permiten archivos PDF.');
-                setSelectedFile(null);
-                return;
-            }
-
-            if (file.size > 50 * 1024 * 1024) { // 50MB
-                setFileError('El archivo no puede superar los 50MB.');
-                setSelectedFile(null);
-                return;
-            }
-
-            setSelectedFile(file);
+        if (!file) {
+            return;
         }
+        if (file.type !== 'application/pdf') {
+            setFileError('Solo se permiten archivos PDF.');
+            setSelectedFile(null);
+            return;
+        }
+        setSelectedFile(file);
     };
 
     // ---------------------------
@@ -559,28 +551,13 @@ const CorporateProtocolsPage = () => {
                         </Grid>
                         <Grid item xs={12}>
                             <Box>
-                                <input
-                                    accept="application/pdf"
-                                    style={{ display: 'none' }}
-                                    id="pdf-upload"
-                                    type="file"
+                                <FileField
+                                    accept="pdf"
+                                    label={currentProtocol ? 'Cambiar archivo PDF' : 'Elegir archivo PDF *'}
+                                    file={selectedFile}
                                     onChange={handleFileChange}
+                                    maxSizeMb={50}
                                 />
-                                <label htmlFor="pdf-upload">
-                                    <Button
-                                        variant="outlined"
-                                        component="span"
-                                        startIcon={<CloudUploadIcon />}
-                                        fullWidth
-                                    >
-                                        {currentProtocol ? 'Cambiar archivo PDF' : 'Seleccionar archivo PDF *'}
-                                    </Button>
-                                </label>
-                                {selectedFile && (
-                                    <Typography variant="body2" color="primary" mt={1}>
-                                        Archivo seleccionado: {selectedFile.name}
-                                    </Typography>
-                                )}
                                 {fileError && (
                                     <Typography variant="body2" color="error" mt={1}>
                                         {fileError}

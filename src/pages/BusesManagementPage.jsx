@@ -8,15 +8,9 @@ import {
     TableBody,
     TableCell,
     TableRow,
-    Button,
     TextField,
     IconButton,
     Tooltip,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
-    Alert,
     CircularProgress,
     List,
     ListItem,
@@ -33,14 +27,11 @@ import {
     Add,
     InsertDriveFile,
     Image as ImageIcon,
-    FileUpload,
     DirectionsBus as DirectionsBusIcon
 } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import { getCiclosEscolares } from '../services/cicloEscolarService';
-import * as XLSX from 'xlsx';
-import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
@@ -61,6 +52,9 @@ import { MobileCard, MobileField } from '../components/table/MobileCard';
 import RowActions from '../components/table/RowActions';
 import { sortRows } from '../utils/tableSort';
 import AppDialog from '../components/dialogs/AppDialog';
+import BulkUploadDialog from '../components/dialogs/BulkUploadDialog';
+import FileField from '../components/form/FileField';
+import { buildWorkbook } from '../utils/excel';
 
 // Campos obligatorios del formulario de bus.
 const BUS_RULES = { plate: ['required'] };
@@ -75,19 +69,18 @@ const WORKSHOP_OPTIONS = [
     { value: 'decommissioned', label: 'Dado de baja' },
 ];
 
-/**
- * Función para formatear fecha/hora (para el nombre del archivo de plantilla, etc.)
- */
-const getFormattedDateTime = () => {
-    const currentDate = new Date();
-    const year = currentDate.getFullYear();
-    const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-    const day = String(currentDate.getDate()).padStart(2, '0');
-    const hours = String(currentDate.getHours()).padStart(2, '0');
-    const minutes = String(currentDate.getMinutes()).padStart(2, '0');
-    const seconds = String(currentDate.getSeconds()).padStart(2, '0');
-    return `${year}${month}${day}_${hours}${minutes}${seconds}`;
-};
+// Plantilla de la carga masiva de buses.
+const buildBusesTemplate = () => buildWorkbook({
+    sheets: [{
+        name: 'Buses',
+        columns: [
+            { header: 'Placa', key: 'placa' },
+            { header: 'Capacidad', key: 'capacidad' },
+            { header: 'Descripción', key: 'descripcion' },
+        ],
+        rows: [{ placa: 'PlacaEjemplo', capacidad: 40, descripcion: 'Descripción de ejemplo. Esta fila es solo un ejemplo.' }],
+    }],
+});
 
 // Columnas de la tabla de buses
 const COLUMNS = [
@@ -158,10 +151,7 @@ const BusesManagementPage = () => {
     // BusesManagementPage now only handles basic bus fleet management
 
     // Carga masiva
-    const [openBulkDialog, setOpenBulkDialog] = useState(false);
-    const [bulkFile, setBulkFile] = useState(null);
-    const [bulkResults, setBulkResults] = useState(null);
-    const [bulkLoading, setBulkLoading] = useState(false);
+    const [bulkOpen, setBulkOpen] = useState(false);
 
     // =================== Efectos y funciones ===================
 
@@ -259,22 +249,8 @@ const BusesManagementPage = () => {
         }));
     };
 
-    const handleFileChange = (e) => {
-        const files = e.target.files;
-        const maxSize = 5 * 1024 * 1024; // 5MB
-
-        if (files.length > 0) {
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                if (file.size > maxSize) {
-                    notify.error(`El archivo ${file.name} supera los 5 MB, por favor selecciona uno más pequeño.`);
-                    // reset input and stop
-                    e.target.value = null;
-                    return;
-                }
-            }
-        }
-
+    // FileField ya valida el límite de 5 MB por archivo.
+    const handleFileChange = (files) => {
         // Append newly selected files to existing ones so they don't disappear from the list
         setSelectedBus((prev) => {
             const existing = prev?.files ? Array.from(prev.files) : [];
@@ -287,9 +263,6 @@ const BusesManagementPage = () => {
                 files: [...existing, ...newFiles]
             };
         });
-
-        // reset the input so the same file can be selected again if needed
-        e.target.value = null;
     };
 
     // Pide confirmación y quita un archivo del bus. Si ya está en el servidor, lo elimina primero de ahí.
@@ -506,90 +479,6 @@ const BusesManagementPage = () => {
         return true;
     });
 
-    // ============== CARGA MASIVA ==============
-    const handleOpenBulkDialog = () => {
-        setBulkFile(null);
-        setBulkResults(null);
-        setOpenBulkDialog(true);
-    };
-    const handleCloseBulkDialog = () => {
-        setOpenBulkDialog(false);
-    };
-
-    const handleBulkFileChange = (e) => {
-        const file = e.target.files[0];
-        const maxSize = 5 * 1024 * 1024; // 5 MB
-
-        if (file && file.size > maxSize) {
-            notify.error(`El archivo ${file.name} supera los 5 MB, por favor selecciona uno más pequeño.`);
-            e.target.value = null;
-            return;
-        }
-
-        setBulkFile(file);
-    };
-
-    const handleUploadBulk = async () => {
-        if (!bulkFile) {
-            return;
-        }
-        setBulkLoading(true);
-        setBulkResults(null);
-
-        const formData = new FormData();
-        formData.append('file', bulkFile);
-
-        try {
-            const resp = await api.post('/buses/bulk-upload', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                    Authorization: `Bearer ${auth.token}`
-                }
-            });
-            setBulkResults(resp.data);
-            fetchBuses();
-        } catch (error) {
-            console.error('Error al subir buses masivamente:', error);
-            notify.fromError(error, 'Error al procesar la carga masiva');
-        }
-        setBulkLoading(false);
-    };
-
-    // Función para descargar la plantilla personalizada de buses
-    const handleDownloadTemplate = () => {
-        // Simple template for basic bus information only
-        const headers = [
-            "Placa",
-            "Capacidad", 
-            "Descripción"
-        ];
-        const exampleRow = [
-            "PlacaEjemplo",
-            40,
-            "Descripción de Ejemplo. Esta fila es solo un ejemplo."
-        ];
-
-        const data = [headers, exampleRow];
-
-        // Create the spreadsheet
-        const ws = XLSX.utils.aoa_to_sheet(data);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Buses");
-
-        // Download the file
-        const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-        const blob = new Blob([wbout], { type: "application/octet-stream" });
-        const fileName = `buses_template_${getFormattedDateTime()}.xlsx`;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    };
-
     // Aplicar ordenamiento y paginación
     const sortedBuses = sortRows(filteredBuses, { orderBy: table.orderBy, order: table.order, getValue: getFieldValue });
     const pageBuses = table.paginate(sortedBuses);
@@ -615,7 +504,7 @@ const BusesManagementPage = () => {
                 eyebrow={MODULE_GROUPS.buses}
                 title="Gestión de Buses"
                 actions={[
-                    { key: 'bulk', label: 'Carga masiva', group: 'upload', permission: 'buses-carga-masiva', onClick: handleOpenBulkDialog },
+                    { key: 'bulk', label: 'Carga masiva', group: 'upload', permission: 'buses-carga-masiva', onClick: () => setBulkOpen(true) },
                     { key: 'add', label: 'Añadir bus', icon: <Add />, primary: true, permission: 'buses-crear', onClick: handleAddBus },
                 ]}
             />
@@ -871,19 +760,15 @@ const BusesManagementPage = () => {
                     </Typography>
                 )}
 
-                <input
-                    accept="application/pdf,image/jpeg,image/png"
-                    style={{ display: 'none' }}
-                    id="file-input"
-                    multiple
-                    type="file"
-                    onChange={handleFileChange}
-                />
-                <label htmlFor="file-input">
-                    <Button variant="outlined" color="primary" component="span" sx={{ mt: 2 }}>
-                        Subir archivos
-                    </Button>
-                </label>
+                <Box sx={{ mt: 2 }}>
+                    <FileField
+                        accept="pdfOImagen"
+                        multiple
+                        hideSelection
+                        label="Subir archivos"
+                        onChange={handleFileChange}
+                    />
+                </Box>
 
                 {selectedBus?.files && selectedBus.files.length > 0 && (
                     <List sx={{ mt: 2 }}>
@@ -927,86 +812,24 @@ const BusesManagementPage = () => {
                 )}
             </AppDialog>
 
-            {/* Diálogo para carga masiva */}
-            <Dialog open={openBulkDialog} onClose={handleCloseBulkDialog} maxWidth="sm" fullWidth>
-                <DialogTitle>Carga Masiva de Buses</DialogTitle>
-                <DialogContent>
-                    <Typography variant="body1" sx={{ mb: 1 }}>
-                        Sube un archivo Excel/CSV con las columnas necesarias (Placa, Capacidad, Descripción). 
-                        Usa la plantilla oficial.<br />
-                        <br />
-                        El límite de archivo es 5 MB.
-                    </Typography>
-
-                    <Button
-                        variant="outlined"
-                        color="success"
-                        onClick={handleDownloadTemplate}
-                        sx={{ mr: 2 }}
-                    >
-                        Descargar Plantilla
-                    </Button>
-
-                    <Button variant="outlined" component="label" startIcon={<FileUpload />}>
-                        Seleccionar Archivo
-                        <input
-                            type="file"
-                            hidden
-                            onChange={handleBulkFileChange}
-                            accept=".xlsx, .xls, .csv"
-                        />
-                    </Button>
-                    {bulkFile && (
-                        <Typography variant="body2" sx={{ mt: 1 }}>
-                            {bulkFile.name}
-                        </Typography>
-                    )}
-
-                    {bulkLoading && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
-                            <CircularProgress size={24} />
-                            <Typography variant="body2" sx={{ ml: 2 }}>
-                                Procesando archivo...
-                            </Typography>
-                        </Box>
-                    )}
-
-                    {bulkResults && (
-                        <Box sx={{ mt: 2 }}>
-                            <Alert severity="info">
-                                <Typography>
-                                    <strong>Buses creados/actualizados:</strong> {bulkResults.successCount}
-                                </Typography>
-                                <Typography>
-                                    <strong>Errores:</strong> {bulkResults.errorsCount}
-                                </Typography>
-                                {bulkResults.errorsList && bulkResults.errorsList.length > 0 && (
-                                    <ul>
-                                        {bulkResults.errorsList.map((err, idx) => (
-                                            <li key={idx}>
-                                                Fila {err.row}: {err.errorMessage}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </Alert>
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseBulkDialog}>Cerrar</Button>
-                    <PermissionGuard permission="buses-carga-masiva">
-                        <Button
-                            onClick={handleUploadBulk}
-                            variant="contained"
-                            color="primary"
-                            disabled={!bulkFile || bulkLoading}
-                        >
-                            Subir
-                        </Button>
-                    </PermissionGuard>
-                </DialogActions>
-            </Dialog>
+            <BulkUploadDialog
+                open={bulkOpen}
+                onClose={() => setBulkOpen(false)}
+                title="Carga masiva de buses"
+                description="Sube un archivo Excel o CSV con las columnas Placa, Capacidad y Descripción, usando la plantilla."
+                templateObject="buses"
+                successLabel="Buses creados o actualizados"
+                buildTemplate={buildBusesTemplate}
+                upload={async (file) => {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    const response = await api.post('/buses/bulk-upload', formData, {
+                        headers: { 'Content-Type': 'multipart/form-data' },
+                    });
+                    return response.data;
+                }}
+                onUploaded={() => fetchBuses()}
+            />
 
             {/* RouteHistoryModal removed */}
         </PageContainer>
