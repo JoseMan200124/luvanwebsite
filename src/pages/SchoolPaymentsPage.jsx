@@ -81,6 +81,9 @@ import { PAYMENT_STATUS, ENROLLMENT_PAYMENT_STATUS, toStatusOptions } from '../c
 import StatusChip from '../components/StatusChip';
 import AppDialog from '../components/dialogs/AppDialog';
 import MoneyField from '../components/form/MoneyField';
+import { Paid as PaidIcon, WarningAmber as WarningAmberIcon, Savings as SavingsIcon, Schedule as ScheduleIcon } from '@mui/icons-material';
+import { StatCard, StatCardGrid } from '../components/StatCard';
+import { loadCatalog } from '../services/catalogStore';
 
 const SectionCard = styled(Card)`
     ${tw`mb-4`}
@@ -408,8 +411,8 @@ const SchoolPaymentsPage = () => {
 
     const fetchAllSchools = useCallback(async () => {
         try {
-            const res = await api.get('/schools', { params: { ...(currentCicloEscolarId ? { cicloEscolarId: currentCicloEscolarId } : {}), includeArchived: true } });
-            const schools = res.data.schools || [];
+            const schoolsList = await loadCatalog('schools', { ...(currentCicloEscolarId ? { cicloEscolarId: currentCicloEscolarId } : {}), includeArchived: true });
+            const schools = schoolsList;
             setAllSchools(schools);
             return schools;
         } catch (err) {
@@ -3617,100 +3620,122 @@ const SchoolPaymentsPage = () => {
                                         </Box>
                                         {/* KPIs Principales */}
                                         <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: '#1976d2' }}>📊 Indicadores Clave (KPIs)</Typography>
-                                        <Box sx={{ mb: 3, p: 2, background: 'linear-gradient(135deg, #667eea15 0%, #764ba215 100%)', borderRadius: 2, boxShadow: 1 }}>
-                                            <Grid container spacing={2}>
-                                                <Grid item xs={12} sm={6} md={3}>
-                                                    <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                            <Typography variant="caption" color="text.secondary">Tasa de Pago</Typography>
-                                                            <Tooltip title={
-                                                                <Box>
-                                                                    <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
-                                                                        {"Porcentaje de familias con cuota generada en el período seleccionado que la pagaron por completo."}
-                                                                    </Box>
-                                                                    <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
-                                                                        {"Solo se cuentan las familias que tienen una cuota facturada en este período, independientemente de su estado de servicio. Por eso este número puede ser menor al total de familias registradas en el colegio: las que no tienen tarifa asignada o no se les generó cuota este mes no entran en el cálculo."}
-                                                                    </Box>
+                                        <StatCardGrid columns={4}>
+                                            <StatCard
+                                                label={(
+                                                    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                                                        <Box component="span">Tasa de Pago</Box>
+                                                        <Tooltip title={
+                                                            <Box>
+                                                                <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                                                                    {"Porcentaje de familias con cuota generada en el período seleccionado que la pagaron por completo."}
                                                                 </Box>
-                                                            } arrow>
-                                                                <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
-                                                            </Tooltip>
-                                                        </Box>
-                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: '#4caf50' }}>{formatPercentOrNA(fin?.tasaDePago)}</Typography>
-                                                        <Typography variant="caption" color="text.secondary" component="div">{fin?.countPagado ?? '—'} de {familiasActivas ?? '—'} familias con tarifa este período</Typography>
-                                                        <Typography variant="caption" color="text.secondary" component="div">{fin?.studentsPagado ?? '—'} de {fin?.studentsActivas ?? '—'} estudiantes</Typography>
-                                                    </Box>
-                                                </Grid>
-                                                <Grid item xs={12} sm={6} md={3}>
-                                                    <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                            <Typography variant="caption" color="text.secondary">Tasa de Mora</Typography>
-                                                            <Tooltip title={
-                                                                <Box>
-                                                                    <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
-                                                                        {"Porcentaje de familias con cuota generada en el período seleccionado que tienen mora sin pagar."}
-                                                                    </Box>
-                                                                    <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
-                                                                        {"Se considera en mora cuando el período tiene una penalidad pendiente (parcial o total). Solo se cuentan las familias que tienen una cuota facturada en este período."}
-                                                                    </Box>
+                                                                <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                                                                    {"Solo se cuentan las familias que tienen una cuota facturada en este período, independientemente de su estado de servicio. Por eso este número puede ser menor al total de familias registradas en el colegio: las que no tienen tarifa asignada o no se les generó cuota este mes no entran en el cálculo."}
                                                                 </Box>
-                                                            } arrow>
-                                                                <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
-                                                            </Tooltip>
-                                                        </Box>
-                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: '#f44336' }}>{formatPercentOrNA(fin?.tasaDeMora)}</Typography>
-                                                        <Typography variant="caption" color="text.secondary" component="div">{fin?.countMora ?? '—'} de {familiasActivas ?? '—'} familias con mora este período</Typography>
-                                                        <Typography variant="caption" color="text.secondary" component="div">{fin?.studentsMora ?? '—'} de {fin?.studentsActivas ?? '—'} estudiantes</Typography>
+                                                            </Box>
+                                                        } arrow>
+                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                        </Tooltip>
                                                     </Box>
-                                                </Grid>
-                                                <Grid item xs={12} sm={6} md={3}>
-                                                    <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                            <Typography variant="caption" color="text.secondary">Eficiencia de Cobro</Typography>
-                                                            <Tooltip title={
-                                                                <Box>
-                                                                    <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
-                                                                        {"Porcentaje del monto neto facturado en el período que ya fue cobrado."}
-                                                                    </Box>
-                                                                    <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
-                                                                        {"El monto neto ya incluye los descuentos familiares."}
-                                                                        <br />
-                                                                        <br />
-                                                                        {"Un 100% significa que se cobró todo lo esperado del período; un valor menor indica cuotas aún sin pagar. Puede superar 100% cuando en Base Caja entran pagos de cuotas de meses anteriores, o cuando hay adelantos; en Base Devengado, cuando el pago de una cuota se registra en un período anterior al que corresponde."}
-                                                                    </Box>
+                                                )}
+                                                value={formatPercentOrNA(fin?.tasaDePago)}
+                                                icon={<PaidIcon />}
+                                                valueColor="#4caf50"
+                                                hint={(
+                                                    <>
+                                                        <Box>{fin?.countPagado ?? '—'} de {familiasActivas ?? '—'} familias con tarifa este período</Box>
+                                                        <Box>{fin?.studentsPagado ?? '—'} de {fin?.studentsActivas ?? '—'} estudiantes</Box>
+                                                    </>
+                                                )}
+                                            />
+                                            <StatCard
+                                                label={(
+                                                    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                                                        <Box component="span">Tasa de Mora</Box>
+                                                        <Tooltip title={
+                                                            <Box>
+                                                                <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                                                                    {"Porcentaje de familias con cuota generada en el período seleccionado que tienen mora sin pagar."}
                                                                 </Box>
-                                                            } arrow>
-                                                                <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
-                                                            </Tooltip>
-                                                        </Box>
-                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: '#2196f3' }}>{formatPercentOrNA(finByBasis(fin?.eficienciaCobro))}</Typography>
-                                                        <Typography variant="caption" color="text.secondary">cobrado vs. monto neto facturado</Typography>
-                                                    </Box>
-                                                </Grid>
-                                                <Grid item xs={12} sm={6} md={3}>
-                                                    <Box sx={{ p: 2, background: 'white', borderRadius: 2, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                            <Typography variant="caption" color="text.secondary">Tasa de Puntualidad</Typography>
-                                                            <Tooltip title={
-                                                                <Box>
-                                                                    <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
-                                                                        {"De las familias que completaron su pago en el período seleccionado, qué porcentaje lo hizo antes o en la fecha límite de pago (sin generar mora)."}
-                                                                    </Box>
-                                                                    <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
-                                                                        {"Ejemplo: si 30 familias pagaron y 25 lo hicieron a tiempo, la tasa es 83.3%. Una tasa alta indica disciplina de pago en el colegio."}
-                                                                    </Box>
+                                                                <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                                                                    {"Se considera en mora cuando el período tiene una penalidad pendiente (parcial o total). Solo se cuentan las familias que tienen una cuota facturada en este período."}
                                                                 </Box>
-                                                            } arrow>
-                                                                <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
-                                                            </Tooltip>
-                                                        </Box>
-                                                        <Typography variant="h4" sx={{ fontWeight: 700, color: '#00897b' }}>{formatPercentOrNA(fin?.tasaPuntualidad)}</Typography>
-                                                        <Typography variant="caption" color="text.secondary" component="div">{fin?.countPagadoSinMora ?? '—'} de {fin?.countPagado ?? '—'} familias pagaron sin entrar en mora este período</Typography>
-                                                        <Typography variant="caption" color="text.secondary" component="div">{fin?.studentsPagadoSinMora ?? '—'} de {fin?.studentsPagado ?? '—'} estudiantes</Typography>
+                                                            </Box>
+                                                        } arrow>
+                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                        </Tooltip>
                                                     </Box>
-                                                </Grid>
-                                            </Grid>
-                                        </Box>
+                                                )}
+                                                value={formatPercentOrNA(fin?.tasaDeMora)}
+                                                icon={<WarningAmberIcon />}
+                                                valueColor="#f44336"
+                                                hint={(
+                                                    <>
+                                                        <Box>{fin?.countMora ?? '—'} de {familiasActivas ?? '—'} familias con mora este período</Box>
+                                                        <Box>{fin?.studentsMora ?? '—'} de {fin?.studentsActivas ?? '—'} estudiantes</Box>
+                                                    </>
+                                                )}
+                                            />
+                                            <StatCard
+                                                label={(
+                                                    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                                                        <Box component="span">Eficiencia de Cobro</Box>
+                                                        <Tooltip title={
+                                                            <Box>
+                                                                <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                                                                    {"Porcentaje del monto neto facturado en el período que ya fue cobrado."}
+                                                                </Box>
+                                                                <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                                                                    {"El monto neto ya incluye los descuentos familiares."}
+                                                                    <br />
+                                                                    <br />
+                                                                    {"Un 100% significa que se cobró todo lo esperado del período; un valor menor indica cuotas aún sin pagar. Puede superar 100% cuando en Base Caja entran pagos de cuotas de meses anteriores, o cuando hay adelantos; en Base Devengado, cuando el pago de una cuota se registra en un período anterior al que corresponde."}
+                                                                </Box>
+                                                            </Box>
+                                                        } arrow>
+                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                        </Tooltip>
+                                                    </Box>
+                                                )}
+                                                value={formatPercentOrNA(finByBasis(fin?.eficienciaCobro))}
+                                                icon={<SavingsIcon />}
+                                                valueColor="#2196f3"
+                                                hint={(
+                                                    <>
+                                                        <Box>cobrado vs. monto neto facturado</Box>
+                                                    </>
+                                                )}
+                                            />
+                                            <StatCard
+                                                label={(
+                                                    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                                                        <Box component="span">Tasa de Puntualidad</Box>
+                                                        <Tooltip title={
+                                                            <Box>
+                                                                <Box sx={{ fontWeight: 600, fontSize: '0.8125rem', mb: 0.5, lineHeight: 1.3 }}>
+                                                                    {"De las familias que completaron su pago en el período seleccionado, qué porcentaje lo hizo antes o en la fecha límite de pago (sin generar mora)."}
+                                                                </Box>
+                                                                <Box sx={{ fontSize: '0.75rem', opacity: 0.8, lineHeight: 1.3 }}>
+                                                                    {"Ejemplo: si 30 familias pagaron y 25 lo hicieron a tiempo, la tasa es 83.3%. Una tasa alta indica disciplina de pago en el colegio."}
+                                                                </Box>
+                                                            </Box>
+                                                        } arrow>
+                                                            <InfoOutlined sx={{ fontSize: 14, color: 'text.disabled', cursor: 'help' }} />
+                                                        </Tooltip>
+                                                    </Box>
+                                                )}
+                                                value={formatPercentOrNA(fin?.tasaPuntualidad)}
+                                                icon={<ScheduleIcon />}
+                                                valueColor="#00897b"
+                                                hint={(
+                                                    <>
+                                                        <Box>{fin?.countPagadoSinMora ?? '—'} de {fin?.countPagado ?? '—'} familias pagaron sin entrar en mora este período</Box>
+                                                        <Box>{fin?.studentsPagadoSinMora ?? '—'} de {fin?.studentsPagado ?? '—'} estudiantes</Box>
+                                                    </>
+                                                )}
+                                            />
+                                        </StatCardGrid>
 
                                         {/* Métricas Financieras */}
                                         <Typography variant="h6" sx={{ mb: 2, mt: 3, fontWeight: 600, color: '#1976d2' }}>💰 Métricas Financieras</Typography>
@@ -4041,8 +4066,8 @@ const SchoolPaymentsPage = () => {
                             size="small"
                             sx={{ mr: 2 }}
                         >
-                            <ToggleButton value="payment">Estado de Pago</ToggleButton>
-                            <ToggleButton value="service">Estado del Servicio</ToggleButton>
+                            <ToggleButton value="payment">Estado de pago</ToggleButton>
+                            <ToggleButton value="service">Estado del servicio</ToggleButton>
                         </ToggleButtonGroup>
                         
                         {countersView === 'payment' ? (
@@ -4173,10 +4198,10 @@ const SchoolPaymentsPage = () => {
                             <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
                                 <Box sx={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 2, mt: 0.5 }}>
                                 <FormControl fullWidth size="small">
-                                    <InputLabel id="export-finalstatus-label">Estado de Pago</InputLabel>
+                                    <InputLabel id="export-finalstatus-label">Estado de pago</InputLabel>
                                     <Select
                                         labelId="export-finalstatus-label"
-                                        label="Estado de Pago"
+                                        label="Estado de pago"
                                         value={exportFinalStatus}
                                         onChange={(e) => setExportFinalStatus(e.target.value)}
                                     >
@@ -4188,10 +4213,10 @@ const SchoolPaymentsPage = () => {
                                     </Select>
                                 </FormControl>
                                 <FormControl fullWidth size="small">
-                                    <InputLabel id="export-servicestatus-label">Estado del Servicio</InputLabel>
+                                    <InputLabel id="export-servicestatus-label">Estado del servicio</InputLabel>
                                     <Select
                                         labelId="export-servicestatus-label"
-                                        label="Estado del Servicio"
+                                        label="Estado del servicio"
                                         value={exportServiceStatus}
                                         onChange={(e) => setExportServiceStatus(e.target.value)}
                                     >
@@ -4306,10 +4331,10 @@ const SchoolPaymentsPage = () => {
                                     </FormControl>
                                 ) : (
                                 <FormControl fullWidth size="small">
-                                    <InputLabel id="export-by-state-label">Estado de Pago</InputLabel>
+                                    <InputLabel id="export-by-state-label">Estado de pago</InputLabel>
                                     <Select
                                         labelId="export-by-state-label"
-                                        label="Estado de Pago"
+                                        label="Estado de pago"
                                         value={exportByStateValue}
                                         onChange={(e) => setExportByStateValue(e.target.value)}
                                     >
@@ -4323,10 +4348,10 @@ const SchoolPaymentsPage = () => {
                                 )}
 
                                 <FormControl fullWidth size="small">
-                                    <InputLabel id="export-by-state-servicestatus-label">Estado del Servicio</InputLabel>
+                                    <InputLabel id="export-by-state-servicestatus-label">Estado del servicio</InputLabel>
                                     <Select
                                         labelId="export-by-state-servicestatus-label"
-                                        label="Estado del Servicio"
+                                        label="Estado del servicio"
                                         value={exportByStateServiceStatus}
                                         onChange={(e) => setExportByStateServiceStatus(e.target.value)}
                                     >

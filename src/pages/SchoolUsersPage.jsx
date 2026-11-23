@@ -82,6 +82,7 @@ import { BulkInstructions } from '../components/dialogs/BulkUploadDialog';
 import { buildWorkbook, downloadWorkbook } from '../utils/excel';
 import { buildFileName } from '../utils/fileName';
 import { todayForFileName } from '../utils/download';
+import { loadCatalog } from '../services/catalogStore';
 
 const FAMILY_STATUS_OPTIONS = ['Nuevo', 'Duplicado', 'Actualizado', 'Sin asignaciones']
     .map((status) => ({ value: status, label: status }));
@@ -722,8 +723,7 @@ const SchoolUsersPage = () => {
     const fetchAllPilots = async () => {
         if (!hasPermission('usuarios-listar-pilotos')) { setAllPilots([]); return; }
         try {
-            const resp = await api.get('/users/pilots');
-            setAllPilots(resp.data.users || []);
+            setAllPilots(await loadCatalog('pilots'));
         } catch (error) {
             console.error('[fetchAllPilots] Error:', error);
             setAllPilots([]);
@@ -733,8 +733,7 @@ const SchoolUsersPage = () => {
     const fetchAllMonitoras = async () => {
         if (!hasPermission('usuarios-listar-monitoras')) { setAllMonitoras([]); return; }
         try {
-            const resp = await api.get('/users/monitors');
-            setAllMonitoras(resp.data.users || []);
+            setAllMonitoras(await loadCatalog('monitors'));
         } catch (error) {
             console.error('[fetchAllMonitoras] Error:', error);
             setAllMonitoras([]);
@@ -1120,17 +1119,12 @@ const SchoolUsersPage = () => {
     // Cargar datos adicionales
     const fetchSchools = useCallback(async () => {
         try {
-            const response = await api.get('/schools', {
-                params: { includeArchived: true },
-                headers: { Authorization: `Bearer ${auth.token}` }
-            });
-            // Usar la misma estructura que RolesManagementPage
-            setSchools(response.data.schools || response.data || []);
+            setSchools(await loadCatalog('schools', { includeArchived: true }));
         } catch (err) {
             console.error('Error fetching schools:', err);
             setSchools([]); // Asegurar que siempre sea un array
         }
-    }, [auth.token]);
+    }, []);
 
     const fetchUsers = useCallback(async () => {
         setLoading(true);

@@ -1004,7 +1004,7 @@ const ManagePaymentsModal = ({ open, onClose, payment = {}, onAction = () => {},
                                 <Typography variant="body1">{family.studentsCount || 0}</Typography>
                             </Box>
                             <Box>
-                                <Typography variant="caption" color="text.secondary">Tipo de Ruta</Typography>
+                                <Typography variant="caption" color="text.secondary">Tipo de ruta</Typography>
                                 <Typography variant="body1">{family.routeType || '-'}</Typography>
                             </Box>
                         </Box>

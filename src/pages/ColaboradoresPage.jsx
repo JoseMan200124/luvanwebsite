@@ -43,6 +43,7 @@ import ColaboradorScheduleModal from '../components/modals/ColaboradorScheduleMo
 import BulkScheduleColaboradoresModal from '../components/modals/BulkScheduleColaboradoresModal';
 import ExcelJS from 'exceljs';
 import BulkUploadDialog from '../components/dialogs/BulkUploadDialog';
+import { ROUTE_TYPE_OPTIONS } from '../constants/options';
 import { downloadWorkbook } from '../utils/excel';
 import { buildFileName } from '../utils/fileName';
 import { todayForFileName } from '../utils/download';
@@ -1626,15 +1627,15 @@ const ColaboradoresPage = () => {
                             </Grid>
                             <Grid item xs={12} sm={6}>
                                 <FormControl fullWidth>
-                                    <InputLabel>Tipo de Ruta</InputLabel>
+                                    <InputLabel>Tipo de ruta</InputLabel>
                                     <Select
                                         value={colaboradorForm.routeType}
-                                        label="Tipo de Ruta"
+                                        label="Tipo de ruta"
                                         onChange={(e) => handleFormChange('routeType', e.target.value)}
                                     >
-                                        <MenuItem value="Completa">Completa</MenuItem>
-                                        <MenuItem value="Media PM">Media PM</MenuItem>
-                                        <MenuItem value="Media AM">Media AM</MenuItem>
+                                        {ROUTE_TYPE_OPTIONS.map((option) => (
+                                            <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                                        ))}
                                     </Select>
                                 </FormControl>
                             </Grid>

@@ -32,6 +32,7 @@ import { formatMonth, formatDate } from '../../utils/dateFormat';
 import { formatQ } from '../../utils/currency';
 import { useCurrentDate } from '../../hooks/useCurrentDate';
 import AppDialog from '../dialogs/AppDialog';
+import { ROUTE_TYPE_OPTIONS } from '../../constants/options';
 
 const PERIOD_RE = /^\d{4}-\d{2}$/;
 
@@ -496,7 +497,7 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                         <TextField
                             select
                             size="small"
-                            label="Tipo de Ruta"
+                            label="Tipo de ruta"
                             value={routeTypeToAdd}
                             onChange={(e) => setRouteTypeToAdd(e.target.value)}
                             disabled={!paymentId || loading}
@@ -512,9 +513,9 @@ const ManagePeriodsModal = ({ open, onClose, payment, onChanged }) => {
                             }}
                         >
                             <MenuItem value=""><em>Usar configuración actual</em></MenuItem>
-                            <MenuItem value="Completa">Completa</MenuItem>
-                            <MenuItem value="Media AM">Media AM</MenuItem>
-                            <MenuItem value="Media PM">Media PM</MenuItem>
+                            {ROUTE_TYPE_OPTIONS.map((option) => (
+                                <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                            ))}
                         </TextField>
 
                         <TextField

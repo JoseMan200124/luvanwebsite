@@ -5,7 +5,8 @@ import { CircularProgress } from '@mui/material';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
-import StatsCard from '../components/dashboard/StatsCard';
+import { StatCard, StatCardGrid } from '../components/StatCard';
+import { School as SchoolIcon } from '@mui/icons-material';
 import IncidentsPerPilotChart from '../components/dashboard/IncidentsPerPilotChart';
 import TotalRoutesCompletedChart from '../components/dashboard/TotalRoutesCompletedChart';
 import api from '../utils/axiosConfig';
@@ -16,13 +17,12 @@ import { F } from '../components/filters/filterFields';
 import { getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import { loadCatalog } from '../services/catalogStore';
 
 const MONTH_OPTIONS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
     .map((month) => ({ value: month, label: month }));
 
 // Grid para las tarjetas de indicadores
-const StatsGrid = tw.div`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8`;
-
 // Grid para las gráficas
 const ChartsGrid = tw.div`grid grid-cols-1 lg:grid-cols-2 gap-6`;
 
@@ -50,8 +50,8 @@ const Dashboard = () => {
     useEffect(() => {
         const fetchSchools = async () => {
             try {
-                const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true } });
-                setSchools(response.data.schools || []);
+                const schoolsList = await loadCatalog('schools', { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true });
+                setSchools(schoolsList);
             } catch (err) {
                 console.error('Error fetching schools:', err);
                 setSchools([]);
@@ -157,13 +157,14 @@ const Dashboard = () => {
                 </div>
             ) : (
                 <div ref={reportRef}>
-                    <StatsGrid>
-                        <StatsCard
-                            title="Rutas Completadas"
+                    <StatCardGrid sx={{ mb: 4 }}>
+                        <StatCard
+                            label="Rutas completadas"
                             value={totalRoutesCompleted}
-                            icon="School"
+                            icon={<SchoolIcon />}
+                            format="number"
                         />
-                    </StatsGrid>
+                    </StatCardGrid>
 
                     <ChartsGrid>
                         <TotalRoutesCompletedChart data={totalRoutesCompleted} />

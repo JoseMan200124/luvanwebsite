@@ -37,6 +37,7 @@ import AppTablePagination from '../components/table/AppTablePagination';
 import SortableTableHead from '../components/table/SortableTableHead';
 import AppTableContainer from '../components/table/AppTableContainer';
 import { formatDateTime, formatDate } from '../utils/dateFormat';
+import { loadCatalog } from '../services/catalogStore';
 
 const safeParseJson = (v) => {
     if (!v) {
@@ -445,29 +446,15 @@ const BusAssignmentHistoryPage = () => {
 
     const fetchCatalogs = React.useCallback(async () => {
         try {
-            const busesRes = await api.get('/buses/simple', {
-                params: { includeDecommissioned: true },
-                headers: { Authorization: `Bearer ${auth.token}` }
-            });
-            setBuses(busesRes.data.buses || []);
+            setBuses(await loadCatalog('buses', { includeDecommissioned: true }));
 
-            const schoolsRes = await api.get('/schools', {
-                params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true },
-                headers: { Authorization: `Bearer ${auth.token}` }
-            });
-            const schoolsData = Array.isArray(schoolsRes.data) ? schoolsRes.data : (schoolsRes.data?.schools || []);
-            setSchools(schoolsData);
+            setSchools(await loadCatalog('schools', { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true }));
 
-            const corpsRes = await api.get('/corporations', {
-                params: getCicloEscolarFilterParams(draftCycle),
-                headers: { Authorization: `Bearer ${auth.token}` }
-            });
-            const corpsData = Array.isArray(corpsRes.data) ? corpsRes.data : (corpsRes.data?.corporations || []);
-            setCorporations(corpsData);
+            setCorporations(await loadCatalog('corporations', getCicloEscolarFilterParams(draftCycle)));
         } catch (err) {
             console.error('Error cargando catálogos de buses:', err);
         }
-    }, [auth.token, draftCycle]);
+    }, [draftCycle]);
 
     const handleGlobalRefresh = React.useCallback(async () => {
         await Promise.all([fetchHistory(), fetchCatalogs(), fetchStats()]);

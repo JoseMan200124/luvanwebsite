@@ -19,6 +19,8 @@ import FuelBreakdownTables from './FuelBreakdownTables';
 import { generateFuelStatsPdf } from './fuelStatsPdf';
 import { formatDate } from '../../utils/dateFormat';
 import { formatQ } from '../../utils/currency';
+import { Payments as PaymentsIcon, LocalGasStation as LocalGasStationIcon, ReceiptLong as ReceiptLongIcon, Sell as SellIcon } from '@mui/icons-material';
+import { StatCard, StatCardGrid } from '../StatCard';
 
 const DEFAULT_PRESET = 'last6Months';
 
@@ -26,16 +28,6 @@ const fuelTypeLabel = (k) => FUEL_TYPES.find((t) => t.key === k)?.label || k;
 const reasonItemLabel = (k) => FUELING_REASONS.find((r) => r.key === k)?.label || k;
 const isAllSelected = (selected) => selected.length === 0 || selected.includes(ALL_OPTION);
 const cardSx = { bgcolor: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 1, p: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' };
-
-const KpiCard = ({ label, value, sub, color = '#111827' }) => (
-    <Box sx={cardSx}>
-        <Typography sx={{ fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#6B7280', fontWeight: 600, mb: 0.75 }}>
-            {label}
-        </Typography>
-        <Typography sx={{ fontWeight: 700, fontSize: 26, color }}>{value}</Typography>
-        {sub ? <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{sub}</Typography> : null}
-    </Box>
-);
 
 const FuelStatisticsTab = () => {
     const [clientOptions, setClientOptions] = useState({ schools: [], corporations: [], hasUnassigned: false });
@@ -199,26 +191,29 @@ const FuelStatisticsTab = () => {
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>{rangeLabel}</Typography>
 
                     {/* Tarjetas de resumen */}
-                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 2, mb: 2 }}>
-                        <KpiCard label="Gasto total" value={formatQ(result.totals.amount, { nullText: 'N/A' })} color="#E65100" />
-                        <KpiCard label="Galones" value={formatGallons(result.totals.gallons)} color="#1976D2" />
-                        <KpiCard label="Registros" value={String(result.totals.records)} />
-                    </Box>
+                    <StatCardGrid columns={3} sx={{ mb: 2 }}>
+                        <StatCard label="Gasto total" value={formatQ(result.totals.amount, { nullText: 'N/A' })} icon={<PaymentsIcon />} valueColor="#E65100" />
+                        <StatCard label="Galones" value={formatGallons(result.totals.gallons)} icon={<LocalGasStationIcon />} valueColor="#1976D2" />
+                        <StatCard label="Registros" value={result.totals.records} icon={<ReceiptLongIcon />} format="number" />
+                    </StatCardGrid>
 
                     {/* Precio ponderado por tipo de combustible */}
-                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 2, mb: 3 }}>
-                        {visibleTypes.length === 0 ? (
-                            <Box sx={{ ...cardSx, color: 'text.secondary', fontSize: 13 }}>Sin cargas de combustible en el rango seleccionado.</Box>
-                        ) : visibleTypes.map((t) => (
-                            <KpiCard
-                                key={t.key}
-                                label={`Precio/galón · ${t.label}`}
-                                value={formatQ(result.totals.byType[t.key].price, { nullText: 'N/A' })}
-                                sub={`${formatGallons(result.totals.byType[t.key].gallons)}`}
-                                color={t.color}
-                            />
-                        ))}
-                    </Box>
+                    {visibleTypes.length === 0 ? (
+                        <Box sx={{ ...cardSx, color: 'text.secondary', fontSize: 13, mb: 3 }}>Sin cargas de combustible en el rango seleccionado.</Box>
+                    ) : (
+                        <StatCardGrid columns={Math.min(visibleTypes.length, 4)}>
+                            {visibleTypes.map((t) => (
+                                <StatCard
+                                    key={t.key}
+                                    label={`Precio/galón · ${t.label}`}
+                                    value={formatQ(result.totals.byType[t.key].price, { nullText: 'N/A' })}
+                                    hint={`${formatGallons(result.totals.byType[t.key].gallons)}`}
+                                    icon={<SellIcon />}
+                                    valueColor={t.color}
+                                />
+                            ))}
+                        </StatCardGrid>
+                    )}
 
                     <FuelCharts series={result.series} visibleTypes={visibleTypes} />
                     <FuelBreakdownTables result={result} visibleTypes={visibleTypes} />

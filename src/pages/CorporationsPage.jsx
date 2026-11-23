@@ -46,6 +46,7 @@ import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
 import { formatClock } from '../utils/dateFormat';
 import AppDialog from '../components/dialogs/AppDialog';
+import { invalidateCatalog } from '../services/catalogStore';
 
 const CorporationCard = styled(Card)`
     ${tw`cursor-pointer transition-all duration-300`}
@@ -169,6 +170,7 @@ const CorporationsPage = () => {
     ];
 
     const fetchCorporations = useCallback(async () => {
+        invalidateCatalog('corporations');
         setLoading(true);
         try {
             const params = { fiscalYear: selectedFiscalYear };

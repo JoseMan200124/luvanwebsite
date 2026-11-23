@@ -6,6 +6,7 @@ import { revisarFamilia, sinTildes as normalizar } from './paradasModel';
 import FamiliaCard from './FamiliaCard';
 import useTableState from '../../hooks/useTableState';
 import AppTablePagination from '../table/AppTablePagination';
+import SearchInput from '../form/SearchInput';
 
 const FILTROS = [
     { valor: 'todas', texto: 'Todas las familias' },
@@ -45,7 +46,7 @@ export default function FamiliasLista({ familias, contexto, soloLectura, despach
     return (
         <Box>
             <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
-                <TextField size="small" label="Buscar por apellido o estudiante" value={busqueda} onChange={e => setBusqueda(e.target.value)} sx={{ flex: 1, minWidth: 240 }} />
+                <SearchInput label="Buscar por apellido o estudiante" value={busqueda} onChange={setBusqueda} sx={{ flex: 1, minWidth: 240 }} />
                 <TextField size="small" select label="Mostrar" value={filtro} onChange={e => setFiltro(e.target.value)} sx={{ minWidth: 240 }}>
                     {FILTROS.map(f => <MenuItem key={f.valor} value={f.valor}>{f.texto}</MenuItem>)}
                 </TextField>

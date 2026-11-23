@@ -28,6 +28,7 @@ import AppTablePagination from '../components/table/AppTablePagination';
 import SortableTableHead from '../components/table/SortableTableHead';
 import AppTableContainer from '../components/table/AppTableContainer';
 import { formatDateTime } from '../utils/dateFormat';
+import { loadCatalog } from '../services/catalogStore';
 
 const ASSIGNMENT_TYPE_LABELS = {
     'bus_pilot': 'Bus - Piloto',
@@ -384,24 +385,13 @@ const AssignmentHistoryPage = () => {
     const fetchCatalogs = async () => {
         try {
             // Cargar buses
-            const busesRes = await api.get('/buses/simple', {
-                headers: { Authorization: `Bearer ${auth.token}` }
-            });
-            setBuses(busesRes.data.buses || []);
+            setBuses(await loadCatalog('buses'));
 
             // Cargar colegios
-            const schoolsRes = await api.get('/schools', {
-                params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true },
-                headers: { Authorization: `Bearer ${auth.token}` }
-            });
-            setSchools(schoolsRes.data.schools || []);
+            setSchools(await loadCatalog('schools', { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true }));
 
             // Cargar corporaciones
-            const corpsRes = await api.get('/corporations', {
-                params: getCicloEscolarFilterParams(draftCycle),
-                headers: { Authorization: `Bearer ${auth.token}` }
-            });
-            setCorporations(corpsRes.data.corporations || []);
+            setCorporations(await loadCatalog('corporations', getCicloEscolarFilterParams(draftCycle)));
 
         } catch (err) {
             console.error('Error al cargar catálogos:', err);

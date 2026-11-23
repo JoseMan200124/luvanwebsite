@@ -19,8 +19,6 @@ import {
     Chip,
     Tooltip,
     CircularProgress,
-    Card,
-    CardContent,
     FormControl,
     InputLabel,
     Select,
@@ -38,8 +36,6 @@ import {
     Edit as EditIcon,
     Add as AddIcon,
 } from '@mui/icons-material';
-import tw from 'twin.macro';
-import styled from 'styled-components';
 import moment from 'moment-timezone';
 import {
     getAllMechanicRequests,
@@ -73,10 +69,9 @@ import useConfirm from '../hooks/useConfirm';
 import { formatDateTime, formatDate } from '../utils/dateFormat';
 import { MECHANIC_STATUS, getStatusLabel, getStatusMeta, toStatusOptions } from '../constants/statuses';
 import AppDialog from '../components/dialogs/AppDialog';
-
-const StatsCard = styled(Card)`
-    ${tw`h-full`}
-`;
+import { EmojiEvents as TopIcon } from '@mui/icons-material';
+import { StatCard, StatCardGrid } from '../components/StatCard';
+import { loadCatalog } from '../services/catalogStore';
 
 // Columnas de la tabla de solicitudes
 const COLUMNS = [
@@ -177,16 +172,10 @@ const MechanicRequestsPage = () => {
     useEffect(() => {
         const loadFiltersData = async () => {
             try {
-                const [schoolsResponse, corpsResponse] = await Promise.all([
-                    api.get('/schools', { params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true } }),
-                    api.get('/corporations', { params: getCicloEscolarFilterParams(draftCycle) })
+                const [schoolsData, corpsData] = await Promise.all([
+                    loadCatalog('schools', { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true }),
+                    loadCatalog('corporations', getCicloEscolarFilterParams(draftCycle))
                 ]);
-                const schoolsData = Array.isArray(schoolsResponse.data) 
-                    ? schoolsResponse.data 
-                    : (schoolsResponse.data?.schools || []);
-                const corpsData = Array.isArray(corpsResponse.data) 
-                    ? corpsResponse.data 
-                    : (corpsResponse.data?.corporations || []);
                 setSchools(schoolsData);
                 setCorporations(corpsData);
             } catch (error) {
@@ -520,86 +509,28 @@ const MechanicRequestsPage = () => {
 
             {/* Estadísticas */}
             {statistics && (
-                <Grid container spacing={3} sx={{ mb: 3 }}>
-                    <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Total
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.totalRequests}
-                                </Typography>
-                                <Typography variant="caption" color="textSecondary" display="block">
-                                    {clientBreakdown.colegios} de colegios · {clientBreakdown.corporativos} corporativos
-                                </Typography>
-                            </CardContent>
-                        </StatsCard>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard sx={{ borderLeft: '4px solid #ff9800' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Urgentes
-                                </Typography>
-                                <Typography variant="h4" color="warning.main">
-                                    {statistics.urgentRequests}
-                                </Typography>
-                            </CardContent>
-                        </StatsCard>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard sx={{ borderLeft: '4px solid #2196f3' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Pendientes
-                                </Typography>
-                                <Typography variant="h4" color="info.main">
-                                    {statistics.pendingRequests}
-                                </Typography>
-                            </CardContent>
-                        </StatsCard>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard sx={{ borderLeft: '4px solid #9c27b0' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    En Proceso
-                                </Typography>
-                                <Typography variant="h4" color="secondary.main">
-                                    {statistics.inProgressRequests}
-                                </Typography>
-                            </CardContent>
-                        </StatsCard>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard sx={{ borderLeft: '4px solid #4caf50' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Completados
-                                </Typography>
-                                <Typography variant="h4" color="success.main">
-                                    {statistics.completedRequests}
-                                </Typography>
-                            </CardContent>
-                        </StatsCard>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Más Solicitudes
-                                </Typography>
-                                <Typography variant="body1" noWrap>
-                                    {statistics.topSchool?.name || statistics.topCorporation?.name || 'N/A'}
-                                </Typography>
-                                <Typography variant="caption" color="textSecondary">
-                                    {statistics.topSchool?.count || statistics.topCorporation?.count || 0} solicitudes
-                                </Typography>
-                            </CardContent>
-                        </StatsCard>
-                    </Grid>
-                </Grid>
+                <StatCardGrid columns={{ md: 3, lg: 6 }}>
+                    <StatCard
+                        label="Total"
+                        value={statistics.totalRequests}
+                        icon={<BuildIcon />}
+                        format="number"
+                        hint={`${clientBreakdown.colegios} de colegios · ${clientBreakdown.corporativos} corporativos`}
+                    />
+                    <StatCard label="Urgentes" value={statistics.urgentRequests} icon={<WarningIcon />} color="#ff9800" valueColor="warning.main" format="number" />
+                    <StatCard label="Pendientes" value={statistics.pendingRequests} icon={<PendingIcon />} color="#2196f3" valueColor="info.main" format="number" />
+                    <StatCard label="En proceso" value={statistics.inProgressRequests} icon={<InProgressIcon />} color="#9c27b0" valueColor="secondary.main" format="number" />
+                    <StatCard label="Completados" value={statistics.completedRequests} icon={<CheckCircleIcon />} color="#4caf50" valueColor="success.main" format="number" />
+                    <StatCard
+                        label="Más solicitudes"
+                        icon={<TopIcon />}
+                        hint={`${statistics.topSchool?.count || statistics.topCorporation?.count || 0} solicitudes`}
+                    >
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>
+                            {statistics.topSchool?.name || statistics.topCorporation?.name || 'N/A'}
+                        </Typography>
+                    </StatCard>
+                </StatCardGrid>
             )}
 
             {/* Filtros */}

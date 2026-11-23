@@ -11,8 +11,6 @@ import {
     CircularProgress,
     Box,
     Grid,
-    Card,
-    CardContent,
     Chip,
     IconButton,
     Tooltip,
@@ -38,6 +36,7 @@ import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { getAllBusIncidents, getBusIncidentById, deleteBusIncident, updateBusIncident, FAILURE_TYPES, INCIDENT_EVENT_TYPES } from '../services/busIncidentService';
 import api from '../utils/axiosConfig';
+import { loadCatalog } from '../services/catalogStore';
 import { getClientSchoolId, getClientCorporationId } from '../utils/clientValue';
 import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
 import PermissionGuard from '../components/PermissionGuard';
@@ -56,6 +55,8 @@ import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
 import { formatDateTime } from '../utils/dateFormat';
 import AppDialog from '../components/dialogs/AppDialog';
+import { ReportProblem as ReportIcon, AltRoute as AltRouteIcon } from '@mui/icons-material';
+import { StatCard, StatCardGrid } from '../components/StatCard';
 
 const NO_FAILURES_FILTER_VALUE = 'sin_fallas';
 
@@ -176,9 +177,7 @@ const BusIncidentsPage = () => {
 
     const fetchSchools = async () => {
         try {
-            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true } });
-            const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
-            setSchools(schoolsData);
+            setSchools(await loadCatalog('schools', { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true }));
         } catch (error) {
             console.error('Error al cargar colegios:', error);
             setSchools([]);
@@ -189,9 +188,7 @@ const BusIncidentsPage = () => {
 
     const fetchCorporations = async () => {
         try {
-            const response = await api.get('/corporations', { params: getCicloEscolarFilterParams(draftCycle) });
-            const corporationsData = Array.isArray(response.data) ? response.data : (response.data?.corporations || []);
-            setCorporations(corporationsData);
+            setCorporations(await loadCatalog('corporations', getCicloEscolarFilterParams(draftCycle)));
         } catch (error) {
             console.error('Error al cargar corporaciones:', error);
             setCorporations([]);
@@ -487,63 +484,26 @@ const BusIncidentsPage = () => {
                 />
 
                 {/* Estadísticas */}
-                <Grid container spacing={3} mb={3}>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Total Incidentes
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.total}
-                                </Typography>
-                                <Typography variant="caption" color="textSecondary" display="block">
-                                    {statistics.colegios || 0} de colegios · {statistics.corporativos || 0} corporativos
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Tipo de Falla Más Común
-                                </Typography>
-                                <Typography variant="h6">
-                                    {Object.keys(statistics.byTipoFalla).length > 0
-                                        ? FAILURE_TYPES[Object.keys(statistics.byTipoFalla).reduce((a, b) => 
-                                            statistics.byTipoFalla[a] > statistics.byTipoFalla[b] ? a : b
-                                        )] || 'Sin Falla'
-                                        : 'N/A'}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Accidentes
-                                </Typography>
-                                <Typography variant="h4" color="error">
-                                    {statistics.byTipo['accidente'] || 0}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Afectó Recorrido
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.withRouteAffected}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                </Grid>
+                <StatCardGrid columns={4}>
+                    <StatCard
+                        label="Total incidentes"
+                        value={statistics.total}
+                        icon={<ReportIcon />}
+                        format="number"
+                        hint={`${statistics.colegios || 0} de colegios · ${statistics.corporativos || 0} corporativos`}
+                    />
+                    <StatCard label="Tipo de falla más común" icon={<BuildIcon />}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>
+                            {Object.keys(statistics.byTipoFalla).length > 0
+                                ? FAILURE_TYPES[Object.keys(statistics.byTipoFalla).reduce((a, b) => (
+                                    statistics.byTipoFalla[a] > statistics.byTipoFalla[b] ? a : b
+                                ))] || 'Sin Falla'
+                                : 'N/A'}
+                        </Typography>
+                    </StatCard>
+                    <StatCard label="Accidentes" value={statistics.byTipo['accidente'] || 0} icon={<CrashIcon />} valueColor="error" format="number" />
+                    <StatCard label="Afectó recorrido" value={statistics.withRouteAffected} icon={<AltRouteIcon />} format="number" />
+                </StatCardGrid>
 
                 {/* Filtros */}
                 <FilterBar

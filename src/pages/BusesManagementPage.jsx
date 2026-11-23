@@ -55,6 +55,7 @@ import AppDialog from '../components/dialogs/AppDialog';
 import BulkUploadDialog from '../components/dialogs/BulkUploadDialog';
 import FileField from '../components/form/FileField';
 import { buildWorkbook } from '../utils/excel';
+import { loadCatalog, invalidateCatalog } from '../services/catalogStore';
 
 // Campos obligatorios del formulario de bus.
 const BUS_RULES = { plate: ['required'] };
@@ -156,6 +157,7 @@ const BusesManagementPage = () => {
     // =================== Efectos y funciones ===================
 
     const fetchBuses = async () => {
+        invalidateCatalog('buses');
         setLoading(true);
         try {
             const response = await api.get('/buses?includeDecommissioned=true', {
@@ -381,10 +383,10 @@ const BusesManagementPage = () => {
     useEffect(() => {
         const loadClients = async () => {
             try {
-                const [ciclosData, schoolsResp, corpsResp] = await Promise.all([
+                const [ciclosData, schoolsList, corpsList] = await Promise.all([
                     getCiclosEscolares(),
-                    api.get('/schools', { params: { allCycles: true, includeArchived: true } }),
-                    api.get('/corporations', { params: { allCycles: true } })
+                    loadCatalog('schools', { allCycles: true, includeArchived: true }),
+                    loadCatalog('corporations', { allCycles: true })
                 ]);
 
                 // El selector agrupa los colegios por ciclo: se completa el objeto del ciclo si la respuesta no lo trae
@@ -394,8 +396,6 @@ const BusesManagementPage = () => {
                     ciclosById[c.id] = c;
                 }
 
-                const schoolsList = schoolsResp.data?.schools || schoolsResp.data || [];
-                const corpsList = corpsResp.data?.corporations || corpsResp.data || [];
 
                 setClientSchools((Array.isArray(schoolsList) ? schoolsList : [])
                     .filter((school) => school && !school.deleted)

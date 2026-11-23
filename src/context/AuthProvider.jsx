@@ -8,6 +8,7 @@ import { jwtDecode } from 'jwt-decode';
 import { loginUser } from '../services/authService';
 import { initSocket, closeSocket } from '../services/socketService';
 import { clearStoredSchoolContext } from '../utils/schoolContext';
+import { clearCatalogs } from '../services/catalogStore';
 import useNotify from '../hooks/useNotify';
 import { ahoraReal } from '../utils/relojReal';
 
@@ -41,12 +42,12 @@ const AuthProvider = ({ children }) => {
     const resetTimer = useCallback(() => setSharedLastActivity(ahoraReal()), [setSharedLastActivity]);
 
     const logout = useCallback(() => {
-        try { localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); clearStoredSchoolContext(); } catch (e) {}
+        try { clearCatalogs(); localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); clearStoredSchoolContext(); } catch (e) {}
         closeSocket(); setAuth({ user: null, token: null }); navigate('/login');
     }, [navigate]);
 
     const logoutByIdle = useCallback(() => {
-        try { localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); clearStoredSchoolContext(); } catch (e) {}
+        try { clearCatalogs(); localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); clearStoredSchoolContext(); } catch (e) {}
         closeSocket(); setAuth({ user: null, token: null }); navigate('/login');
         notify.warning('El tiempo de inactividad venció. Vuelva a iniciar sesión.', { duration: null, closeOnClickAway: true });
     }, [navigate, notify]);
@@ -72,7 +73,7 @@ const AuthProvider = ({ children }) => {
                 }
             }
         } catch (err) {
-            try { localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); clearStoredSchoolContext(); } catch (e) {}
+            try { clearCatalogs(); localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); clearStoredSchoolContext(); } catch (e) {}
             logout();
         }
     }, [logout]);

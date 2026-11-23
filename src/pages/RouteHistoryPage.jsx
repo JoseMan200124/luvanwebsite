@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box,
     Typography,
-    Tooltip,
     Paper,
     Grid,
     Button,
@@ -48,6 +47,8 @@ import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
 import useIsMobile from '../hooks/useIsMobile';
 import { formatTime, formatDateLong, formatDate } from '../utils/dateFormat';
+import { loadCatalog } from '../services/catalogStore';
+import { StatCard, StatCardGrid } from '../components/StatCard';
 
 const RouteHistoryPage = () => {
     const [loading, setLoading] = useState(false);
@@ -277,12 +278,10 @@ const RouteHistoryPage = () => {
     useEffect(() => {
         const loadClients = async () => {
             try {
-                const [schoolsResp, corpsResp] = await Promise.all([
-                    api.get('/schools', { params: { ...getCicloEscolarFilterParams(historyDraftCycle), includeArchived: true } }),
-                    api.get('/corporations', { params: getCicloEscolarFilterParams(historyDraftCycle) })
+                const [schoolsList, corpsList] = await Promise.all([
+                    loadCatalog('schools', { ...getCicloEscolarFilterParams(historyDraftCycle), includeArchived: true }),
+                    loadCatalog('corporations', getCicloEscolarFilterParams(historyDraftCycle))
                 ]);
-                const schoolsList = schoolsResp.data?.schools || schoolsResp.data || [];
-                const corpsList = corpsResp.data?.corporations || corpsResp.data || [];
                 setHistorySchools((Array.isArray(schoolsList) ? schoolsList : []).filter((item) => item && !item.deleted));
                 setHistoryCorporations((Array.isArray(corpsList) ? corpsList : []).filter((item) => item && !item.deleted));
             } catch (err) {
@@ -344,7 +343,6 @@ const RouteHistoryPage = () => {
     const isMobile = useIsMobile();
 
     const softPrimaryBg = alpha(theme.palette.primary.main, 0.04);
-    const softerPrimaryBg = alpha(theme.palette.primary.main, 0.02);
     // El PDF usa el endpoint de estadísticas con los mismos filtros que el historial
     const downloadStatsPdfReport = async () => {
         const fallbackRange = monthRangeFromNow(0);
@@ -421,22 +419,22 @@ const RouteHistoryPage = () => {
             label: groupLabel === 'placa' ? 'Placas' : 'Rutas',
             value: formatNumber(resumen.groupsCount),
             hint: `Cantidad de ${groupLabel === 'placa' ? 'placas' : 'rutas'} en el conjunto filtrado`,
-            icon: <CheckCircle fontSize="small" color="primary" />,
+            icon: <CheckCircle />,
         }] : []),
         {
             key: 'total',
-            label: 'Total Kilómetros',
+            label: 'Total kilómetros',
             value: resumen ? formatKmSummary(resumen.totalKm) : '-',
             hint: 'Kilómetros de los recorridos terminados que cumplen los filtros',
-            icon: <Speed fontSize="small" color="primary" />,
+            icon: <Speed />,
         },
         {
             key: 'avg',
-            label: 'Km Promedio/Día',
+            label: 'Km promedio/día',
             value: resumen ? formatKmSummary(resumen.avgPerActiveDay) : '-',
             hint: 'Promedio por día activo (día con recorridos)',
             chip: resumen ? `Días activos: ${formatNumber(resumen.activeDays)}` : undefined,
-            icon: <CalendarToday fontSize="small" color="primary" />,
+            icon: <CalendarToday />,
         },
         ...(resumen && resumen.groupsCount > 1 && resumen.top ? [{
             key: 'top',
@@ -444,7 +442,7 @@ const RouteHistoryPage = () => {
             // Igual que en el PDF: la ruta lleva su cliente ("18 · Colegio"); la placa va sola
             value: groupLabel === 'ruta' && resumen.top.clientName ? `${resumen.top.key} · ${resumen.top.clientName}` : resumen.top.key,
             hint: `${groupLabel === 'placa' ? 'Placa' : 'Ruta'} con mayor kilometraje (${formatKmSummary(resumen.top.totalKm)})`,
-            icon: <DirectionsBus fontSize="small" color="primary" />,
+            icon: <DirectionsBus />,
         }] : []),
     ];
 
@@ -490,31 +488,26 @@ const RouteHistoryPage = () => {
                     </Box>
                 </Box>
                 {pdfError && <Alert severity="error" sx={{ mb: 1.5 }} onClose={() => setPdfError(null)}>{pdfError}</Alert>}
-                <Grid container spacing={2} alignItems="stretch" sx={{ mb: 2 }}>
+                <StatCardGrid columns={kpiCards.length} sx={{ mb: 2 }}>
                     {kpiCards.map((kpi) => (
-                        <Grid item xs={12} sm={6} md={12 / kpiCards.length} key={kpi.key} sx={{ display: 'flex' }}>
-                            <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, borderColor: 'divider', backgroundColor: softerPrimaryBg, width: '100%', display: 'flex', flexDirection: 'column' }}>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                                    <Box sx={{ minWidth: 0 }}>
-                                        <Typography variant="caption" color="textSecondary">{kpi.label}</Typography>
-                                        <Tooltip title={String(kpi.value)} placement="top" enterDelay={400}>
-                                            <Typography variant="h5" sx={{ letterSpacing: -0.5, fontWeight: 700 }} noWrap>{kpi.value}</Typography>
-                                        </Tooltip>
-                                    </Box>
-                                    <Box sx={{ width: 34, height: 34, flexShrink: 0, borderRadius: 1.5, backgroundColor: softPrimaryBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        {kpi.icon}
-                                    </Box>
-                                </Box>
-                                <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>{kpi.hint}</Typography>
-                                {kpi.chip && (
-                                    <Box sx={{ mt: 1.25 }}>
-                                        <Chip size="small" color="primary" variant="outlined" label={kpi.chip} sx={{ backgroundColor: softPrimaryBg }} />
-                                    </Box>
-                                )}
-                            </Paper>
-                        </Grid>
+                        <StatCard
+                            key={kpi.key}
+                            label={kpi.label}
+                            value={kpi.value}
+                            icon={kpi.icon}
+                            hint={(
+                                <>
+                                    {kpi.hint}
+                                    {kpi.chip && (
+                                        <Box sx={{ mt: 0.75 }}>
+                                            <Chip size="small" color="primary" variant="outlined" label={kpi.chip} sx={{ backgroundColor: softPrimaryBg }} />
+                                        </Box>
+                                    )}
+                                </>
+                            )}
+                        />
                     ))}
-                </Grid>
+                </StatCardGrid>
                 <Divider sx={{ mb: 2 }} />
                 <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
                     {total} recorridos: {clientBreakdown.colegios} de colegios · {clientBreakdown.corporativos} corporativos

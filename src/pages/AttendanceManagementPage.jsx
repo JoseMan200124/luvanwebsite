@@ -44,6 +44,9 @@ import AppTableContainer from '../components/table/AppTableContainer';
 import RowActions from '../components/table/RowActions';
 import { formatDate } from '../utils/dateFormat';
 import AppDialog from '../components/dialogs/AppDialog';
+import { FactCheck as FactCheckIcon, Percent as PercentIcon, Groups as GroupsIcon, HowToReg as HowToRegIcon } from '@mui/icons-material';
+import { StatCard, StatCardGrid } from '../components/StatCard';
+import { loadCatalog } from '../services/catalogStore';
 
 // Columnas de la tabla de asistencias
 const COLUMNS = [
@@ -168,8 +171,8 @@ const AttendanceManagementPage = () => {
 
     const fetchSchools = async () => {
         try {
-            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true } });
-            const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
+            const schoolsList = await loadCatalog('schools', { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true });
+            const schoolsData = schoolsList;
             setSchools(schoolsData);
         } catch (error) {
             console.error('Error al cargar colegios:', error);
@@ -319,56 +322,12 @@ const AttendanceManagementPage = () => {
                 />
 
                 {/* Estadísticas */}
-                <Grid container spacing={3} mb={3}>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Total Registros
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.total}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Promedio Asistencia
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.averageAttendance}%
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Total Alumnos
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.totalStudents}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Alumnos Presentes
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.totalPresent}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                </Grid>
+                <StatCardGrid columns={4}>
+                    <StatCard label="Total registros" value={statistics.total} icon={<FactCheckIcon />} format="number" />
+                    <StatCard label="Promedio asistencia" value={`${statistics.averageAttendance}%`} icon={<PercentIcon />} />
+                    <StatCard label="Total alumnos" value={statistics.totalStudents} icon={<GroupsIcon />} format="number" />
+                    <StatCard label="Alumnos presentes" value={statistics.totalPresent} icon={<HowToRegIcon />} format="number" />
+                </StatCardGrid>
 
                 {/* Filtros */}
                 <FilterBar {...pageFilters.barProps} loading={loading} />

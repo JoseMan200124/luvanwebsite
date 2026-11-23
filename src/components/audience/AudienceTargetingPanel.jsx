@@ -894,14 +894,14 @@ const AudienceTargetingPanel = ({
                                         </Box>
                                     </Box>
                                     <MultiChipSelect
-                                        label="Tipo de Ruta"
+                                        label="Tipo de ruta"
                                         options={ROUTE_TYPE_OPTIONS}
                                         value={value.padreFilters?.routeTypes || []}
                                         onChange={(next) => onChange(setPadreFilter(value, 'routeTypes', next))}
                                         required
                                     />
                                     <MultiChipSelect
-                                        label="Estado del Servicio"
+                                        label="Estado del servicio"
                                         options={SERVICE_STATUS_OPTIONS}
                                         value={value.padreFilters?.serviceStatuses || []}
                                         onChange={(next) => onChange(setPadreFilter(value, 'serviceStatuses', next))}
@@ -909,7 +909,7 @@ const AudienceTargetingPanel = ({
                                     />
                                     {!paymentsExempt && (
                                         <MultiChipSelect
-                                            label="Estado de Pago"
+                                            label="Estado de pago"
                                             options={PAYMENT_STATUS_OPTIONS}
                                             value={value.padreFilters?.paymentStatuses || []}
                                             onChange={(next) => onChange(setPadreFilter(value, 'paymentStatuses', next))}
@@ -928,16 +928,16 @@ const AudienceTargetingPanel = ({
                                                 <Typography variant="body2">Incluir familias sin flujo de pagos</Typography>
                                                 <Typography variant="caption" color="text.secondary">
                                                     {schoolsChoice === 'all'
-                                                        ? 'Suma a las familias de colegios que no manejan pagos (p. ej. cursos de vacaciones), que no tienen Estado de Pago y de otro modo quedan fuera.'
-                                                        : `Suma a las familias de ${noPaymentSelectedSchools.map((school) => school.name).join(', ')}, que no manejan pagos y no tienen Estado de Pago, por lo que de otro modo quedan fuera.`}
+                                                        ? 'Suma a las familias de colegios que no manejan pagos (p. ej. cursos de vacaciones), que no tienen Estado de pago y de otro modo quedan fuera.'
+                                                        : `Suma a las familias de ${noPaymentSelectedSchools.map((school) => school.name).join(', ')}, que no manejan pagos y no tienen Estado de pago, por lo que de otro modo quedan fuera.`}
                                                 </Typography>
                                             </Box>
                                         </Box>
                                     )}
                                     <FormHelperText>
                                         {paymentsExempt
-                                            ? 'Tipo de Ruta y Estado del Servicio son obligatorios. Los colegios elegidos no tienen flujo de pagos, por eso no hay Estado de Pago. '
-                                            : 'Tipo de Ruta, Estado del Servicio y Estado de Pago son obligatorios. '}
+                                            ? 'Tipo de ruta y Estado del servicio son obligatorios. Los colegios elegidos no tienen flujo de pagos, por eso no hay Estado de pago. '
+                                            : 'Tipo de ruta, Estado del servicio y Estado de pago son obligatorios. '}
                                         «Incluir familias sin ruta» e «Incluir familias sin flujo de pagos» son opcionales.
                                     </FormHelperText>
                                 </AccordionDetails>

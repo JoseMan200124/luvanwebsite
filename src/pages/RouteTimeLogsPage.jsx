@@ -11,9 +11,6 @@ import {
     TableRow,
     CircularProgress,
     Box,
-    Grid,
-    Card,
-    CardContent,
     Chip,
 } from '@mui/material';
 import { Delete as DeleteIcon } from '@mui/icons-material';
@@ -40,6 +37,8 @@ import SortableTableHead from '../components/table/SortableTableHead';
 import AppTableContainer from '../components/table/AppTableContainer';
 import RowActions from '../components/table/RowActions';
 import { formatTime, formatDate } from '../utils/dateFormat';
+import { FactCheck as FactCheckIcon, Timer as TimerIcon } from '@mui/icons-material';
+import { StatCard, StatCardGrid } from '../components/StatCard';
 
 // Columnas de la tabla
 const COLUMNS = [
@@ -473,47 +472,14 @@ const RouteTimeLogsPage = () => {
                 />
 
                 {/* Estadísticas */}
-                <Grid container spacing={3} mb={3}>
-                    <Grid item xs={12} sm={6}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Total Registros
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.total}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Duración Promedio
-                                </Typography>
-                                <Box display="flex" alignItems="baseline" gap={2}>
-                                    <Box>
-                                        <Typography variant="h3" component="span">
-                                            {Math.floor(Number.parseFloat(statistics.averageDuration) / 60) || 0}
-                                        </Typography>
-                                        <Typography variant="h6" component="span" color="textSecondary">
-                                            {' h '}
-                                        </Typography>
-                                    </Box>
-                                    <Box>
-                                        <Typography variant="h3" component="span">
-                                            {Math.round(Number.parseFloat(statistics.averageDuration) % 60) || 0}
-                                        </Typography>
-                                        <Typography variant="h6" component="span" color="textSecondary">
-                                            {' min'}
-                                        </Typography>
-                                    </Box>
-                                </Box>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                </Grid>
+                <StatCardGrid columns={2}>
+                    <StatCard label="Total registros" value={statistics.total} icon={<FactCheckIcon />} format="number" />
+                    <StatCard
+                        label="Duración promedio"
+                        icon={<TimerIcon />}
+                        value={`${Math.floor(Number.parseFloat(statistics.averageDuration) / 60) || 0} h ${Math.round(Number.parseFloat(statistics.averageDuration) % 60) || 0} min`}
+                    />
+                </StatCardGrid>
 
                 {/* Filtros */}
                 <FilterBar {...pageFilters.barProps} loading={loading} />

@@ -19,8 +19,6 @@ import {
     Grid,
     Chip,
     CircularProgress,
-    Card,
-    CardContent,
 } from '@mui/material';
 import {
     Visibility as VisibilityIcon,
@@ -29,10 +27,10 @@ import {
     HelpOutline as HelpOutlineIcon
 } from '@mui/icons-material';
 import {
-    Cancel as CancelIcon
+    Cancel as CancelIcon,
+    Assignment as AssignmentIcon,
+    Flag as FlagIcon
 } from '@mui/icons-material';
-import tw from 'twin.macro';
-import styled from 'styled-components';
 import StatusChip from '../components/StatusChip';
 import { REQUEST_STATUS, getStatusLabel } from '../constants/statuses';
 import { formatDateTime } from '../utils/dateFormat';
@@ -66,13 +64,10 @@ import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import useClientScope from '../hooks/useClientScope';
 import AppDialog from '../components/dialogs/AppDialog';
+import { StatCard, StatCardGrid } from '../components/StatCard';
 import usePermissions from '../hooks/usePermissions';
 
 const SELECTABLE_REQUEST_STATES = Object.keys(REQUEST_STATES).filter((s) => s !== 'approved');
-
-const StatsCard = styled(Card)`
-    ${tw`h-full`}
-`;
 
 /**
  * RequestsPage
@@ -698,65 +693,38 @@ const RequestsPage = () => {
 
             {/* Statistics */}
             {statistics && (
-                <Grid container spacing={3} sx={{ mb: 3 }}>
-                    <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>Total</Typography>
-                                <Typography variant="h4">{statistics.totalRequests}</Typography>
-                            </CardContent>
-                        </StatsCard>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard sx={{ borderLeft: `4px solid ${REQUEST_STATUS.pending.color}` }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>Pendientes</Typography>
-                                <Typography variant="h4" color={REQUEST_STATUS.pending.color}>{statistics.pendingRequests}</Typography>
-                            </CardContent>
-                        </StatsCard>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard sx={{ borderLeft: `4px solid ${REQUEST_STATUS.in_review.color}` }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>En revisión</Typography>
-                                <Typography variant="h4" color={REQUEST_STATUS.in_review.color}>{statistics.inReviewRequests ?? 0}</Typography>
-                            </CardContent>
-                        </StatsCard>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard sx={{ borderLeft: `4px solid ${REQUEST_STATUS.completed.color}` }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>Completadas</Typography>
-                                <Typography variant="h4" color={REQUEST_STATUS.completed.color}>{statistics.approvedRequests}</Typography>
-                            </CardContent>
-                        </StatsCard>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard sx={{ borderLeft: `4px solid ${REQUEST_STATUS.rejected.color}` }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>Rechazadas</Typography>
-                                <Typography variant="h4" color={REQUEST_STATUS.rejected.color}>{statistics.rejectedRequests}</Typography>
-                            </CardContent>
-                        </StatsCard>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>Por Prioridad</Typography>
-                                <Grid container spacing={1} sx={{ mt: 1 }}>
-                                    {['urgent','high','medium','low'].map((p) => (
-                                        <Grid item xs={6} key={p}>
-                                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                                <Typography variant="body2">{PRIORITY_LABELS_ES[p] || p}</Typography>
-                                                <Typography variant="h6">{statistics.priorityCounts?.[p] ?? 0}</Typography>
-                                            </Box>
-                                        </Grid>
-                                    ))}
-                                </Grid>
-                            </CardContent>
-                        </StatsCard>
-                    </Grid>
-                </Grid>
+                <StatCardGrid columns={{ md: 3, lg: 6 }}>
+                    <StatCard label="Total" value={statistics.totalRequests} icon={<AssignmentIcon />} format="number" />
+                    {[
+                        { label: 'Pendientes', status: REQUEST_STATUS.pending, value: statistics.pendingRequests },
+                        { label: 'En revisión', status: REQUEST_STATUS.in_review, value: statistics.inReviewRequests ?? 0 },
+                        { label: 'Completadas', status: REQUEST_STATUS.completed, value: statistics.approvedRequests },
+                        { label: 'Rechazadas', status: REQUEST_STATUS.rejected, value: statistics.rejectedRequests },
+                    ].map(({ label, status, value }) => {
+                        const StatusIcon = status.icon;
+                        return (
+                            <StatCard
+                                key={label}
+                                label={label}
+                                value={value}
+                                icon={<StatusIcon />}
+                                color={status.color}
+                                valueColor={status.color}
+                                format="number"
+                            />
+                        );
+                    })}
+                    <StatCard label="Por prioridad" icon={<FlagIcon />}>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', mt: 0.25, pr: 0.5 }}>
+                            {['urgent', 'high', 'medium', 'low'].map((p) => (
+                                <Box key={p} sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1.5 }}>
+                                    <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.4 }}>{PRIORITY_LABELS_ES[p] || p}</Typography>
+                                    <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.4 }}>{statistics.priorityCounts?.[p] ?? 0}</Typography>
+                                </Box>
+                            ))}
+                        </Box>
+                    </StatCard>
+                </StatCardGrid>
             )}
 
             <FilterBar {...pageFilters.barProps} loading={loading} />

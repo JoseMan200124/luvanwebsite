@@ -13,11 +13,7 @@ export const ROLE_OPTIONS = [
     { value: 'auxiliars',   label: 'Auxiliares' },
 ];
 
-export const ROUTE_TYPE_OPTIONS = [
-    { value: 'Completa', label: 'Completa' },
-    { value: 'Media AM', label: 'Media AM' },
-    { value: 'Media PM', label: 'Media PM' },
-];
+export { ROUTE_TYPE_OPTIONS } from '../../constants/options';
 
 export const SERVICE_STATUS_OPTIONS = toStatusOptions(SERVICE_STATUS, ['ACTIVE', 'PAUSED', 'SUSPENDED', 'PENDING_START']);
 

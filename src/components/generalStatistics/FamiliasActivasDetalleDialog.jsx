@@ -5,14 +5,15 @@
 // El corte es el último día del mes; en un mes en curso, hoy.
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    Box, Button, Chip, CircularProgress, Collapse, FormControlLabel, IconButton, InputAdornment, Stack, Switch, Table, TableBody, TableCell, TableHead, TableRow,
-    TextField, Tooltip, Typography
+    Box, Button, Chip, CircularProgress, Collapse, FormControlLabel, IconButton, Stack, Switch, Table, TableBody, TableCell, TableHead, TableRow,
+    Tooltip, Typography
 } from '@mui/material';
 import {
-    CheckCircleOutline, DeleteOutline, ExpandLess, ExpandMore, PauseCircleOutline, Search
+    CheckCircleOutline, DeleteOutline, ExpandLess, ExpandMore, PauseCircleOutline
 } from '@mui/icons-material';
 import { ESTADOS, sxChip, numeros, ChipSinPagos } from './FamiliasActivasComun';
 import AppDialog from '../dialogs/AppDialog';
+import SearchInput from '../form/SearchInput';
 
 const ESTADO_ALUMNO = {
     ACTIVO: { etiqueta: 'Activo', plural: ['activo', 'activos'], color: 'success', Icono: CheckCircleOutline, orden: 0 },
@@ -349,13 +350,11 @@ const FamiliasActivasDetalleDialog = ({ detalle, cargando, hoy, onClose, onDesca
 
                     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }} justifyContent="space-between" sx={{ mb: 1 }}>
                         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }}>
-                            <TextField
-                                size="small"
+                            <SearchInput
+                                label="Buscar familia, correo o alumno"
                                 value={busqueda}
-                                onChange={(e) => setBusqueda(e.target.value)}
-                                placeholder="Buscar familia, correo o alumno"
+                                onChange={setBusqueda}
                                 sx={{ minWidth: 320 }}
-                                InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }}
                             />
                             {hayFamilias && (
                                 <FormControlLabel

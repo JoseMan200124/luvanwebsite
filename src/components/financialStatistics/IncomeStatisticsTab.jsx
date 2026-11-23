@@ -10,8 +10,6 @@ import {
     MenuItem,
     ToggleButton,
     ToggleButtonGroup,
-    TextField,
-    InputAdornment,
     IconButton,
     Tooltip,
     Chip,
@@ -24,7 +22,7 @@ import {
     Paper,
     Collapse
 } from '@mui/material';
-import { InfoOutlined, Search, ChevronLeft, ChevronRight, Download, KeyboardArrowRight, KeyboardArrowDown } from '@mui/icons-material';
+import { InfoOutlined,  ChevronLeft, ChevronRight, Download, KeyboardArrowRight, KeyboardArrowDown } from '@mui/icons-material';
 import api from '../../utils/axiosConfig';
 import useRegisterPageRefresh from '../../hooks/useRegisterPageRefresh';
 import FilterBar from '../filters/FilterBar';
@@ -38,6 +36,10 @@ import moment from 'moment-timezone';
 import 'moment/locale/es';
 import { formatMonth, formatDateTime } from '../../utils/dateFormat';
 import { formatQ } from '../../utils/currency';
+import { Payments as PaymentsIcon, TrendingUp as TrendingUpIcon, TrendingDown as TrendingDownIcon, FamilyRestroom as FamilyIcon, WarningAmber as WarningIcon } from '@mui/icons-material';
+import { StatCard, StatCardGrid } from '../StatCard';
+import { loadCatalog } from '../../services/catalogStore';
+import SearchInput from '../form/SearchInput';
 
 const ROWS_PER_PAGE_OPTIONS = [5, 8, 10, 15, 25, 50];
 const DEFAULT_ROWS_PER_PAGE = 8;
@@ -295,8 +297,8 @@ const IncomeStatisticsTab = () => {
 
     const fetchSchools = useCallback(async () => {
         try {
-            const res = await api.get('/schools', { params: { allCycles: true, includeArchived: true } });
-            setSchools((res.data.schools || []).filter((s) => s.paymentsEnabled !== false));
+            const schoolsList = await loadCatalog('schools', { allCycles: true, includeArchived: true });
+            setSchools(schoolsList.filter((s) => s.paymentsEnabled !== false));
         } catch (e) {
             console.error('fetchSchools error', e);
         }
@@ -660,11 +662,11 @@ const IncomeStatisticsTab = () => {
     }, [result, metricsBasis]);
 
     const kpis = totales ? [
-        { key: 'ingresoTotal', label: 'Ingreso Total', type: 'money', basis: true, color: '#2e7d32' },
-        { key: 'tasaDePago', label: 'Tasa de Pago', type: 'percent', color: '#4caf50' },
-        { key: 'tasaDeMora', label: 'Tasa de Mora', type: 'percent', color: '#f44336' },
-        { key: 'familiasActivas', label: 'Familias Facturadas', type: 'int', color: '#1976d2' },
-        { key: 'moraPendiente', label: 'Mora Pendiente', type: 'money', color: '#d32f2f' }
+        { key: 'ingresoTotal', label: 'Ingreso Total', type: 'money', basis: true, color: '#2e7d32', icon: PaymentsIcon },
+        { key: 'tasaDePago', label: 'Tasa de Pago', type: 'percent', color: '#4caf50', icon: TrendingUpIcon },
+        { key: 'tasaDeMora', label: 'Tasa de Mora', type: 'percent', color: '#f44336', icon: TrendingDownIcon },
+        { key: 'familiasActivas', label: 'Familias Facturadas', type: 'int', color: '#1976d2', icon: FamilyIcon },
+        { key: 'moraPendiente', label: 'Mora Pendiente', type: 'money', color: '#d32f2f', icon: WarningIcon }
     ] : [];
 
     return (
@@ -713,28 +715,28 @@ const IncomeStatisticsTab = () => {
                 <div style={{ backgroundColor: '#fff', padding: '16px', overflowX: 'auto' }}>
                     {/* KPI cards */}
                     {kpis.length > 0 && (
-                        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 2, mb: 3 }}>
+                        <StatCardGrid columns={{ md: 3, lg: 5 }}>
                             {kpis.map((kpi) => {
                                 const kpiTooltip = getMetricTooltip(kpi.key);
+                                const KpiIcon = kpi.icon;
                                 return (
-                                    <Box key={kpi.key} sx={{ bgcolor: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 1, p: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.75 }}>
-                                            <Typography sx={{ fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#6B7280', fontWeight: 600 }}>
+                                    <StatCard
+                                        key={kpi.key}
+                                        label={kpiTooltip ? (
+                                            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
                                                 {kpi.label}
-                                            </Typography>
-                                            {kpiTooltip ? (
                                                 <Tooltip title={kpiTooltip} arrow>
                                                     <InfoOutlined sx={{ fontSize: 13, color: 'text.disabled', cursor: 'help' }} />
                                                 </Tooltip>
-                                            ) : null}
-                                        </Box>
-                                        <Typography sx={{ fontWeight: 700, fontSize: 26, color: kpi.color }}>
-                                            {formatMetric(totales, kpi, metricsBasis)}
-                                        </Typography>
-                                    </Box>
+                                            </Box>
+                                        ) : kpi.label}
+                                        value={formatMetric(totales, kpi, metricsBasis)}
+                                        icon={<KpiIcon />}
+                                        valueColor={kpi.color}
+                                    />
                                 );
                             })}
-                        </Box>
+                        </StatCardGrid>
                     )}
 
                     {/* Top colegios */}
@@ -787,19 +789,11 @@ const IncomeStatisticsTab = () => {
                                 );
                             })}
                         </Box>
-                        <TextField
-                            size="small"
-                            placeholder="Buscar colegio…"
+                        <SearchInput
+                            label="Buscar colegio"
                             value={search}
-                            onChange={onSearchChange}
+                            onChange={(value) => onSearchChange({ target: { value } })}
                             sx={{ width: 220, bgcolor: '#fff', borderRadius: 1 }}
-                            InputProps={{
-                                startAdornment: (
-                                    <InputAdornment position="start">
-                                        <Search sx={{ fontSize: 18, opacity: 0.5 }} />
-                                    </InputAdornment>
-                                )
-                            }}
                         />
                     </Box>
 

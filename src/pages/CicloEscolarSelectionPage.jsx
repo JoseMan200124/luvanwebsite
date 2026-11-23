@@ -80,6 +80,7 @@ import { formatClock, formatDateTime } from '../utils/dateFormat';
 import { formatQ } from '../utils/currency';
 import { SCHOOL_OPERATION_STATUS, SCHOOL_ENROLLMENT_STATUS, getStatusMeta } from '../constants/statuses';
 import AppDialog from '../components/dialogs/AppDialog';
+import { invalidateCatalog } from '../services/catalogStore';
 
 const SchoolCard = styled(Card)`
     ${tw`cursor-pointer transition-all duration-300`}
@@ -482,6 +483,7 @@ const CicloEscolarSelectionPage = () => {
     }, [notify]);
 
     const fetchSchoolsByYear = useCallback(async () => {
+        invalidateCatalog('schools');
         setLoading(true);
         try {
             const params = {

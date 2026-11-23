@@ -11,8 +11,6 @@ import {
     CircularProgress,
     Box,
     Grid,
-    Card,
-    CardContent,
     Chip,
     IconButton,
     Tooltip,
@@ -65,6 +63,9 @@ import { formatDate, formatDateTime } from '../utils/dateFormat';
 import { useCurrentDate } from '../hooks/useCurrentDate';
 import { downloadBlob, readBlobError } from '../utils/download';
 import { buildFileName } from '../utils/fileName';
+import { Assignment as AssignmentIcon, AltRoute as AltRouteIcon, EventBusy as EventBusyIcon } from '@mui/icons-material';
+import { StatCard, StatCardGrid } from '../components/StatCard';
+import { loadCatalog } from '../services/catalogStore';
 
 const NO_FAILURES_FILTER_VALUE = 'sin_fallas';
 
@@ -205,8 +206,8 @@ const FailureMappingPage = () => {
 
     const fetchSchools = async () => {
         try {
-            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true } });
-            const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
+            const schoolsList = await loadCatalog('schools', { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true });
+            const schoolsData = schoolsList;
             setSchools(schoolsData);
         } catch (error) {
             console.error('Error al cargar colegios:', error);
@@ -216,8 +217,8 @@ const FailureMappingPage = () => {
 
     const fetchCorporations = async () => {
         try {
-            const response = await api.get('/corporations', { params: getCicloEscolarFilterParams(draftCycle) });
-            const corporationsData = Array.isArray(response.data) ? response.data : (response.data?.corporations || []);
+            const corporationsList = await loadCatalog('corporations', getCicloEscolarFilterParams(draftCycle));
+            const corporationsData = corporationsList;
             setCorporations(corporationsData);
         } catch (error) {
             console.error('Error al cargar corporaciones:', error);
@@ -412,8 +413,8 @@ const FailureMappingPage = () => {
     // Colegios de todos los ciclos para el modal: el selector de cliente los agrupa por ciclo
     const fetchPdfModalSchools = async () => {
         try {
-            const response = await api.get('/schools', { params: { allCycles: true, includeArchived: true } });
-            const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
+            const schoolsList = await loadCatalog('schools', { allCycles: true, includeArchived: true });
+            const schoolsData = schoolsList;
             setPdfModalSchools(schoolsData);
         } catch (error) {
             console.error('Error al cargar colegios para modal PDF:', error);
@@ -589,59 +590,18 @@ const FailureMappingPage = () => {
                 />
 
                 {/* Estadísticas */}
-                <Grid container spacing={3} mb={3}>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Total Registros
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.total}
-                                </Typography>
-                                <Typography variant="caption" color="textSecondary" display="block">
-                                    {statistics.colegios} de colegios · {statistics.corporativos} corporativos
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Accidentes
-                                </Typography>
-                                <Typography variant="h4" color="error">
-                                    {statistics.byTipo['accidente'] || 0}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Afectó Recorrido
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.withRouteAffected}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Días No Operacionales
-                                </Typography>
-                                <Typography variant="h4" color="warning.main">
-                                    {statistics.noOperacional}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                </Grid>
+                <StatCardGrid columns={4}>
+                    <StatCard
+                        label="Total registros"
+                        value={statistics.total}
+                        icon={<AssignmentIcon />}
+                        format="number"
+                        hint={`${statistics.colegios} de colegios · ${statistics.corporativos} corporativos`}
+                    />
+                    <StatCard label="Accidentes" value={statistics.byTipo['accidente'] || 0} icon={<CrashIcon />} valueColor="error" format="number" />
+                    <StatCard label="Afectó recorrido" value={statistics.withRouteAffected} icon={<AltRouteIcon />} format="number" />
+                    <StatCard label="Días no operacionales" value={statistics.noOperacional} icon={<EventBusyIcon />} valueColor="warning.main" format="number" />
+                </StatCardGrid>
 
                 {/* Filtros */}
                 <FilterBar

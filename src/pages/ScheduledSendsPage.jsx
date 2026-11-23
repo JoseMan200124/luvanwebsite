@@ -9,7 +9,6 @@ import {
     Cancel as CancelIcon, Edit as EditIcon, ExpandMore as ExpandMoreIcon, Replay as ReplayIcon,
     Visibility as VisibilityIcon, ScheduleSend as ScheduleSendIcon,
 } from '@mui/icons-material';
-import api from '../utils/axiosConfig';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F } from '../components/filters/filterFields';
@@ -36,6 +35,7 @@ import { formatDateTime } from '../utils/dateFormat';
 import { SCHEDULED_SEND_STATUS, SCHEDULED_RUN_STATUS, getStatusLabel } from '../constants/statuses';
 import StatusChip from '../components/StatusChip';
 import AppDialog from '../components/dialogs/AppDialog';
+import { loadCatalog } from '../services/catalogStore';
 
 // Secciones desplegables de la vista (una por estado). `hint` explica qué significa cada estado.
 const SECTIONS = [
@@ -295,8 +295,8 @@ const ScheduledSendsPage = () => {
         try {
             const item = await getScheduledSend(uuid);
             // El panel de audiencia necesita los colegios del ciclo del envío.
-            const response = await api.get('/schools', { params: { cicloEscolarId: item.cicloEscolarId, includeArchived: true } });
-            setEditSchools(normalizeSchools(response.data?.schools));
+            const schoolsList = await loadCatalog('schools', { cicloEscolarId: item.cicloEscolarId, includeArchived: true });
+            setEditSchools(normalizeSchools(schoolsList));
             setEditing(item);
         } catch (err) {
             showError(err, 'Error al abrir el envío para editar.');

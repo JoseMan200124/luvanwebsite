@@ -18,8 +18,6 @@ import {
     CircularProgress,
     Box,
     Grid,
-    Card,
-    CardContent,
     Select,
     MenuItem,
     FormControl,
@@ -68,10 +66,14 @@ import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
 import AppDialog from '../components/dialogs/AppDialog';
+import EntitySelect from '../components/form/EntitySelect';
 import { buildFileName } from '../utils/fileName';
 import { todayForFileName } from '../utils/download';
 import MoneyField from '../components/form/MoneyField';
 import { validate, hasErrors, focusFirstError, clearError } from '../utils/validators';
+import { LocalGasStation as LocalGasStationIcon, Payments as PaymentsIcon, Sell as PriceIcon, Speed as SpeedIcon } from '@mui/icons-material';
+import { StatCard, StatCardGrid } from '../components/StatCard';
+import { loadCatalog } from '../services/catalogStore';
 
 // Campos obligatorios de los formularios (los mismos que exige el servidor; galones y precio, mayores que 0).
 const CREATE_RULES = {
@@ -104,9 +106,6 @@ const getBusClientId = (bus, type) => {
 // Feature flag: mostrar la nueva métrica de consumo (activar manualmente cuando corresponda)
 const SHOW_NEW_FUEL_METRIC = false;
 
-// Tamaño dinámico de las tarjetas para evitar huecos en la fila
-const cardMd = SHOW_NEW_FUEL_METRIC ? 2.4 : 3;
-
 // Columnas de la tabla
 const COLUMNS = [
     { id: 'recordDate', label: 'Fecha', sortable: true },
@@ -115,7 +114,7 @@ const COLUMNS = [
     { id: 'plate', label: 'Placa', sortable: true },
     { id: 'pilotName', label: 'Piloto', sortable: true },
     { id: 'fuelingReason', label: 'Razón', sortable: true },
-    { id: 'fuelType', label: 'Tipo Combustible', sortable: true },
+    { id: 'fuelType', label: 'Tipo de combustible', sortable: true },
     { id: 'anotacion', label: 'Anotación', align: 'center' },
     { id: 'gallonage', label: 'Galones', sortable: true, align: 'right' },
     { id: 'pricePerGallon', label: 'Precio/Galón', sortable: true, align: 'right' },
@@ -272,9 +271,7 @@ const FuelRecordsPage = () => {
             return;
         }
         try {
-            const response = await api.get('/users/pilots');
-            const pilotsData = Array.isArray(response.data?.users) ? response.data.users : (response.data || []);
-            setPilots(pilotsData);
+            setPilots(await loadCatalog('pilots'));
         } catch (error) {
             console.error('Error al cargar pilotos:', error);
             setPilots([]);
@@ -291,9 +288,7 @@ const FuelRecordsPage = () => {
 
     const fetchSchools = async () => {
         try {
-            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true } });
-            const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
-            setSchools(schoolsData);
+            setSchools(await loadCatalog('schools', { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true }));
         } catch (error) {
             console.error('Error al cargar colegios:', error);
             setSchools([]);
@@ -303,8 +298,11 @@ const FuelRecordsPage = () => {
     const fetchBusesBySchool = async (schoolId) => {
         try {
             // Si no se pasa schoolId, traemos todos los buses para permitir seleccionar placa independientemente.
-            const url = schoolId ? `/buses/school/${schoolId}` : '/buses/simple';
-            const response = await api.get(url);
+            if (!schoolId) {
+                setBuses(await loadCatalog('buses'));
+                return;
+            }
+            const response = await api.get(`/buses/school/${schoolId}`);
             const busesData = Array.isArray(response.data) ? response.data : (response.data?.buses || []);
             setBuses(busesData);
         } catch (error) {
@@ -315,9 +313,7 @@ const FuelRecordsPage = () => {
 
     const fetchCorporations = async () => {
         try {
-            const response = await api.get('/corporations');
-            const corporationsData = Array.isArray(response.data) ? response.data : (response.data?.corporations || []);
-            setCorporations(corporationsData);
+            setCorporations(await loadCatalog('corporations'));
         } catch (error) {
             console.error('Error al cargar corporaciones:', error);
             setCorporations([]);
@@ -677,15 +673,11 @@ const FuelRecordsPage = () => {
             // (p. ej. creado en un colegio de 2027 que en realidad es de 2026).
             // Sin allCycles, interceptor y backend limitarían a uno.
             const params = { allCycles: true, includeArchived: true };
-            const [schoolsResponse, corporationsResponse, busesResponse] = await Promise.all([
-                api.get('/schools', { params }),
-                api.get('/corporations'),
-                api.get('/buses/simple')
+            const [schoolsData, corporationsData, busesData] = await Promise.all([
+                loadCatalog('schools', params),
+                loadCatalog('corporations'),
+                loadCatalog('buses')
             ]);
-
-            const schoolsData = Array.isArray(schoolsResponse.data) ? schoolsResponse.data : (schoolsResponse.data?.schools || []);
-            const corporationsData = Array.isArray(corporationsResponse.data) ? corporationsResponse.data : (corporationsResponse.data?.corporations || []);
-            const busesData = Array.isArray(busesResponse.data) ? busesResponse.data : (busesResponse.data?.buses || []);
 
             setEditSchools(schoolsData);
             setEditCorporations(corporationsData);
@@ -990,89 +982,35 @@ const FuelRecordsPage = () => {
                 />
 
                 {/* Estadísticas */}
-                <Grid container spacing={3} mb={3} alignItems="stretch">
-                    {/* Ajuste md dinámico para evitar hueco cuando la tarjeta nueva está oculta */}
-                    {/** cardMd: 2.4 cuando mostramos 5 cards; 3 cuando mostramos solo 4 **/}
-                    
-                    <Grid item xs={12} sm={6} md={cardMd}>
-                        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 140 }}>
-                            <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', py: 1.5 }}>
-                                <Box display="flex" alignItems="center" mb={1}>
-                                    <GasIcon color="primary" sx={{ mr: 1 }} />
-                                    <Typography color="textSecondary" variant="body2">
-                                        Total Registros
-                                    </Typography>
-                                </Box>
-                                <Typography variant="h4">
-                                    {statistics.totalRecords}
-                                </Typography>
-                                <Typography variant="caption" color="textSecondary" display="block">
-                                    {clientBreakdown.colegios} de colegios · {clientBreakdown.corporativos} corporativos
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={cardMd}>
-                        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 140 }}>
-                            <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', py: 1.5 }}>
-                                <Typography color="textSecondary" gutterBottom variant="body2">
-                                    Total Galones
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.totalGallons.toFixed(2)}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={cardMd}>
-                        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 140 }}>
-                            <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', py: 1.5 }}>
-                                <Typography color="textSecondary" gutterBottom variant="body2">
-                                    Total Gastado
-                                </Typography>
-                                <Typography variant="h4">
-                                    {formatQ(statistics.totalAmount || 0)}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={cardMd}>
-                        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 140 }}>
-                            <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', py: 1.5 }}>
-                                <Typography color="textSecondary" gutterBottom variant="body2">
-                                    Precio Promedio/Galón
-                                </Typography>
-                                <Typography variant="h4">
-                                    {formatQ(statistics.averagePrice || 0)}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
+                <StatCardGrid columns={SHOW_NEW_FUEL_METRIC ? 5 : 4}>
+                    <StatCard
+                        label="Total registros"
+                        value={statistics.totalRecords}
+                        icon={<GasIcon />}
+                        format="number"
+                        hint={`${clientBreakdown.colegios} de colegios · ${clientBreakdown.corporativos} corporativos`}
+                    />
+                    <StatCard label="Total galones" value={statistics.totalGallons.toFixed(2)} icon={<LocalGasStationIcon />} />
+                    <StatCard label="Total gastado" value={statistics.totalAmount || 0} icon={<PaymentsIcon />} format="money" />
+                    <StatCard label="Precio promedio/galón" value={statistics.averagePrice || 0} icon={<PriceIcon />} format="money" />
                     {SHOW_NEW_FUEL_METRIC && (
-                        <Grid item xs={12} sm={6} md={2.4}>
-                            <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 140 }}>
-                                <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', py: 1.5 }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <Typography color="textSecondary" gutterBottom variant="body2" sx={{ mb: 0 }}>
-                                            Consumo de combustible por días/recorrido
-                                        </Typography>
-                                        <Tooltip title="¿Cómo se calcula esto?">
-                                            <IconButton size="small" onClick={() => setEfficiencyInfoOpen(true)} sx={{ ml: 0.5, p: 0.25 }}>
-                                                <InfoOutlinedIcon fontSize="small" color="action" />
-                                            </IconButton>
-                                        </Tooltip>
-                                    </Box>
-                                    <Typography variant="h5" sx={{ lineHeight: 1.2 }}>
-                                        {(Number(statistics.efficiency?.estimatedConsumptionPerDay) || 0).toFixed(2)} gal/día
-                                    </Typography>
-                                    <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
-                                        {(Number(statistics.efficiency?.estimatedConsumptionPerRoute) || 0).toFixed(2)} gal/recorrido
-                                    </Typography>
-                                </CardContent>
-                            </Card>
-                        </Grid>
+                        <StatCard
+                            label={(
+                                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center' }}>
+                                    Consumo de combustible por días/recorrido
+                                    <Tooltip title="¿Cómo se calcula esto?">
+                                        <IconButton size="small" onClick={() => setEfficiencyInfoOpen(true)} sx={{ ml: 0.5, p: 0.25 }}>
+                                            <InfoOutlinedIcon fontSize="small" color="action" />
+                                        </IconButton>
+                                    </Tooltip>
+                                </Box>
+                            )}
+                            value={`${(Number(statistics.efficiency?.estimatedConsumptionPerDay) || 0).toFixed(2)} gal/día`}
+                            icon={<SpeedIcon />}
+                            hint={`${(Number(statistics.efficiency?.estimatedConsumptionPerRoute) || 0).toFixed(2)} gal/recorrido`}
+                        />
                     )}
-                </Grid>
+                </StatCardGrid>
 
                 {/* Filtros */}
                 <FilterBar
@@ -1206,38 +1144,27 @@ const FuelRecordsPage = () => {
                         </Grid>
 
                         <Grid item xs={12} sm={6}>
-                            <Autocomplete
-                                options={buses.map(b => ({ label: b.plate, id: b.id, routeNumber: b.routeNumber }))}
-                                value={createForm.busId ? (buses.find(x => x.id === createForm.busId) ? { label: buses.find(x => x.id === createForm.busId).plate, id: createForm.busId } : null) : null}
-                                onChange={(e, newValue) => {
-                                    handleCreateChange('busId', newValue ? newValue.id : '');
-                                }}
-                                getOptionLabel={(option) => option?.label || ''}
-                                renderInput={(params) => (
-                                    <TextField
-                                        {...params}
-                                        label="Bus (placa)"
-                                        variant="outlined"
-                                        name="busId"
-                                        required
-                                        error={Boolean(createErrors.busId)}
-                                        helperText={createErrors.busId}
-                                    />
-                                )}
-                                fullWidth
-                                isOptionEqualToValue={(opt, val) => opt?.id === val?.id}
+                            <EntitySelect
+                                entity="bus"
+                                label="Bus (placa)"
+                                name="busId"
+                                size="medium"
+                                options={buses}
+                                value={createForm.busId}
+                                onChange={(busId) => handleCreateChange('busId', busId)}
+                                required
+                                error={Boolean(createErrors.busId)}
+                                helperText={createErrors.busId}
                             />
                         </Grid>
 
                         <Grid item xs={12} sm={6}>
-                            <Autocomplete
-                                options={pilots.map(p => ({ label: p.name, id: p.id }))}
-                                value={createForm.pilotId ? (pilots.find(x => x.id === createForm.pilotId) ? { label: pilots.find(x => x.id === createForm.pilotId).name, id: createForm.pilotId } : null) : null}
-                                onChange={(e, newValue) => handleCreateChange('pilotId', newValue ? newValue.id : '')}
-                                getOptionLabel={(option) => option?.label || ''}
-                                renderInput={(params) => <TextField {...params} label="Piloto" variant="outlined" />}
-                                fullWidth
-                                isOptionEqualToValue={(opt, val) => opt?.id === val?.id}
+                            <EntitySelect
+                                entity="pilot"
+                                size="medium"
+                                options={pilots}
+                                value={createForm.pilotId}
+                                onChange={(pilotId) => handleCreateChange('pilotId', pilotId)}
                             />
                         </Grid>
 

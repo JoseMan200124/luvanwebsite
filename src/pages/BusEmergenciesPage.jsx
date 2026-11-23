@@ -11,8 +11,6 @@ import {
     CircularProgress,
     Box,
     Grid,
-    Card,
-    CardContent,
     Chip,
     IconButton,
     Tooltip,
@@ -45,6 +43,9 @@ import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
 import { formatDateTime } from '../utils/dateFormat';
 import AppDialog from '../components/dialogs/AppDialog';
+import { GpsFixed as GpsIcon, School as SchoolIcon } from '@mui/icons-material';
+import { StatCard, StatCardGrid } from '../components/StatCard';
+import { loadCatalog } from '../services/catalogStore';
 
 // Columnas de la tabla
 const COLUMNS = [
@@ -136,8 +137,8 @@ const BusEmergenciesPage = () => {
 
     const fetchSchools = async () => {
         try {
-            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true } });
-            const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
+            const schoolsList = await loadCatalog('schools', { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true });
+            const schoolsData = schoolsList;
             setSchools(schoolsData);
         } catch (error) {
             console.error('Error al cargar colegios:', error);
@@ -147,8 +148,8 @@ const BusEmergenciesPage = () => {
 
     const fetchCorporations = async () => {
         try {
-            const response = await api.get('/corporations', { params: getCicloEscolarFilterParams(draftCycle) });
-            const corporationsData = Array.isArray(response.data) ? response.data : (response.data?.corporations || []);
+            const corporationsList = await loadCatalog('corporations', getCicloEscolarFilterParams(draftCycle));
+            const corporationsData = corporationsList;
             setCorporations(corporationsData);
         } catch (error) {
             console.error('Error al cargar corporaciones:', error);
@@ -334,51 +335,26 @@ const BusEmergenciesPage = () => {
                 />
 
                 {/* Estadísticas */}
-                <Grid container spacing={3} mb={3}>
-                    <Grid item xs={12} sm={6} md={4}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Total Emergencias
-                                </Typography>
-                                <Typography variant="h4" color="error">
-                                    {statistics.total}
-                                </Typography>
-                                <Typography variant="caption" color="textSecondary" display="block">
-                                    {statistics.colegios || 0} de colegios · {statistics.corporativos || 0} corporativos
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={4}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Con Ubicación GPS
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.withLocation}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={4}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Colegio con Más Emergencias
-                                </Typography>
-                                <Typography variant="h6">
-                                    {Object.keys(statistics.bySchool).length > 0
-                                        ? Object.keys(statistics.bySchool).reduce((a, b) => 
-                                            statistics.bySchool[a] > statistics.bySchool[b] ? a : b
-                                        )
-                                        : 'N/A'}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                </Grid>
+                <StatCardGrid columns={3}>
+                    <StatCard
+                        label="Total emergencias"
+                        value={statistics.total}
+                        icon={<WarningIcon />}
+                        valueColor="error"
+                        format="number"
+                        hint={`${statistics.colegios || 0} de colegios · ${statistics.corporativos || 0} corporativos`}
+                    />
+                    <StatCard label="Con ubicación GPS" value={statistics.withLocation} icon={<GpsIcon />} format="number" />
+                    <StatCard label="Colegio con más emergencias" icon={<SchoolIcon />}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>
+                            {Object.keys(statistics.bySchool).length > 0
+                                ? Object.keys(statistics.bySchool).reduce((a, b) => (
+                                    statistics.bySchool[a] > statistics.bySchool[b] ? a : b
+                                ))
+                                : 'N/A'}
+                        </Typography>
+                    </StatCard>
+                </StatCardGrid>
 
                 {/* Filtros */}
                 <FilterBar

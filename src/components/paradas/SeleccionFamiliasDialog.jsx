@@ -4,12 +4,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     Alert, Box, Button, Checkbox, CircularProgress,
-    List, ListItem, ListItemButton, ListItemIcon, ListItemText, TextField, Typography,
+    List, ListItem, ListItemButton, ListItemIcon, ListItemText, Typography,
 } from '@mui/material';
 import { Groups } from '@mui/icons-material';
 import AppDialog from '../dialogs/AppDialog';
 import paradasService, { mensajeError } from '../../services/paradasService';
 import { sinTildes as normalizar } from './paradasModel';
+import SearchInput from '../form/SearchInput';
 
 export default function SeleccionFamiliasDialog({
     open, schoolId, titulo, descripcion, textoConfirmar, excluirIds = [], permitirTodasDelFiltro = false,
@@ -77,7 +78,7 @@ export default function SeleccionFamiliasDialog({
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
             <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap' }}>
                 {/* Enter en la búsqueda no confirma la selección. */}
-                <TextField size="small" label="Buscar por apellido" value={busqueda} onChange={e => setBusqueda(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); } }} sx={{ flex: 1 }} />
+                <SearchInput label="Buscar por apellido" value={busqueda} onChange={setBusqueda} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); } }} sx={{ flex: 1 }} />
             </Box>
             <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
                 <Button size="small" onClick={seleccionarVisibles} disabled={!visibles.length}>Seleccionar todas las que se muestran ({visibles.length})</Button>

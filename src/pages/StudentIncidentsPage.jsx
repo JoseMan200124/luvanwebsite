@@ -11,8 +11,6 @@ import {
     CircularProgress,
     Box,
     Grid,
-    Card,
-    CardContent,
     Chip,
 } from '@mui/material';
 import { Visibility as VisibilityIcon } from '@mui/icons-material';
@@ -36,6 +34,9 @@ import AppTableContainer from '../components/table/AppTableContainer';
 import RowActions from '../components/table/RowActions';
 import { formatDateTime } from '../utils/dateFormat';
 import AppDialog from '../components/dialogs/AppDialog';
+import { ReportProblem as ReportIcon, Category as CategoryIcon, Schedule as ScheduleIcon } from '@mui/icons-material';
+import { StatCard, StatCardGrid } from '../components/StatCard';
+import { loadCatalog } from '../services/catalogStore';
 
 const SCHEDULE_OPTIONS = DEFAULT_SCHEDULE_CODES.map((code) => ({ value: code, label: SCHEDULE_LABELS[code] || code }));
 
@@ -125,8 +126,8 @@ const StudentIncidentsPage = () => {
 
     const fetchSchools = async () => {
         try {
-            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true } });
-            const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
+            const schoolsList = await loadCatalog('schools', { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true });
+            const schoolsData = schoolsList;
             setSchools(schoolsData);
         } catch (error) {
             console.error('Error al cargar colegios:', error);
@@ -257,52 +258,27 @@ const StudentIncidentsPage = () => {
                 />
 
                 {/* Estadísticas */}
-                <Grid container spacing={3} mb={3}>
-                    <Grid item xs={12} sm={6} md={4}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Total Incidentes
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.total}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={4}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Tipo Más Común
-                                </Typography>
-                                <Typography variant="h6">
-                                    {Object.keys(statistics.byType).length > 0
-                                        ? INCIDENT_TYPES[Object.keys(statistics.byType).reduce((a, b) => 
-                                            statistics.byType[a] > statistics.byType[b] ? a : b
-                                        )]
-                                        : 'N/A'}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={4}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Horario Más Incidentes
-                                </Typography>
-                                <Typography variant="h6">
-                                    {Object.keys(statistics.bySchedule).length > 0
-                                        ? getScheduleLabel(Object.keys(statistics.bySchedule).reduce((a, b) => 
-                                            statistics.bySchedule[a] > statistics.bySchedule[b] ? a : b
-                                        ))
-                                        : 'N/A'}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                </Grid>
+                <StatCardGrid columns={3}>
+                    <StatCard label="Total incidentes" value={statistics.total} icon={<ReportIcon />} format="number" />
+                    <StatCard label="Tipo más común" icon={<CategoryIcon />}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>
+                            {Object.keys(statistics.byType).length > 0
+                                ? INCIDENT_TYPES[Object.keys(statistics.byType).reduce((a, b) => (
+                                    statistics.byType[a] > statistics.byType[b] ? a : b
+                                ))]
+                                : 'N/A'}
+                        </Typography>
+                    </StatCard>
+                    <StatCard label="Horario con más incidentes" icon={<ScheduleIcon />}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>
+                            {Object.keys(statistics.bySchedule).length > 0
+                                ? getScheduleLabel(Object.keys(statistics.bySchedule).reduce((a, b) => (
+                                    statistics.bySchedule[a] > statistics.bySchedule[b] ? a : b
+                                )))
+                                : 'N/A'}
+                        </Typography>
+                    </StatCard>
+                </StatCardGrid>
 
                 {/* Filtros */}
                 <FilterBar {...pageFilters.barProps} loading={loading} />

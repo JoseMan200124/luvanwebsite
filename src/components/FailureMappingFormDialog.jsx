@@ -11,6 +11,7 @@ import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import moment from 'moment-timezone';
 import api from '../utils/axiosConfig';
+import { loadCatalog } from '../services/catalogStore';
 import {
     FAILURE_TYPES, CONFLICT_CODES, FORCEABLE_CODE, createFailureMappingWeb, updateFailureMapping,
 } from '../services/failureMappingService';
@@ -90,10 +91,10 @@ const FailureMappingFormDialog = ({ open, onClose, onSaved, record = null }) => 
             return undefined;
         }
         let cancelled = false;
-        api.get('/schools', { params: { allCycles: true, includeArchived: true } })
-            .then((response) => {
+        loadCatalog('schools', { allCycles: true, includeArchived: true })
+            .then((data) => {
                 if (!cancelled) {
-                    setSchools(Array.isArray(response.data) ? response.data : (response.data?.schools || []));
+                    setSchools(data);
                 }
             })
             .catch(() => {
@@ -101,10 +102,10 @@ const FailureMappingFormDialog = ({ open, onClose, onSaved, record = null }) => 
                     setSchools([]);
                 }
             });
-        api.get('/corporations', { params: { allCycles: true } })
-            .then((response) => {
+        loadCatalog('corporations', { allCycles: true })
+            .then((data) => {
                 if (!cancelled) {
-                    setCorporations(Array.isArray(response.data) ? response.data : (response.data?.corporations || []));
+                    setCorporations(data);
                 }
             })
             .catch(() => {
@@ -112,10 +113,10 @@ const FailureMappingFormDialog = ({ open, onClose, onSaved, record = null }) => 
                     setCorporations([]);
                 }
             });
-        api.get('/buses/simple', { params: { includeDecommissioned: true } })
-            .then((response) => {
+        loadCatalog('buses', { includeDecommissioned: true })
+            .then((data) => {
                 if (!cancelled) {
-                    setAllBuses(Array.isArray(response.data?.buses) ? response.data.buses : []);
+                    setAllBuses(data);
                 }
             })
             .catch(() => {

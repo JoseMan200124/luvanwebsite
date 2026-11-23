@@ -48,10 +48,12 @@ import usePermissions from '../hooks/usePermissions';
 import useManageableRoles from '../hooks/useManageableRoles';
 import { formatDateTime } from '../utils/dateFormat';
 import AppDialog from '../components/dialogs/AppDialog';
+import EntitySelect from '../components/form/EntitySelect';
 import BulkUploadDialog from '../components/dialogs/BulkUploadDialog';
 import { buildWorkbook, downloadWorkbook } from '../utils/excel';
 import { buildFileName } from '../utils/fileName';
 import { todayForFileName } from '../utils/download';
+import { loadCatalog, invalidateCatalog } from '../services/catalogStore';
 
 // Fallback static role list (used as initial value, backend will provide authoritative list)
 const roleOptionsStatic = [
@@ -257,8 +259,7 @@ const RolesManagementPage = () => {
             return;
         }
         try {
-            const resp = await api.get('/users/pilots', { skipSchoolCycleContext: true });
-            setAllPilots(resp.data.users || []);
+            setAllPilots(await loadCatalog('pilots', {}, { skipSchoolCycleContext: true }));
         } catch (error) {
             console.error('[fetchAllPilots] Error:', error);
             setAllPilots([]);
@@ -271,8 +272,7 @@ const RolesManagementPage = () => {
             return;
         }
         try {
-            const resp = await api.get('/users/monitors', { skipSchoolCycleContext: true });
-            setAllMonitoras(resp.data.users || []);
+            setAllMonitoras(await loadCatalog('monitors', {}, { skipSchoolCycleContext: true }));
         } catch (error) {
             console.error('[fetchAllMonitoras] Error:', error);
             setAllMonitoras([]);
@@ -341,8 +341,7 @@ const RolesManagementPage = () => {
 
     const fetchSchools = async () => {
         try {
-            const resp = await api.get('/schools', { params: { allCycles: true, latestPerSchool: true }, skipSchoolCycleContext: true });
-            setSchools(resp.data.schools || []);
+            setSchools(await loadCatalog('schools', { allCycles: true, latestPerSchool: true }, { skipSchoolCycleContext: true }));
         } catch (err) {
             console.error('[fetchSchools] Error:', err);
             notify.error('Error al obtener colegios');
@@ -363,13 +362,13 @@ const RolesManagementPage = () => {
 
     const fetchAssignableSchools = async () => {
         try {
-            const [latestResp, allResp] = await Promise.all([
-                api.get('/schools', { params: { latestPerSchool: true }, skipSchoolCycleContext: true }),
-                api.get('/schools', { params: { allCycles: true }, skipSchoolCycleContext: true })
+            const [latestSchools, allSchools] = await Promise.all([
+                loadCatalog('schools', { latestPerSchool: true }, { skipSchoolCycleContext: true }),
+                loadCatalog('schools', { allCycles: true }, { skipSchoolCycleContext: true })
             ]);
 
             const canonicalByName = new Map();
-            for (const school of latestResp.data.schools || []) {
+            for (const school of latestSchools) {
                 const key = normalizeSchoolName(school.name);
                 const current = canonicalByName.get(key);
                 if (!current || Number(school.id) > Number(current.id)) {
@@ -383,7 +382,7 @@ const RolesManagementPage = () => {
             // Maps every per-cycle school row to the canonical id shown in the selector,
             // so data keyed by a sibling record (e.g. a monitora's school) still resolves.
             const canonicalBySchoolId = new Map();
-            for (const school of allResp.data.schools || []) {
+            for (const school of allSchools) {
                 const canonical = canonicalByName.get(normalizeSchoolName(school.name));
                 if (canonical) {
                     canonicalBySchoolId.set(Number(school.id), Number(canonical.id));
@@ -398,8 +397,7 @@ const RolesManagementPage = () => {
 
     const fetchCorporations = async () => {
         try {
-            const resp = await api.get('/corporations', { params: { allCycles: true }, skipSchoolCycleContext: true });
-            setCorporations(resp.data.corporations || []);
+            setCorporations(await loadCatalog('corporations', { allCycles: true }, { skipSchoolCycleContext: true }));
         } catch (err) {
             console.error('[fetchCorporations] Error:', err);
             notify.error('Error al obtener corporaciones');
@@ -512,6 +510,8 @@ const RolesManagementPage = () => {
         });
         if (ok) {
             notify.success('Usuario eliminado');
+            invalidateCatalog('pilots');
+            invalidateCatalog('monitors');
             fetchUsers();
         }
     };
@@ -660,7 +660,8 @@ const RolesManagementPage = () => {
                 notify.success('Usuario creado');
             }
 
-            // Refresca y cierra
+            invalidateCatalog('pilots');
+            invalidateCatalog('monitors');
             fetchUsers();
             handleDialogClose();
         } catch (err) {
@@ -1257,58 +1258,36 @@ const RolesManagementPage = () => {
                     {!isSelfEdit && !roleDisablesSchoolOrCorp(selectedUser?.roleId) && (
                         <>
                             <Grid item xs={12} md={6}>
-                                <FormControl variant="outlined" fullWidth>
-                                    <InputLabel>Colegio</InputLabel>
-                                    <Select
-                                        name="school"
-                                        value={selectedUser?.school || ''}
-                                        onChange={(e) => {
-                                            const newSchoolId = e.target.value;
-                                            setSelectedUser(prev => ({
-                                                ...prev,
-                                                school: newSchoolId,
-                                                corporationId: newSchoolId ? '' : prev.corporationId
-                                            }));
-                                        }}
-                                        label="Colegio"
-                                    >
-                                        <MenuItem value="">
-                                            <em>Ninguno</em>
-                                        </MenuItem>
-                                        {schools.map((sch) => (
-                                            <MenuItem key={sch.id} value={sch.id}>
-                                                {sch.name}
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
+                                <EntitySelect
+                                    entity="school"
+                                    name="school"
+                                    size="medium"
+                                    options={schools}
+                                    value={selectedUser?.school || ''}
+                                    onChange={(newSchoolId) => {
+                                        setSelectedUser(prev => ({
+                                            ...prev,
+                                            school: newSchoolId,
+                                            corporationId: newSchoolId ? '' : prev.corporationId
+                                        }));
+                                    }}
+                                />
                             </Grid>
                             <Grid item xs={12} md={6}>
-                                <FormControl variant="outlined" fullWidth>
-                                    <InputLabel>Corporación</InputLabel>
-                                    <Select
-                                        name="corporationId"
-                                        value={selectedUser?.corporationId || ''}
-                                        onChange={(e) => {
-                                            const newCorporationId = e.target.value;
-                                            setSelectedUser(prev => ({ 
-                                                ...prev, 
-                                                corporationId: newCorporationId,
-                                                school: newCorporationId ? '' : prev.school
-                                            }));
-                                        }}
-                                        label="Corporación"
-                                    >
-                                        <MenuItem value="">
-                                            <em>Ninguna</em>
-                                        </MenuItem>
-                                        {corporations.map((corp) => (
-                                            <MenuItem key={corp.id} value={corp.id}>
-                                                {corp.name}
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
+                                <EntitySelect
+                                    entity="corporation"
+                                    name="corporationId"
+                                    size="medium"
+                                    options={corporations}
+                                    value={selectedUser?.corporationId || ''}
+                                    onChange={(newCorporationId) => {
+                                        setSelectedUser(prev => ({
+                                            ...prev,
+                                            corporationId: newCorporationId,
+                                            school: newCorporationId ? '' : prev.school
+                                        }));
+                                    }}
+                                />
                             </Grid>
                         </>
                     )}
@@ -1501,7 +1480,11 @@ const RolesManagementPage = () => {
                     });
                     return response.data;
                 }}
-                onUploaded={() => fetchUsers()}
+                onUploaded={() => {
+                    invalidateCatalog('pilots');
+                    invalidateCatalog('monitors');
+                    fetchUsers();
+                }}
             />
 
             {/* Reporte de rutas eliminado */}

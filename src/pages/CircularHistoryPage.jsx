@@ -50,6 +50,7 @@ import RowActions from '../components/table/RowActions';
 import { formatDateTime } from '../utils/dateFormat';
 import { EMAIL_STATUS } from '../constants/statuses';
 import AppDialog from '../components/dialogs/AppDialog';
+import { loadCatalog } from '../services/catalogStore';
 
 const safeStr = (v) => (v == null ? '' : String(v)).trim();
 
@@ -246,11 +247,7 @@ const CircularHistoryPage = () => {
   // Los colegios del selector siguen al ciclo que se está eligiendo
   const fetchSchools = useCallback(async () => {
     try {
-      const res = await api.get('/schools', {
-        params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true },
-      });
-      const list = res?.data?.schools;
-      setSchools(Array.isArray(list) ? list : []);
+      setSchools(await loadCatalog('schools', { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true }));
     } catch (e) {
       console.warn('[CircularHistory] schools fetch error', e);
       setSchools([]);

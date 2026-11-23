@@ -29,6 +29,8 @@ import { formatQ } from '../utils/currency';
 import { useCurrentDate } from '../hooks/useCurrentDate';
 import AppDialog from './dialogs/AppDialog';
 import MoneyField from './form/MoneyField';
+import EntitySelect from './form/EntitySelect';
+import { loadCatalog } from '../services/catalogStore';
 
 // Columnas de la tabla
 const COLUMNS = [
@@ -90,8 +92,8 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
     useEffect(() => {
         const fetchSchools = async () => {
             try {
-                const res = await api.get('/schools', { params: { includeArchived: true } });
-                setSchools(res.data.schools || []);
+                const schoolsList = await loadCatalog('schools', { includeArchived: true });
+                setSchools(schoolsList);
                 // If initialSchoolId provided, ensure it's set in formData
                 if (initialSchoolId) {
                     setFormData(prev => ({ ...prev, schoolId: initialSchoolId }));
@@ -236,21 +238,14 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
                 {/* Formulario de registro */}
                 <Grid item xs={12}>
                     {!hideSchoolSelect ? (
-                        <FormControl variant="outlined" fullWidth>
-                            <InputLabel>Colegio</InputLabel>
-                            <Select
-                                name="schoolId"
-                                label="Colegio"
-                                value={formData.schoolId}
-                                onChange={handleChange}
-                            >
-                                {schools.map((school) => (
-                                    <MenuItem key={school.id} value={school.id}>
-                                        {school.name}
-                                    </MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
+                        <EntitySelect
+                            entity="school"
+                            name="schoolId"
+                            size="medium"
+                            options={schools}
+                            value={formData.schoolId}
+                            onChange={(schoolId) => handleChange({ target: { name: 'schoolId', value: schoolId } })}
+                        />
                     ) : (
                         // Hidden input to keep backend compatibility
                         <input type="hidden" name="schoolId" value={formData.schoolId} />

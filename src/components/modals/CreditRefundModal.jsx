@@ -25,6 +25,7 @@ import { useCurrentDate } from '../../hooks/useCurrentDate';
 import { formatQ } from '../../utils/currency';
 import AppDialog from '../dialogs/AppDialog';
 import MoneyField from '../form/MoneyField';
+import SearchInput from '../form/SearchInput';
 
 const emptyDetail = (creditBalance, todayStr) => ({
     refundDate: todayStr,
@@ -346,12 +347,11 @@ const CreditRefundModal = ({ open, onClose, schoolId, cicloEscolarId, buildPayme
                             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                                 {families.length} familia{families.length === 1 ? '' : 's'} con crédito a favor · Total disponible {formatQ(totalCreditBalance || 0)}
                             </Typography>
-                            <TextField
-                                placeholder="Buscar familia…"
-                                size="small"
+                            <SearchInput
+                                label="Buscar familia"
                                 fullWidth
                                 value={search}
-                                onChange={(e) => setSearch(e.target.value)}
+                                onChange={setSearch}
                                 sx={{ mb: 2, maxWidth: { sm: 320 } }}
                             />
 
