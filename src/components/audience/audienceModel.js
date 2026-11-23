@@ -37,6 +37,7 @@ const EMPTY_PADRE_FILTERS = {
     serviceStatuses: [],
     paymentStatuses: [],
     includeNoRoute: false,
+    includeNoPaymentFlow: false,
 };
 
 export const EMPTY_SCHOOL_ENTRY = { routeNumbers: [], scheduleCodes: [], grades: [], levelIds: [] };
@@ -145,10 +146,27 @@ export const deriveAudienceModes = (audience) => {
     };
 };
 
+// Colegio fuera del flujo de pagos: no genera cobros, así que el Estado de Pago no le aplica.
+export const isSchoolWithoutPayments = (school) => school?.paymentsEnabled === false || school?.paymentsEnabled === 0;
+
+/**
+ * El Estado de Pago no aplica cuando el alcance nombra colegios y todos están sin flujo de
+ * pagos. Con "todos los colegios" (alcance vacío) siempre aplica.
+ */
+export const isPaymentsExempt = (audience, schools = []) => {
+    const scope = audience?.scope || [];
+    if (scope.length === 0) {
+        return false;
+    }
+    return scope.every((entry) => isSchoolWithoutPayments(
+        schools.find((school) => Number(school.id) === Number(entry.schoolId))
+    ));
+};
+
 /**
  * Mismas reglas que valida el backend en validateAudience().
  */
-export const validateAudience = (audience) => {
+export const validateAudience = (audience, schools = []) => {
     if (!audience) {
         return { valid: false, message: 'Selecciona destinatarios.' };
     }
@@ -170,7 +188,7 @@ export const validateAudience = (audience) => {
         if (!serviceStatuses || serviceStatuses.length === 0) {
             return { valid: false, message: 'Selecciona al menos un Estado del Servicio en los filtros de Padres.' };
         }
-        if (!paymentStatuses || paymentStatuses.length === 0) {
+        if ((!paymentStatuses || paymentStatuses.length === 0) && !isPaymentsExempt(audience, schools)) {
             return { valid: false, message: 'Selecciona al menos un Estado de Pago en los filtros de Padres.' };
         }
     }
