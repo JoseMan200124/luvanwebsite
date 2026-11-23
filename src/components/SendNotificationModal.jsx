@@ -37,7 +37,7 @@ const SendNotificationModal = ({ open, onClose, schools = [], cicloEscolarId = n
     }, [open, editing]);
 
     const totalUnique = preview?.counts?.totalUnique ?? 0;
-    const audienceValidation = validateAudience(audience);
+    const audienceValidation = validateAudience(audience, schools);
     const scheduleValidation = validateSchedule(schedule);
     const isScheduled = schedule.mode === 'scheduled';
     const remaining = MAX_MESSAGE_LENGTH - message.length;

@@ -10,6 +10,7 @@ import ScopeRules from './ScopeRules';
 import {
     ROLE_OPTIONS, ROUTE_TYPE_OPTIONS, SERVICE_STATUS_OPTIONS, PAYMENT_STATUS_OPTIONS,
     getSchoolEntry, setSchoolIds, setSchoolField, setPadreFilter, setUserIds, deriveAudienceModes,
+    isPaymentsExempt, isSchoolWithoutPayments,
 } from './audienceModel';
 import FamilyPicker from './FamilyPicker';
 import { previewAudience, fetchScheduleCounts } from '../../services/audienceService';
@@ -482,6 +483,11 @@ const AudienceTargetingPanel = ({
         [schools, selectedSchoolIds]
     );
     const padreSelected = (value.roles || []).includes('parents');
+    // Colegios sin flujo de pagos: con todos ellos elegidos el Estado de Pago no aplica.
+    const paymentsExempt = isPaymentsExempt(value, schools);
+    const noPaymentSelectedSchools = selectedSchools.filter(isSchoolWithoutPayments);
+    // El checkbox aplica con "Todos los colegios" o con una selección mixta (con y sin pagos).
+    const showNoPaymentCheckbox = schoolsChoice === 'all' || (!paymentsExempt && noPaymentSelectedSchools.length > 0);
 
     const globalScheduleCodes = useMemo(() => {
         const seen = new Set();
@@ -550,7 +556,7 @@ const AudienceTargetingPanel = ({
         && (!padreSelected || (
             (value.padreFilters?.routeTypes || []).length > 0
             && (value.padreFilters?.serviceStatuses || []).length > 0
-            && (value.padreFilters?.paymentStatuses || []).length > 0
+            && (paymentsExempt || (value.padreFilters?.paymentStatuses || []).length > 0)
         ))
     );
 
@@ -587,6 +593,27 @@ const AudienceTargetingPanel = ({
             onChange({ ...setSchoolIds(value, []), scheduleCodes: [], levelIds: [] });
         }
     };
+
+    // Filtros de pago que dejaron de aplicar se limpian para que no viajen ocultos: el Estado de Pago
+    // al quedar solo colegios sin pagos, y el checkbox "Incluir familias sin flujo de pagos" al
+    // dejar de ser Todos los colegios o una selección mixta. Un solo efecto y una sola escritura:
+    // dos efectos con el mismo `value` se pisarían entre sí.
+    useEffect(() => {
+        const filters = value.padreFilters || {};
+        const clearStatuses = paymentsExempt && (filters.paymentStatuses || []).length > 0;
+        const clearNoPaymentFlow = !showNoPaymentCheckbox && Boolean(filters.includeNoPaymentFlow);
+        if (clearStatuses || clearNoPaymentFlow) {
+            onChange({
+                ...value,
+                padreFilters: {
+                    ...filters,
+                    ...(clearStatuses ? { paymentStatuses: [] } : {}),
+                    ...(clearNoPaymentFlow ? { includeNoPaymentFlow: false } : {}),
+                },
+            });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [paymentsExempt, showNoPaymentCheckbox, value.padreFilters?.paymentStatuses, value.padreFilters?.includeNoPaymentFlow]);
 
     const audienceKey = JSON.stringify(value);
 
@@ -880,16 +907,38 @@ const AudienceTargetingPanel = ({
                                         onChange={(next) => onChange(setPadreFilter(value, 'serviceStatuses', next))}
                                         required
                                     />
-                                    <MultiChipSelect
-                                        label="Estado de Pago"
-                                        options={PAYMENT_STATUS_OPTIONS}
-                                        value={value.padreFilters?.paymentStatuses || []}
-                                        onChange={(next) => onChange(setPadreFilter(value, 'paymentStatuses', next))}
-                                        required
-                                    />
+                                    {!paymentsExempt && (
+                                        <MultiChipSelect
+                                            label="Estado de Pago"
+                                            options={PAYMENT_STATUS_OPTIONS}
+                                            value={value.padreFilters?.paymentStatuses || []}
+                                            onChange={(next) => onChange(setPadreFilter(value, 'paymentStatuses', next))}
+                                            required
+                                        />
+                                    )}
+                                    {showNoPaymentCheckbox && (
+                                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                                            <Checkbox
+                                                size="small"
+                                                sx={{ mt: -0.5 }}
+                                                checked={Boolean(value.padreFilters?.includeNoPaymentFlow)}
+                                                onChange={(e) => onChange(setPadreFilter(value, 'includeNoPaymentFlow', e.target.checked))}
+                                            />
+                                            <Box>
+                                                <Typography variant="body2">Incluir familias sin flujo de pagos</Typography>
+                                                <Typography variant="caption" color="text.secondary">
+                                                    {schoolsChoice === 'all'
+                                                        ? 'Suma a las familias de colegios que no manejan pagos (p. ej. cursos de vacaciones), que no tienen Estado de Pago y de otro modo quedan fuera.'
+                                                        : `Suma a las familias de ${noPaymentSelectedSchools.map((school) => school.name).join(', ')}, que no manejan pagos y no tienen Estado de Pago, por lo que de otro modo quedan fuera.`}
+                                                </Typography>
+                                            </Box>
+                                        </Box>
+                                    )}
                                     <FormHelperText>
-                                        Tipo de Ruta, Estado del Servicio y Estado de Pago son obligatorios.
-                                        «Incluir familias sin ruta» es opcional.
+                                        {paymentsExempt
+                                            ? 'Tipo de Ruta y Estado del Servicio son obligatorios. Los colegios elegidos no tienen flujo de pagos, por eso no hay Estado de Pago. '
+                                            : 'Tipo de Ruta, Estado del Servicio y Estado de Pago son obligatorios. '}
+                                        «Incluir familias sin ruta» e «Incluir familias sin flujo de pagos» son opcionales.
                                     </FormHelperText>
                                 </AccordionDetails>
                             </Accordion>
