@@ -44,7 +44,7 @@ const CircularMasivaModal = ({ open, onClose, schools = [], cicloEscolarId = nul
     }, [open, editing]);
 
     const totalUnique = preview?.counts?.totalUnique ?? 0;
-    const audienceValidation = validateAudience(audience);
+    const audienceValidation = validateAudience(audience, schools);
     const scheduleValidation = validateSchedule(schedule);
     const isScheduled = schedule.mode === 'scheduled';
     const currentAttachment = editing?.attachment && !removeAttachment ? editing.attachment : null;

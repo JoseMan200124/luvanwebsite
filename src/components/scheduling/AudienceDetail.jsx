@@ -80,6 +80,7 @@ const PadreFilters = ({ filters }) => {
         filters.serviceStatuses.length > 0 && { name: 'Estado del servicio', value: filterValue(SERVICE_STATUS_OPTIONS, filters.serviceStatuses) },
         filters.paymentStatuses.length > 0 && { name: 'Estado de pago', value: filterValue(PAYMENT_STATUS_OPTIONS, filters.paymentStatuses) },
         { name: 'Familias sin ruta', value: filters.includeNoRoute ? 'Incluidas' : 'No incluidas' },
+        filters.includeNoPaymentFlow && { name: 'Familias sin flujo de pagos', value: 'Incluidas' },
     ].filter(Boolean);
 
     return (
