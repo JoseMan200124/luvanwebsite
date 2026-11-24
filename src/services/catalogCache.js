@@ -51,6 +51,10 @@ export const createCatalogCache = (fetcher) => {
         [...data.keys()]
             .filter((key) => key.startsWith(`${name}|`))
             .forEach((key) => data.delete(key));
+        // Una petición en vuelo trae datos previos a la invalidación: no debe reutilizarse.
+        [...inflight.keys()]
+            .filter((key) => key.startsWith(`${name}|`))
+            .forEach((key) => inflight.delete(key));
     };
 
     const clear = () => {

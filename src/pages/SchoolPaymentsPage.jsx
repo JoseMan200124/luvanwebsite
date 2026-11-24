@@ -2505,13 +2505,11 @@ const SchoolPaymentsPage = () => {
                 // fecha de hoy (Guatemala). Así un reloj del navegador mal puesto no cambia la mora congelada.
                 const freezeDate = payload?.freezeDate || undefined;
                 const fechaNota = freezeDate ? moment(freezeDate) : await getCurrentDate();
-                console.log('[FREEZE_PENALTY] Sending request:', { paymentId: payment.id, freezeDate: freezeDate || '(backend)' });
-                const response = await api.post('/payments/penalties/freeze', {
+                await api.post('/payments/penalties/freeze', {
                     paymentId: payment.id,
                     freezeDate,
                     notes: `Mora congelada manualmente el ${fechaNota.format('DD/MM/YYYY')}`
                 });
-                console.log('[FREEZE_PENALTY] Response received:', response.data);
                 notify.success('Mora congelada');
             } else if (actionName === 'unfreezePenalty') {
                 // Descongelar mora (reanudar acumulación)

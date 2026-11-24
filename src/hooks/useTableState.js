@@ -25,7 +25,7 @@ const useTableState = ({ defaultRowsPerPage = DEFAULT_ROWS_PER_PAGE, defaultOrde
     const onPageChange = useCallback((_event, newPage) => setPage(newPage), []);
 
     const onRowsPerPageChange = useCallback((event) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
+        setRowsPerPage(Number.parseInt(event.target.value, 10));
         setPage(0);
     }, []);
 
