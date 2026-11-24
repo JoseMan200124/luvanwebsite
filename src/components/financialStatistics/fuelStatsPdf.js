@@ -6,8 +6,10 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import moment from 'moment-timezone';
 import {
-    FUELING_REASONS, GRANULARITIES, clientTagLabel, formatGallons, formatMoney, formatPercent, reasonLabel
+    FUELING_REASONS, GRANULARITIES, clientTagLabel, formatGallons, formatPercent, reasonLabel
 } from './fuelStatsUtils';
+import { formatDateTime } from '../../utils/dateFormat';
+import { formatQ } from '../../utils/currency';
 
 const MARGIN_X = 12;
 const TITLE = 'Reporte de Estadísticas Financieras de Combustible';
@@ -73,14 +75,14 @@ export const generateFuelStatsPdf = (result, { visibleTypes, filtersLabel, range
     pdf.setTextColor(107, 114, 128);
     pdf.text(`${rangeLabel}  ·  Agrupado por ${granularityLabel}`, MARGIN_X, 22);
     pdf.text(filtersLabel, MARGIN_X, 27, { maxWidth: pageWidth - MARGIN_X * 2 });
-    pdf.text(`Generado el ${now.format('DD/MM/YYYY HH:mm')} (hora Guatemala)`, pageWidth - MARGIN_X, 16, { align: 'right' });
+    pdf.text(`Generado el ${formatDateTime(now)} (hora Guatemala)`, pageWidth - MARGIN_X, 16, { align: 'right' });
 
     pdf.setDrawColor(230);
     pdf.line(MARGIN_X, 31, pageWidth - MARGIN_X, 31);
 
     // --- Tarjetas: resumen general y precio por tipo ---
     let cursorY = drawKpiRow(pdf, [
-        { label: 'Gasto total', value: formatMoney(totals.amount), color: '#E65100' },
+        { label: 'Gasto total', value: formatQ(totals.amount, { nullText: 'N/A' }), color: '#E65100' },
         { label: 'Galones', value: formatGallons(totals.gallons), color: '#1976D2' },
         { label: 'Registros', value: String(totals.records), color: '#111827' }
     ], 35, pageWidth) + 4;
@@ -88,7 +90,7 @@ export const generateFuelStatsPdf = (result, { visibleTypes, filtersLabel, range
     if (visibleTypes.length > 0) {
         cursorY = drawKpiRow(pdf, visibleTypes.map((t) => ({
             label: `Precio/galón · ${t.label}`,
-            value: formatMoney(totals.byType[t.key].price),
+            value: formatQ(totals.byType[t.key].price, { nullText: 'N/A' }),
             sub: formatGallons(totals.byType[t.key].gallons),
             color: t.color
         })), cursorY, pageWidth) + 4;
@@ -96,7 +98,7 @@ export const generateFuelStatsPdf = (result, { visibleTypes, filtersLabel, range
 
     // --- Tablas ---
     const priceHead = visibleTypes.map((t) => `Precio ${t.label}`);
-    const priceRow = (byType) => visibleTypes.map((t) => formatMoney(byType?.[t.key]?.price));
+    const priceRow = (byType) => visibleTypes.map((t) => formatQ(byType?.[t.key]?.price, { nullText: 'N/A' }));
 
     const section = (title, head, body, { highlightRow } = {}) => {
         let y = cursorY + 6;
@@ -149,9 +151,9 @@ export const generateFuelStatsPdf = (result, { visibleTypes, filtersLabel, range
     };
 
     const reasonHead = FUELING_REASONS.map((r) => `Gasto ${r.label}`);
-    const reasonRow = (byReason) => FUELING_REASONS.map((r) => (Number(byReason?.[r.key]) > 0 ? formatMoney(byReason[r.key]) : '—'));
+    const reasonRow = (byReason) => FUELING_REASONS.map((r) => (Number(byReason?.[r.key]) > 0 ? formatQ(byReason[r.key], { nullText: 'N/A' }) : '—'));
     const metricsRow = (d, withReasons) => [
-        String(d.records), formatGallons(d.gallons), formatMoney(d.amount), formatPercent(d.shareOfAmount),
+        String(d.records), formatGallons(d.gallons), formatQ(d.amount, { nullText: 'N/A' }), formatPercent(d.shareOfAmount),
         ...(withReasons ? reasonRow(d.byReason) : []), ...priceRow(d.byType)
     ];
     const metricsHead = (first, withReasons) => [first, 'Registros', 'Galones', 'Gasto', '% del gasto', ...(withReasons ? reasonHead : []), ...priceHead];

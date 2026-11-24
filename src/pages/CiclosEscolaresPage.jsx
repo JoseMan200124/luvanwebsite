@@ -1,28 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    Alert,
     Box,
-    Button,
     Card,
     CardContent,
     Chip,
     CircularProgress,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
-    IconButton,
-    Snackbar,
     Table,
     TableBody,
     TableCell,
-    TableHead,
     TableRow,
     TextField,
-    Tooltip
+    Typography,
 } from '@mui/material';
 import { Add, CalendarToday, Edit, Star } from '@mui/icons-material';
-import PermissionGuard from '../components/PermissionGuard';
 import {
     createCicloEscolar,
     getCiclosEscolares,
@@ -33,19 +23,35 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { setSelectedCicloEscolarId } from '../utils/schoolContext';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import useNotify from '../hooks/useNotify';
+import AppDialog from '../components/dialogs/AppDialog';
+import AppTableContainer from '../components/table/AppTableContainer';
+import SortableTableHead from '../components/table/SortableTableHead';
+import RowActions from '../components/table/RowActions';
+import { MobileCard, MobileField } from '../components/table/MobileCard';
+import useIsMobile from '../hooks/useIsMobile';
 
 const emptyForm = {
     anio: ''
 };
 
+// Columnas de la tabla de ciclos escolares
+const CICLO_COLUMNS = [
+    { id: 'anio', label: 'Año' },
+    { id: 'etiqueta', label: 'Etiqueta' },
+    { id: 'estado', label: 'Estado' },
+    { id: 'acciones', label: 'Acciones', align: 'right' },
+];
+
 const CiclosEscolaresPage = () => {
+    const isMobile = useIsMobile();
     const [ciclosEscolares, setCiclosEscolares] = useState([]);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [openDialog, setOpenDialog] = useState(false);
     const [selectedCiclo, setSelectedCiclo] = useState(null);
     const [form, setForm] = useState(emptyForm);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
 
     const fetchCiclosEscolares = useCallback(async () => {
         setLoading(true);
@@ -54,11 +60,11 @@ const CiclosEscolaresPage = () => {
             setCiclosEscolares(Array.isArray(data.ciclosEscolares) ? data.ciclosEscolares : []);
         } catch (error) {
             console.error('Error cargando ciclos escolares:', error);
-            setSnackbar({ open: true, message: 'Error al cargar ciclos escolares', severity: 'error' });
+            notify.error('Error al cargar ciclos escolares');
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [notify]);
 
     useEffect(() => {
         fetchCiclosEscolares();
@@ -101,7 +107,7 @@ const CiclosEscolaresPage = () => {
     const handleSave = async () => {
         const anio = Number.parseInt(form.anio, 10);
         if (!Number.isInteger(anio) || anio < 2000 || anio > 2100) {
-            setSnackbar({ open: true, message: 'Ingresa un año válido entre 2000 y 2100', severity: 'error' });
+            notify.error('Ingresa un año válido entre 2000 y 2100');
             return;
         }
 
@@ -115,16 +121,16 @@ const CiclosEscolaresPage = () => {
 
             if (selectedCiclo?.id) {
                 await updateCicloEscolar(selectedCiclo.id, payload);
-                setSnackbar({ open: true, message: 'Ciclo escolar actualizado', severity: 'success' });
+                notify.success('Ciclo escolar actualizado');
             } else {
                 await createCicloEscolar(payload);
-                setSnackbar({ open: true, message: 'Ciclo escolar creado', severity: 'success' });
+                notify.success('Ciclo escolar creado');
             }
             handleCloseDialog();
             fetchCiclosEscolares();
         } catch (error) {
             console.error('Error guardando ciclo escolar:', error);
-            setSnackbar({ open: true, message: error.response?.data?.message || 'Error al guardar ciclo escolar', severity: 'error' });
+            notify.fromError(error, 'Error al guardar ciclo escolar');
         } finally {
             setSaving(false);
         }
@@ -139,15 +145,30 @@ const CiclosEscolaresPage = () => {
             const data = await setDefaultCicloEscolar(cicloEscolar.id);
             const defaultCycle = data.cicloEscolar || cicloEscolar;
             setSelectedCicloEscolarId(defaultCycle.id);
-            setSnackbar({ open: true, message: 'Ciclo escolar predeterminado actualizado', severity: 'success' });
+            notify.success('Ciclo escolar predeterminado actualizado');
             fetchCiclosEscolares();
         } catch (error) {
             console.error('Error marcando ciclo escolar predeterminado:', error);
-            setSnackbar({ open: true, message: error.response?.data?.message || 'Error al actualizar ciclo predeterminado', severity: 'error' });
+            notify.fromError(error, 'Error al actualizar ciclo predeterminado');
         } finally {
             setSaving(false);
         }
     };
+
+    // Acciones por fila: editar y marcar como predeterminado, con los mismos permisos de antes.
+    const rowActions = (cicloEscolar) => [
+        { key: 'edit', kind: 'edit', label: 'Editar', icon: <Edit fontSize="small" />, permission: 'ciclos-escolares-editar', onClick: () => handleOpenEdit(cicloEscolar) },
+        {
+            key: 'default',
+            label: 'Marcar como predeterminado',
+            tooltip: cicloEscolar.predeterminado ? 'Ya es predeterminado' : 'Marcar como predeterminado',
+            // Como antes: azul en el predeterminado (aunque el botón esté deshabilitado) y gris en los demás.
+            icon: <Star fontSize="small" sx={{ color: cicloEscolar.predeterminado ? 'primary.main' : 'text.secondary' }} />,
+            permission: 'ciclos-escolares-activar',
+            disabled: cicloEscolar.predeterminado || saving,
+            onClick: () => handleSetDefault(cicloEscolar),
+        },
+    ];
 
     return (
         <PageContainer width="md">
@@ -166,74 +187,68 @@ const CiclosEscolaresPage = () => {
                         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
                             <CircularProgress />
                         </Box>
+                    ) : isMobile ? (
+                        <Box>
+                            {ciclosEscolares.map((cicloEscolar) => (
+                                <MobileCard key={cicloEscolar.id} actions={<RowActions actions={rowActions(cicloEscolar)} />}>
+                                    <MobileField label="Año">{cicloEscolar.anio}</MobileField>
+                                    <MobileField label="Etiqueta">{`Ciclo Escolar ${cicloEscolar.anio}`}</MobileField>
+                                    {cicloEscolar.predeterminado && (
+                                        <MobileField label="Estado">
+                                            <Chip label="Predeterminado" color="primary" size="small" />
+                                        </MobileField>
+                                    )}
+                                </MobileCard>
+                            ))}
+                            {ciclosEscolares.length === 0 && (
+                                <Typography align="center" color="text.secondary">No hay ciclos escolares configurados.</Typography>
+                            )}
+                        </Box>
                     ) : (
-                        <Table>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell>Año</TableCell>
-                                    <TableCell>Etiqueta</TableCell>
-                                    <TableCell>Estado</TableCell>
-                                    <TableCell align="right">Acciones</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {ciclosEscolares.map((cicloEscolar) => (
-                                    <TableRow key={cicloEscolar.id} hover>
-                                        <TableCell>{cicloEscolar.anio}</TableCell>
-                                        <TableCell>{`Ciclo Escolar ${cicloEscolar.anio}`}</TableCell>
-                                        <TableCell>
-                                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                                                {cicloEscolar.predeterminado && <Chip label="Predeterminado" color="primary" size="small" />}
-                                            </Box>
-                                        </TableCell>
-                                        <TableCell align="right">
-                                            <PermissionGuard permission="ciclos-escolares-editar">
-                                                <Tooltip title="Editar">
-                                                    <IconButton onClick={() => handleOpenEdit(cicloEscolar)}>
-                                                        <Edit />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            </PermissionGuard>
-                                            <PermissionGuard permission="ciclos-escolares-activar">
-                                                <Tooltip title={cicloEscolar.predeterminado ? 'Ya es predeterminado' : 'Marcar como predeterminado'}>
-                                                    <span>
-                                                        <IconButton disabled={cicloEscolar.predeterminado || saving} onClick={() => handleSetDefault(cicloEscolar)}>
-                                                            <Star sx={{ color: cicloEscolar.predeterminado ? 'primary.main' : 'text.secondary' }} />
-                                                        </IconButton>
-                                                    </span>
-                                                </Tooltip>
-                                            </PermissionGuard>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                                {ciclosEscolares.length === 0 && (
-                                    <TableRow>
-                                        <TableCell colSpan={4} align="center">No hay ciclos escolares configurados.</TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
+                        <AppTableContainer>
+                            <Table>
+                                <SortableTableHead columns={CICLO_COLUMNS} />
+                                <TableBody>
+                                    {ciclosEscolares.map((cicloEscolar) => (
+                                        <TableRow key={cicloEscolar.id} hover>
+                                            <TableCell>{cicloEscolar.anio}</TableCell>
+                                            <TableCell>{`Ciclo Escolar ${cicloEscolar.anio}`}</TableCell>
+                                            <TableCell>
+                                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                                    {cicloEscolar.predeterminado && <Chip label="Predeterminado" color="primary" size="small" />}
+                                                </Box>
+                                            </TableCell>
+                                            <TableCell align="right">
+                                                <RowActions actions={rowActions(cicloEscolar)} />
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {ciclosEscolares.length === 0 && (
+                                        <TableRow>
+                                            <TableCell colSpan={4} align="center">No hay ciclos escolares configurados.</TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </AppTableContainer>
                     )}
                 </CardContent>
             </Card>
 
-            <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-                <DialogTitle>{selectedCiclo ? 'Editar Ciclo Escolar' : 'Nuevo Ciclo Escolar'}</DialogTitle>
-                <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-                    <TextField name="anio" label="Año" value={form.anio} onChange={handleChange} slotProps={{ htmlInput: { inputMode: 'numeric' } }} fullWidth />
-                    <TextField label="Etiqueta" value={form.anio ? `Ciclo Escolar ${form.anio}` : ''} fullWidth disabled />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseDialog}>Cancelar</Button>
-                    <Button onClick={handleSave} variant="contained" disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</Button>
-                </DialogActions>
-            </Dialog>
+            <AppDialog
+                open={openDialog}
+                onClose={handleCloseDialog}
+                title={selectedCiclo ? 'Editar ciclo escolar' : 'Nuevo ciclo escolar'}
+                size="sm"
+                onSubmit={handleSave}
+                submitLabel="Guardar"
+                submitting={saving}
+                contentSx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}
+            >
+                <TextField name="anio" label="Año" value={form.anio} onChange={handleChange} slotProps={{ htmlInput: { inputMode: 'numeric' } }} fullWidth />
+                <TextField label="Etiqueta" value={form.anio ? `Ciclo Escolar ${form.anio}` : ''} fullWidth disabled />
+            </AppDialog>
 
-            <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}>
-                <Alert severity={snackbar.severity} onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))} sx={{ width: '100%' }}>
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </PageContainer>
     );
 };

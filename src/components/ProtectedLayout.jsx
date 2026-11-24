@@ -9,6 +9,10 @@ import NotificationsMenu from './NotificationsMenu';
 import { AuthContext } from '../context/AuthProvider';
 import PageRefreshProvider, { PageRefreshContext } from '../context/PageRefreshProvider';
 import { LAYOUT_ACCENT, PAGE_BG } from '../theme/tokens';
+import { ThemeProvider } from '@mui/material/styles';
+import adminTheme from '../theme';
+
+const PORTAL_ROLE_IDS = [3, 8];
 
 const GlobalRefreshButton = ({ compact = false, onRefreshStart, onRefreshEnd }) => {
     const refreshCtx = useContext(PageRefreshContext);
@@ -133,7 +137,7 @@ const ProtectedLayout = () => {
         requestAnimationFrame(() => setOutletMinHeightPx(null));
     }, []);
 
-    return (
+    const content = (
         <div style={{ display: 'flex', minHeight: '100vh' }}>
             <Sidebar isOpen={isSidebarOpen} toggleSidebar={handleToggleSidebar} />
             <div
@@ -192,6 +196,11 @@ const ProtectedLayout = () => {
             </div>
         </div>
     );
+
+    if (PORTAL_ROLE_IDS.includes(Number(auth?.user?.roleId))) {
+        return content;
+    }
+    return <ThemeProvider theme={adminTheme}>{content}</ThemeProvider>;
 };
 
 export default ProtectedLayout;

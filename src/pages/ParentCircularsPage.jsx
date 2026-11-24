@@ -29,23 +29,9 @@ import parse from 'html-react-parser';
 
 import ParentNavbar from '../components/ParentNavbar';
 import api from '../utils/axiosConfig';
+import { formatDateLong } from '../utils/dateFormat';
 
 const safeStr = (v) => (v == null ? '' : String(v)).trim();
-
-const formatDateLong = (dateString) => {
-  if (!dateString) {
-      return '';
-  }
-  try {
-    return new Date(dateString).toLocaleDateString('es-ES', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  } catch {
-    return String(dateString);
-  }
-};
 
 const withPdfViewerParams = (url) => {
   const u = safeStr(url);

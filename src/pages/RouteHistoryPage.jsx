@@ -4,25 +4,18 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box,
     Typography,
-    Tooltip,
     Paper,
     Grid,
     Button,
     Chip,
-    Card,
-    CardContent,
     Divider,
     CircularProgress,
-    Pagination,
     Alert,
     Table,
-    TableHead,
     TableBody,
     TableRow,
     TableCell,
-    TableContainer,
     useTheme,
-    useMediaQuery,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import {
@@ -37,6 +30,8 @@ import {
     School as SchoolIcon
 } from '@mui/icons-material';
 import api from '../utils/axiosConfig';
+import { downloadBlob, readBlobError } from '../utils/download';
+import { buildFileName } from '../utils/fileName';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
@@ -45,13 +40,36 @@ import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
+import useIsMobile from '../hooks/useIsMobile';
+import { formatTime, formatDateLong, formatDate } from '../utils/dateFormat';
+import { loadCatalog } from '../services/catalogStore';
+import { StatCard, StatCardGrid } from '../components/StatCard';
+import AppTableContainer from '../components/table/AppTableContainer';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import { MobileCard } from '../components/table/MobileCard';
+import { DEFAULT_ROWS_PER_PAGE } from '../components/table/tableConfig';
+
+
+const HISTORY_COLUMNS = [
+    { id: 'fecha', label: 'Fecha' },
+    { id: 'ruta', label: 'Número de ruta', align: 'center' },
+    { id: 'placa', label: 'Placa' },
+    { id: 'piloto', label: 'Piloto' },
+    { id: 'cliente', label: 'Cliente' },
+    { id: 'inicio', label: 'Hora inicio' },
+    { id: 'fin', label: 'Hora fin' },
+    { id: 'duracion', label: 'Duración' },
+    { id: 'kilometraje', label: 'Kilometraje' },
+    { id: 'estado', label: 'Estado' },
+];
 
 const RouteHistoryPage = () => {
     const [loading, setLoading] = useState(false);
     const [routes, setRoutes] = useState([]);
     const [error, setError] = useState(null);
     const [page, setPage] = useState(1);
-    const pageSize = 10;
+    const [pageSize, setPageSize] = useState(DEFAULT_ROWS_PER_PAGE);
     const [total, setTotal] = useState(0);
     const [clientBreakdown, setClientBreakdown] = useState({ colegios: 0, corporativos: 0 });
     // Resumen de kilometraje del conjunto filtrado completo (no solo la página)
@@ -260,9 +278,9 @@ const RouteHistoryPage = () => {
     const historyApplied = historyFilters.applied;
     useEffect(() => {
         fetchRouteHistory(buildRouteHistoryParams(historyApplied, page));
-        // fetchRouteHistory se recrea en cada render; solo deben disparar los filtros aplicados y la página
+        // fetchRouteHistory se recrea en cada render; solo deben disparar los filtros aplicados, la página y las filas por página
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [historyApplied, page]);
+    }, [historyApplied, page, pageSize]);
 
     // El refresco global vuelve a pedir la página actual con los filtros aplicados
     useRegisterPageRefresh(async () => {
@@ -274,12 +292,10 @@ const RouteHistoryPage = () => {
     useEffect(() => {
         const loadClients = async () => {
             try {
-                const [schoolsResp, corpsResp] = await Promise.all([
-                    api.get('/schools', { params: { ...getCicloEscolarFilterParams(historyDraftCycle), includeArchived: true } }),
-                    api.get('/corporations', { params: getCicloEscolarFilterParams(historyDraftCycle) })
+                const [schoolsList, corpsList] = await Promise.all([
+                    loadCatalog('schools', { ...getCicloEscolarFilterParams(historyDraftCycle), includeArchived: true }),
+                    loadCatalog('corporations', getCicloEscolarFilterParams(historyDraftCycle))
                 ]);
-                const schoolsList = schoolsResp.data?.schools || schoolsResp.data || [];
-                const corpsList = corpsResp.data?.corporations || corpsResp.data || [];
                 setHistorySchools((Array.isArray(schoolsList) ? schoolsList : []).filter((item) => item && !item.deleted));
                 setHistoryCorporations((Array.isArray(corpsList) ? corpsList : []).filter((item) => item && !item.deleted));
             } catch (err) {
@@ -323,13 +339,6 @@ const RouteHistoryPage = () => {
         loadRoutes();
     }, [historyDraftClientType, historyDraftClientId]);
 
-    const formatTime = (dateTime) => {
-        if (!dateTime) {
-            return 'N/A';
-        }
-        const date = new Date(dateTime);
-        return date.toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' });
-    };
 
     const formatDuration = (startTime, endTime) => {
         if (!startTime || !endTime) {
@@ -345,10 +354,9 @@ const RouteHistoryPage = () => {
 
     const contentMinHeight = 320;
     const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
 
     const softPrimaryBg = alpha(theme.palette.primary.main, 0.04);
-    const softerPrimaryBg = alpha(theme.palette.primary.main, 0.02);
     // El PDF usa el endpoint de estadísticas con los mismos filtros que el historial
     const downloadStatsPdfReport = async () => {
         const fallbackRange = monthRangeFromNow(0);
@@ -399,24 +407,16 @@ const RouteHistoryPage = () => {
                 return;
             }
 
-            const url = window.URL.createObjectURL(blob);
-
             const start = params.startDate || '';
             const end = params.endDate || '';
             const safeStart = start ? String(start).replace(/[^0-9-]/g, '_') : 'sin-inicio';
             const safeEnd = end ? String(end).replace(/[^0-9-]/g, '_') : 'sin-fin';
-            const filename = `reporte_kilometros_${params.groupBy}_${safeStart}_${safeEnd}.pdf`;
-
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            window.URL.revokeObjectURL(url);
+            // El nombre lleva el rango del reporte en lugar del día de descarga.
+            downloadBlob(blob, buildFileName({ object: `reporte kilometros ${params.groupBy}`, date: `${safeStart}_${safeEnd}`, extension: 'pdf' }));
         } catch (err) {
             console.error('Error generando PDF:', err);
-            setPdfError(err.response?.data?.message || err.message || 'No se pudo generar el PDF');
+            const error = await readBlobError(err);
+            setPdfError(error.response?.data?.message || error.message || 'No se pudo generar el PDF');
         } finally {
             setPdfLoading(false);
         }
@@ -433,22 +433,22 @@ const RouteHistoryPage = () => {
             label: groupLabel === 'placa' ? 'Placas' : 'Rutas',
             value: formatNumber(resumen.groupsCount),
             hint: `Cantidad de ${groupLabel === 'placa' ? 'placas' : 'rutas'} en el conjunto filtrado`,
-            icon: <CheckCircle fontSize="small" color="primary" />,
+            icon: <CheckCircle />,
         }] : []),
         {
             key: 'total',
-            label: 'Total Kilómetros',
+            label: 'Total kilómetros',
             value: resumen ? formatKmSummary(resumen.totalKm) : '-',
             hint: 'Kilómetros de los recorridos terminados que cumplen los filtros',
-            icon: <Speed fontSize="small" color="primary" />,
+            icon: <Speed />,
         },
         {
             key: 'avg',
-            label: 'Km Promedio/Día',
+            label: 'Km promedio/día',
             value: resumen ? formatKmSummary(resumen.avgPerActiveDay) : '-',
             hint: 'Promedio por día activo (día con recorridos)',
             chip: resumen ? `Días activos: ${formatNumber(resumen.activeDays)}` : undefined,
-            icon: <CalendarToday fontSize="small" color="primary" />,
+            icon: <CalendarToday />,
         },
         ...(resumen && resumen.groupsCount > 1 && resumen.top ? [{
             key: 'top',
@@ -456,7 +456,7 @@ const RouteHistoryPage = () => {
             // Igual que en el PDF: la ruta lleva su cliente ("18 · Colegio"); la placa va sola
             value: groupLabel === 'ruta' && resumen.top.clientName ? `${resumen.top.key} · ${resumen.top.clientName}` : resumen.top.key,
             hint: `${groupLabel === 'placa' ? 'Placa' : 'Ruta'} con mayor kilometraje (${formatKmSummary(resumen.top.totalKm)})`,
-            icon: <DirectionsBus fontSize="small" color="primary" />,
+            icon: <DirectionsBus />,
         }] : []),
     ];
 
@@ -502,31 +502,26 @@ const RouteHistoryPage = () => {
                     </Box>
                 </Box>
                 {pdfError && <Alert severity="error" sx={{ mb: 1.5 }} onClose={() => setPdfError(null)}>{pdfError}</Alert>}
-                <Grid container spacing={2} alignItems="stretch" sx={{ mb: 2 }}>
+                <StatCardGrid columns={kpiCards.length} sx={{ mb: 2 }}>
                     {kpiCards.map((kpi) => (
-                        <Grid item xs={12} sm={6} md={12 / kpiCards.length} key={kpi.key} sx={{ display: 'flex' }}>
-                            <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, borderColor: 'divider', backgroundColor: softerPrimaryBg, width: '100%', display: 'flex', flexDirection: 'column' }}>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                                    <Box sx={{ minWidth: 0 }}>
-                                        <Typography variant="caption" color="textSecondary">{kpi.label}</Typography>
-                                        <Tooltip title={String(kpi.value)} placement="top" enterDelay={400}>
-                                            <Typography variant="h5" sx={{ letterSpacing: -0.5, fontWeight: 700 }} noWrap>{kpi.value}</Typography>
-                                        </Tooltip>
-                                    </Box>
-                                    <Box sx={{ width: 34, height: 34, flexShrink: 0, borderRadius: 1.5, backgroundColor: softPrimaryBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        {kpi.icon}
-                                    </Box>
-                                </Box>
-                                <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>{kpi.hint}</Typography>
-                                {kpi.chip && (
-                                    <Box sx={{ mt: 1.25 }}>
-                                        <Chip size="small" color="primary" variant="outlined" label={kpi.chip} sx={{ backgroundColor: softPrimaryBg }} />
-                                    </Box>
-                                )}
-                            </Paper>
-                        </Grid>
+                        <StatCard
+                            key={kpi.key}
+                            label={kpi.label}
+                            value={kpi.value}
+                            icon={kpi.icon}
+                            hint={(
+                                <>
+                                    {kpi.hint}
+                                    {kpi.chip && (
+                                        <Box sx={{ mt: 0.75 }}>
+                                            <Chip size="small" color="primary" variant="outlined" label={kpi.chip} sx={{ backgroundColor: softPrimaryBg }} />
+                                        </Box>
+                                    )}
+                                </>
+                            )}
+                        />
                     ))}
-                </Grid>
+                </StatCardGrid>
                 <Divider sx={{ mb: 2 }} />
                 <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
                     {total} recorridos: {clientBreakdown.colegios} de colegios · {clientBreakdown.corporativos} corporativos
@@ -553,8 +548,10 @@ const RouteHistoryPage = () => {
                                     <Grid container spacing={2}>
                                         {routes.map((route, index) => (
                                             <Grid item xs={12} key={route.id || index}>
-                                                <Card variant="outlined" sx={{ borderRadius: 2, borderLeft: route.reporteFalla ? '4px solid #f44336' : '4px solid #4caf50', transition: 'all 0.3s', '&:hover': { boxShadow: 3, transform: 'translateY(-2px)' } }}>
-                                                    <CardContent>
+                                                <MobileCard
+                                                    elevation={0}
+                                                    sx={{ mb: 0, border: '1px solid', borderColor: 'divider', borderRadius: 2, borderLeft: route.reporteFalla ? '4px solid #f44336' : '4px solid #4caf50', transition: 'all 0.3s', '&:hover': { boxShadow: 3, transform: 'translateY(-2px)' } }}
+                                                >
                                                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                                                 <DirectionsBus color="primary" />
@@ -607,35 +604,20 @@ const RouteHistoryPage = () => {
                                                         </Box>
 
                                                         <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-                                                            <Typography variant="caption" color="textSecondary">Registrado el {new Date(route.createdAt).toLocaleDateString('es-GT', { year: 'numeric', month: 'long', day: 'numeric' })}</Typography>
+                                                            <Typography variant="caption" color="textSecondary">Registrado el {formatDateLong(route.createdAt)}</Typography>
                                                         </Box>
-                                                    </CardContent>
-                                                </Card>
+                                                </MobileCard>
                                             </Grid>
                                         ))}
                                     </Grid>
                                 ) : (
-                                    <TableContainer>
+                                    <AppTableContainer>
                                         <Table size="small">
-                                            <TableHead>
-                                                <TableRow>
-                                                    <TableCell>Fecha</TableCell>
-                                                    <TableCell align="center">Número de ruta</TableCell>
-                                                    <TableCell>Placa</TableCell>
-                                                    <TableCell>Piloto</TableCell>
-                                                    <TableCell>Cliente</TableCell>
-                                                    <TableCell>Hora inicio</TableCell>
-                                                    <TableCell>Hora fin</TableCell>
-                                                    <TableCell>Duración</TableCell>
-                                                    <TableCell>Kilometraje</TableCell>
-                                                    <TableCell>Estado</TableCell>
-                                                    {/* Acciones removidas: vista solo lectura */}
-                                                </TableRow>
-                                            </TableHead>
+                                            <SortableTableHead columns={HISTORY_COLUMNS} />
                                             <TableBody>
                                                 {routes.map((route, idx) => (
                                                     <TableRow key={route.id || idx} hover>
-                                                        <TableCell>{new Date(route.createdAt).toLocaleDateString('es-GT', { year: 'numeric', month: '2-digit', day: '2-digit' })}</TableCell>
+                                                        <TableCell>{formatDate(route.createdAt)}</TableCell>
                                                         <TableCell align="center">{route.routeNumber || route.number || '—'}</TableCell>
                                                         <TableCell>
                                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -657,7 +639,7 @@ const RouteHistoryPage = () => {
                                                 ))}
                                             </TableBody>
                                         </Table>
-                                    </TableContainer>
+                                    </AppTableContainer>
                                 )}
 
                                 {loading && (
@@ -670,12 +652,16 @@ const RouteHistoryPage = () => {
                     </Grid>
 
                     <Grid item xs={12}>
-                        <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'nowrap' }}>
-                            <Box sx={{ width: 56 }} />
-                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflowX: 'auto' }}>
-                                <Pagination count={Math.max(1, Math.ceil((total || 0) / pageSize))} page={page} onChange={(e, p) => setPage(p)} color="primary" />
-                            </Box>
-                        </Box>
+                        <AppTablePagination
+                            count={total}
+                            page={page - 1}
+                            rowsPerPage={pageSize}
+                            onPageChange={(_event, newPage) => setPage(newPage + 1)}
+                            onRowsPerPageChange={(event) => {
+                                setPageSize(Number.parseInt(event.target.value, 10));
+                                setPage(1);
+                            }}
+                        />
                     </Grid>
                 </Grid>
             </Paper>

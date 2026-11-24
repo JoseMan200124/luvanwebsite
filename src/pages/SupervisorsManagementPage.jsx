@@ -2,21 +2,18 @@
 
 import React, { useEffect, useState, useContext } from 'react';
 import {
-    Typography,
     Paper,
+    Typography,
     CircularProgress,
     Table,
     TableBody,
     TableCell,
     TableContainer,
     TableHead,
-    TablePagination,
     TableRow,
     Accordion,
     AccordionSummary,
     AccordionDetails,
-    useTheme,
-    useMediaQuery,
     Box,
     Chip,
     Alert
@@ -29,31 +26,23 @@ import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { matchSearchTokens } from '../utils/clientFilter';
 import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
-import styled from 'styled-components';
+import useTableState from '../hooks/useTableState';
+import useIsMobile from '../hooks/useIsMobile';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import { MobileCard, MobileField } from '../components/table/MobileCard';
 
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 
-// Container principal con estilos responsivos
-// Componentes para vista móvil (tarjetas)
-const MobileCard = styled(Paper)`
-  padding: 16px;
-  margin-bottom: 16px;
-`;
-const MobileField = styled(Box)`
-  margin-bottom: 8px;
-  display: flex;
-  flex-direction: column;
-`;
-const MobileLabel = styled(Typography)`
-  font-weight: bold;
-  font-size: 0.875rem;
-  color: #555;
-`;
-const MobileValue = styled(Typography)`
-  font-size: 1rem;
-`;
+// Columnas de la tabla de supervisores
+const COLUMNS = [
+    { id: 'name', label: 'Nombre' },
+    { id: 'email', label: 'Email' },
+    { id: 'clients', label: 'Clientes Asignados' },
+];
 
 const ClientsList = ({ clients }) => {
     if (clients.length === 0) {
@@ -125,18 +114,16 @@ const ClientsList = ({ clients }) => {
 
 const SupervisorsManagementPage = () => {
     const { auth } = useContext(AuthContext);
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
 
     const [supervisors, setSupervisors] = useState([]);
     const [loading, setLoading] = useState(false);
 
     // Para búsqueda y paginación
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(5);
+    const table = useTableState();
     const pageFilters = useFilters({
         fields: [F.search('search', { placeholder: 'Nombre o correo' })],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const { search: searchQuery } = pageFilters.applied;
 
@@ -169,14 +156,7 @@ const SupervisorsManagementPage = () => {
     // Filtrar supervisores
     const filteredSupervisors = supervisors.filter((s) => matchSearchTokens(searchQuery, [s.name, s.email]));
 
-    // Paginación
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
+    const pageSupervisors = table.paginate(filteredSupervisors);
 
     const handleChangeAccordion = (panel) => (event, isExpanded) => {
         setExpanded(isExpanded ? panel : false);
@@ -202,21 +182,13 @@ const SupervisorsManagementPage = () => {
                     ) : isMobile ? (
                         // Vista móvil: renderizar una lista de tarjetas (MobileCard) para cada supervisor
                         <>
-                            {filteredSupervisors
-                                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                            {pageSupervisors
                                 .map((sup, index) => {
                                     return (
                                         <MobileCard key={sup.email}>
-                                            <MobileField>
-                                                <MobileLabel>Nombre</MobileLabel>
-                                                <MobileValue>{sup.name}</MobileValue>
-                                            </MobileField>
-                                            <MobileField>
-                                                <MobileLabel>Email</MobileLabel>
-                                                <MobileValue>{sup.email}</MobileValue>
-                                            </MobileField>
-                                            <MobileField>
-                                                <MobileLabel>Clientes Asignados</MobileLabel>
+                                            <MobileField label="Nombre">{sup.name}</MobileField>
+                                            <MobileField label="Email">{sup.email}</MobileField>
+                                            <MobileField label="Clientes Asignados">
                                                 <Accordion
                                                     expanded={expanded === `panel-${index}`}
                                                     onChange={handleChangeAccordion(`panel-${index}`)}
@@ -235,34 +207,16 @@ const SupervisorsManagementPage = () => {
                                         </MobileCard>
                                     );
                                 })}
-                            <TablePagination
-                                component="div"
-                                count={filteredSupervisors.length}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                rowsPerPageOptions={[5, 10, 25]}
-                                labelRowsPerPage="Filas por página"
-                            />
+                            <AppTablePagination count={filteredSupervisors.length} {...table.paginationProps} />
                         </>
                     ) : (
                         // Vista desktop: renderizar la tabla original
                         <Paper sx={{ width: '100%', overflowX: 'auto' }}>
-                            <TableContainer
-                                sx={{ maxHeight: { xs: 400, sm: 'none' }, overflowX: 'auto' }}
-                            >
+                            <AppTableContainer>
                                 <Table stickyHeader sx={{ minWidth: 760 }}>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>Nombre</TableCell>
-                                            <TableCell>Email</TableCell>
-                                            <TableCell>Clientes Asignados</TableCell>
-                                        </TableRow>
-                                    </TableHead>
+                                    <SortableTableHead columns={COLUMNS} />
                                     <TableBody>
-                                        {filteredSupervisors
-                                            .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                                        {pageSupervisors
                                             .map((sup, index) => {
                                                 return (
                                                     <TableRow key={sup.email}>
@@ -296,17 +250,8 @@ const SupervisorsManagementPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={filteredSupervisors.length}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                rowsPerPageOptions={[5, 10, 25]}
-                                labelRowsPerPage="Filas por página"
-                            />
+                            </AppTableContainer>
+                            <AppTablePagination count={filteredSupervisors.length} {...table.paginationProps} />
                         </Paper>
                     )}
                 </>

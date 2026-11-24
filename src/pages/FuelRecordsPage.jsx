@@ -1,7 +1,11 @@
 // src/pages/FuelRecordsPage.jsx
 
 import { useEffect, useRef, useState } from 'react';
-import PermissionGuard from '../components/PermissionGuard';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import RowActions from '../components/table/RowActions';
 import usePermissions from '../hooks/usePermissions';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import {
@@ -10,16 +14,10 @@ import {
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    TablePagination,
-    TableSortLabel,
     CircularProgress,
     Box,
     Grid,
-    Card,
-    CardContent,
     Select,
     MenuItem,
     FormControl,
@@ -29,13 +27,8 @@ import {
     Chip,
     IconButton,
     Tooltip,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     Button,
-    Snackbar,
-    Alert,
+    FormHelperText,
 } from '@mui/material';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
@@ -48,6 +41,8 @@ import {
     Add as AddIcon
 } from '@mui/icons-material';
 import moment from 'moment-timezone';
+import { formatDateTime } from '../utils/dateFormat';
+import { formatQ } from '../utils/currency';
 import {
     getFuelRecords,
     getFuelStatistics,
@@ -68,8 +63,34 @@ import { F, toRouteOptions } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
+import AppDialog from '../components/dialogs/AppDialog';
+import EntitySelect from '../components/form/EntitySelect';
+import { buildFileName } from '../utils/fileName';
+import { todayForFileName } from '../utils/download';
+import MoneyField from '../components/form/MoneyField';
+import { validate, hasErrors, focusFirstError, clearError } from '../utils/validators';
+import { LocalGasStation as LocalGasStationIcon, Payments as PaymentsIcon, Sell as PriceIcon, Speed as SpeedIcon } from '@mui/icons-material';
+import { StatCard, StatCardGrid } from '../components/StatCard';
+import { loadCatalog } from '../services/catalogStore';
 
-moment.tz.setDefault('America/Guatemala');
+// Campos obligatorios de los formularios (los mismos que exige el servidor; galones y precio, mayores que 0).
+const CREATE_RULES = {
+    client: ['required'],
+    busId: ['required'],
+    fuelingReason: ['required'],
+    fuelType: ['required'],
+    gallonage: ['required', 'positive'],
+    pricePerGallon: ['required', 'positive'],
+};
+const EDIT_RULES = { ...CREATE_RULES, routeNumber: ['required'] };
+
+const failedResponse = (response, fallback) => {
+    const error = new Error(response?.message || fallback);
+    error.response = { data: { message: response?.message || fallback } };
+    return error;
+};
 
 // Id del colegio o corporación al que pertenece un bus, según el tipo de cliente.
 const getBusClientId = (bus, type) => {
@@ -85,20 +106,34 @@ const getBusClientId = (bus, type) => {
 // Feature flag: mostrar la nueva métrica de consumo (activar manualmente cuando corresponda)
 const SHOW_NEW_FUEL_METRIC = false;
 
-// Tamaño dinámico de las tarjetas para evitar huecos en la fila
-const cardMd = SHOW_NEW_FUEL_METRIC ? 2.4 : 3;
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'recordDate', label: 'Fecha', sortable: true },
+    { id: 'client', label: 'Cliente', sortable: true },
+    { id: 'routeNumber', label: 'Ruta', sortable: true },
+    { id: 'plate', label: 'Placa', sortable: true },
+    { id: 'pilotName', label: 'Piloto', sortable: true },
+    { id: 'fuelingReason', label: 'Razón', sortable: true },
+    { id: 'fuelType', label: 'Tipo de combustible', sortable: true },
+    { id: 'anotacion', label: 'Anotación', align: 'center' },
+    { id: 'gallonage', label: 'Galones', sortable: true, align: 'right' },
+    { id: 'pricePerGallon', label: 'Precio/Galón', sortable: true, align: 'right' },
+    { id: 'totalAmount', label: 'Total', sortable: true, align: 'right' },
+    { id: 'acciones', label: 'Acciones', align: 'center' },
+];
 
 const FuelRecordsPage = () => {
     const { hasPermission } = usePermissions();
+    const notify = useNotify();
+    const confirm = useConfirm();
     const [fuelRecords, setFuelRecords] = useState([]);
     const [loading, setLoading] = useState(false);
     const [exporting, setExporting] = useState(false);
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(25);
+    // Paginación y orden (en el servidor)
+    const table = useTableState({ defaultOrderBy: 'recordDate', defaultOrder: 'desc' });
+    const { page, rowsPerPage, orderBy, order } = table;
     const [totalCount, setTotalCount] = useState(0);
     // Ordenamiento
-    const [orderBy, setOrderBy] = useState('recordDate');
-    const [order, setOrder] = useState('desc');
 
     // Filtros
     const [schools, setSchools] = useState([]);
@@ -137,7 +172,7 @@ const FuelRecordsPage = () => {
             F.select('fuelType', { label: 'Tipo de combustible', options: FUEL_TYPES }),
             F.dateRange('dates'),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     draftClientRef.current = pageFilters.draft.client;
     const {
@@ -159,12 +194,6 @@ const FuelRecordsPage = () => {
     // Editar registro
     const [editOpen, setEditOpen] = useState(false);
     const [updating, setUpdating] = useState(false);
-    const [editSnackbar, setEditSnackbar] = useState({ open: false, message: '', severity: 'success' });
-
-    // Eliminar registro
-    const [deleteOpen, setDeleteOpen] = useState(false);
-    const [deleteId, setDeleteId] = useState(null);
-    const [deleting, setDeleting] = useState(false);
     const [editSchools, setEditSchools] = useState([]);
     const [editCorporations, setEditCorporations] = useState([]);
     const [editBuses, setEditBuses] = useState([]);
@@ -201,6 +230,11 @@ const FuelRecordsPage = () => {
         recordDateTime: moment().format('hh:mm A'),
         notes: ''
     });
+    const [createErrors, setCreateErrors] = useState({});
+    const [editErrors, setEditErrors] = useState({});
+    // Valores con que se abrió cada formulario: cerrar con cambios pide confirmación.
+    const createInitialRef = useRef('');
+    const editInitialRef = useRef('');
 
     // Estadísticas
     const [clientBreakdown, setClientBreakdown] = useState({ colegios: 0, corporativos: 0 });
@@ -237,9 +271,7 @@ const FuelRecordsPage = () => {
             return;
         }
         try {
-            const response = await api.get('/users/pilots');
-            const pilotsData = Array.isArray(response.data?.users) ? response.data.users : (response.data || []);
-            setPilots(pilotsData);
+            setPilots(await loadCatalog('pilots'));
         } catch (error) {
             console.error('Error al cargar pilotos:', error);
             setPilots([]);
@@ -256,9 +288,7 @@ const FuelRecordsPage = () => {
 
     const fetchSchools = async () => {
         try {
-            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true } });
-            const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
-            setSchools(schoolsData);
+            setSchools(await loadCatalog('schools', { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true }));
         } catch (error) {
             console.error('Error al cargar colegios:', error);
             setSchools([]);
@@ -268,8 +298,11 @@ const FuelRecordsPage = () => {
     const fetchBusesBySchool = async (schoolId) => {
         try {
             // Si no se pasa schoolId, traemos todos los buses para permitir seleccionar placa independientemente.
-            const url = schoolId ? `/buses/school/${schoolId}` : '/buses/simple';
-            const response = await api.get(url);
+            if (!schoolId) {
+                setBuses(await loadCatalog('buses'));
+                return;
+            }
+            const response = await api.get(`/buses/school/${schoolId}`);
             const busesData = Array.isArray(response.data) ? response.data : (response.data?.buses || []);
             setBuses(busesData);
         } catch (error) {
@@ -280,9 +313,7 @@ const FuelRecordsPage = () => {
 
     const fetchCorporations = async () => {
         try {
-            const response = await api.get('/corporations');
-            const corporationsData = Array.isArray(response.data) ? response.data : (response.data?.corporations || []);
-            setCorporations(corporationsData);
+            setCorporations(await loadCatalog('corporations'));
         } catch (error) {
             console.error('Error al cargar corporaciones:', error);
             setCorporations([]);
@@ -446,6 +477,7 @@ const FuelRecordsPage = () => {
             }
         } catch (error) {
             console.error('Error al cargar registros de combustible:', error);
+            notify.fromError(error, 'Error al cargar los registros de combustible');
             setFuelRecords([]);
             setTotalCount(0);
         } finally {
@@ -453,12 +485,6 @@ const FuelRecordsPage = () => {
         }
     };
 
-    const handleRequestSort = (field) => {
-        const isAsc = orderBy === field && order === 'asc';
-        setOrder(isAsc ? 'desc' : 'asc');
-        setOrderBy(field);
-        setPage(0);
-    };
 
     const fetchStatistics = async () => {
         try {
@@ -567,18 +593,10 @@ const FuelRecordsPage = () => {
         }
     };
 
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
 
     const handleDownloadExcel = async () => {
         if (!totalCount || totalCount === 0) {
-            window.alert('No hay registros para exportar con los filtros seleccionados.');
+            notify.warning('No hay registros para exportar con los filtros seleccionados');
             return;
         }
         try {
@@ -616,19 +634,10 @@ const FuelRecordsPage = () => {
                 filters.endDate = dates.to;
             }
 
-            const response = await exportFuelRecordsExcel(filters);
-            const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `registros_combustible_${moment().format('YYYYMMDD_HHmmss')}.xlsx`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            window.URL.revokeObjectURL(url);
+            await exportFuelRecordsExcel(filters, buildFileName({ object: 'registros combustible', date: todayForFileName(), extension: 'xlsx' }));
         } catch (error) {
             console.error('Error al generar el reporte de combustible:', error);
-            window.alert('Error al generar el reporte. Revise la consola.');
+            notify.fromError(error, 'Error al generar el reporte');
         } finally {
             setExporting(false);
         }
@@ -649,6 +658,7 @@ const FuelRecordsPage = () => {
             }
         } catch (error) {
             console.error('Error al cargar detalles del registro:', error);
+            notify.fromError(error, 'Error al cargar los detalles del registro');
         }
     };
 
@@ -663,15 +673,11 @@ const FuelRecordsPage = () => {
             // (p. ej. creado en un colegio de 2027 que en realidad es de 2026).
             // Sin allCycles, interceptor y backend limitarían a uno.
             const params = { allCycles: true, includeArchived: true };
-            const [schoolsResponse, corporationsResponse, busesResponse] = await Promise.all([
-                api.get('/schools', { params }),
-                api.get('/corporations'),
-                api.get('/buses/simple')
+            const [schoolsData, corporationsData, busesData] = await Promise.all([
+                loadCatalog('schools', params),
+                loadCatalog('corporations'),
+                loadCatalog('buses')
             ]);
-
-            const schoolsData = Array.isArray(schoolsResponse.data) ? schoolsResponse.data : (schoolsResponse.data?.schools || []);
-            const corporationsData = Array.isArray(corporationsResponse.data) ? corporationsResponse.data : (corporationsResponse.data?.corporations || []);
-            const busesData = Array.isArray(busesResponse.data) ? busesResponse.data : (busesResponse.data?.buses || []);
 
             setEditSchools(schoolsData);
             setEditCorporations(corporationsData);
@@ -711,7 +717,10 @@ const FuelRecordsPage = () => {
         setEditSchools([]);
         setEditCorporations([]);
         setEditBuses([]);
-        setEditForm(buildEditFormFromRecord(record));
+        const form = buildEditFormFromRecord(record);
+        editInitialRef.current = JSON.stringify(form);
+        setEditErrors({});
+        setEditForm(form);
         loadEditReferenceData();
         setEditOpen(true);
         setDetailsOpen(false);
@@ -720,6 +729,7 @@ const FuelRecordsPage = () => {
     const handleCloseEdit = () => {
         setEditOpen(false);
         setUpdating(false);
+        setEditErrors({});
         setEditSchools([]);
         setEditCorporations([]);
         setEditBuses([]);
@@ -739,6 +749,7 @@ const FuelRecordsPage = () => {
     };
 
     const handleEditChange = (field, value) => {
+        setEditErrors((prev) => clearError(prev, field));
         if (field === 'client') {
             setEditForm(prev => ({ ...prev, client: value, routeNumber: '' }));
             return;
@@ -755,16 +766,15 @@ const FuelRecordsPage = () => {
 
     const handleEditSubmit = async () => {
         if (!selectedRecord) {
-            setEditSnackbar({ open: true, message: 'No se pudo cargar el registro a editar.', severity: 'error' });
+            notify.error('No se pudo cargar el registro a editar');
             return;
         }
 
-        const required = ['client', 'busId', 'routeNumber', 'fuelingReason', 'fuelType', 'pricePerGallon', 'gallonage'];
-        for (const key of required) {
-            if (editForm[key] === '' || editForm[key] === null || editForm[key] === undefined) {
-                setEditSnackbar({ open: true, message: 'Por favor complete los campos requeridos.', severity: 'error' });
-                return;
-            }
+        const found = validate(editForm, EDIT_RULES);
+        setEditErrors(found);
+        if (hasErrors(found)) {
+            focusFirstError(found);
+            return;
         }
 
         let recordDateIso = null;
@@ -800,65 +810,36 @@ const FuelRecordsPage = () => {
                 handleCloseEdit();
                 handleCloseDetails();
                 await Promise.all([fetchFuelRecords(), fetchStatistics()]);
-                setEditSnackbar({ open: true, message: 'Registro actualizado exitosamente', severity: 'success' });
+                notify.success('Registro actualizado');
             } else {
-                setEditSnackbar({
-                    open: true,
-                    message: response?.message || 'No se pudo actualizar el registro.',
-                    severity: 'error'
-                });
+                notify.error(response?.message || 'No se pudo actualizar el registro');
             }
         } catch (error) {
             console.error('Error al actualizar registro:', error);
-            setEditSnackbar({
-                open: true,
-                message: 'Error al actualizar el registro. Revise la consola.',
-                severity: 'error'
-            });
+            notify.fromError(error, 'Error al actualizar el registro');
         } finally {
             setUpdating(false);
         }
     };
 
-    const handleOpenDelete = (id) => {
-        setDeleteId(id);
-        setDeleteOpen(true);
-    };
-
-    const handleCancelDelete = () => {
-        setDeleteId(null);
-        setDeleteOpen(false);
-    };
-
-    const handleConfirmDelete = async () => {
-        if (!deleteId) {
-            return;
-        }
-        try {
-            setDeleting(true);
-            const response = await deleteFuelRecord(deleteId);
-            if (response?.success) {
-                setDeleteOpen(false);
-                setDeleteId(null);
-                handleCloseDetails();
-                await Promise.all([fetchFuelRecords(), fetchStatistics()]);
-                setEditSnackbar({ open: true, message: 'Registro eliminado exitosamente', severity: 'success' });
-            } else {
-                setEditSnackbar({
-                    open: true,
-                    message: response?.message || 'No se pudo eliminar el registro.',
-                    severity: 'error'
-                });
-            }
-        } catch (error) {
-            console.error('Error al eliminar registro:', error);
-            setEditSnackbar({
-                open: true,
-                message: 'Error al eliminar el registro. Revise la consola.',
-                severity: 'error'
-            });
-        } finally {
-            setDeleting(false);
+    const handleDelete = async (id) => {
+        const ok = await confirm({
+            title: 'Eliminar registro de combustible',
+            message: 'Se eliminará el registro de combustible. Esta acción no se puede deshacer.',
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: async () => {
+                const response = await deleteFuelRecord(id);
+                if (!response?.success) {
+                    throw failedResponse(response, 'No se pudo eliminar el registro');
+                }
+            },
+            errorMessage: 'Error al eliminar el registro',
+        });
+        if (ok) {
+            handleCloseDetails();
+            await Promise.all([fetchFuelRecords(), fetchStatistics()]);
+            notify.success('Registro eliminado');
         }
     };
 
@@ -870,13 +851,6 @@ const FuelRecordsPage = () => {
             'admin': 'secondary',
         };
         return colors[reason] || 'default';
-    };
-
-    const formatCurrency = (amount) => {
-        return new Intl.NumberFormat('es-GT', {
-            style: 'currency',
-            currency: 'GTQ',
-        }).format(amount || 0);
     };
 
     const editPlateOptions = [...new Set(editBuses.map((bus) => bus.plate).filter(Boolean))]
@@ -894,9 +868,16 @@ const FuelRecordsPage = () => {
         : null;
 
     // Crear registro: handlers
+    const handleOpenCreate = () => {
+        createInitialRef.current = JSON.stringify(createForm);
+        setCreateErrors({});
+        setCreateOpen(true);
+    };
+
     const handleCloseCreate = () => {
         setCreateOpen(false);
         setCreating(false);
+        setCreateErrors({});
         setCreateForm({
             fuelingReason: '',
             fuelType: '',
@@ -913,6 +894,7 @@ const FuelRecordsPage = () => {
     };
 
     const handleCreateChange = (field, value) => {
+        setCreateErrors((prev) => clearError(prev, field));
         // If the client changes, clear previously selected routeNumber to avoid stale values
         if (field === 'client') {
             setCreateForm(prev => ({ ...prev, client: value, routeNumber: '' }));
@@ -922,13 +904,11 @@ const FuelRecordsPage = () => {
     };
 
     const handleCreateSubmit = async () => {
-        // Validar campos requeridos: fuelingReason, fuelType, client, busId, pricePerGallon, gallonage
-        const required = ['fuelingReason', 'fuelType', 'client', 'busId', 'pricePerGallon', 'gallonage'];
-        for (const key of required) {
-            if (createForm[key] === '' || createForm[key] === null || createForm[key] === undefined) {
-                window.alert('Por favor complete los campos requeridos.');
-                return;
-            }
+        const found = validate(createForm, CREATE_RULES);
+        setCreateErrors(found);
+        if (hasErrors(found)) {
+            focusFirstError(found);
+            return;
         }
 
         // Combine selected date and time into a single ISO timestamp
@@ -973,16 +953,16 @@ const FuelRecordsPage = () => {
             if (response?.success) {
                 handleCloseCreate();
                 // Refresh list and stats
-                setPage(0);
+                table.resetPage();
                 fetchFuelRecords();
                 fetchStatistics();
-                window.alert('Registro creado exitosamente');
+                notify.success('Registro creado');
             } else {
-                window.alert('No se pudo crear el registro.');
+                notify.error(response?.message || 'No se pudo crear el registro');
             }
         } catch (error) {
             console.error('Error al crear registro:', error);
-            window.alert('Error al crear registro. Revise la consola.');
+            notify.fromError(error, 'Error al crear el registro');
         } finally {
             setCreating(false);
         }
@@ -997,94 +977,40 @@ const FuelRecordsPage = () => {
                     subtitle="Visualiza y gestiona los registros de abastecimiento de combustible"
                     actions={[
                         { key: 'report', label: 'Generar reporte', group: 'download', loading: exporting, disabled: totalCount === 0, onClick: handleDownloadExcel },
-                        { key: 'create', label: 'Nuevo registro', icon: <AddIcon />, primary: true, permission: 'combustible-crear-registro', onClick: () => setCreateOpen(true) },
+                        { key: 'create', label: 'Nuevo registro', icon: <AddIcon />, primary: true, permission: 'combustible-crear-registro', onClick: handleOpenCreate },
                     ]}
                 />
 
                 {/* Estadísticas */}
-                <Grid container spacing={3} mb={3} alignItems="stretch">
-                    {/* Ajuste md dinámico para evitar hueco cuando la tarjeta nueva está oculta */}
-                    {/** cardMd: 2.4 cuando mostramos 5 cards; 3 cuando mostramos solo 4 **/}
-                    
-                    <Grid item xs={12} sm={6} md={cardMd}>
-                        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 140 }}>
-                            <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', py: 1.5 }}>
-                                <Box display="flex" alignItems="center" mb={1}>
-                                    <GasIcon color="primary" sx={{ mr: 1 }} />
-                                    <Typography color="textSecondary" variant="body2">
-                                        Total Registros
-                                    </Typography>
-                                </Box>
-                                <Typography variant="h4">
-                                    {statistics.totalRecords}
-                                </Typography>
-                                <Typography variant="caption" color="textSecondary" display="block">
-                                    {clientBreakdown.colegios} de colegios · {clientBreakdown.corporativos} corporativos
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={cardMd}>
-                        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 140 }}>
-                            <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', py: 1.5 }}>
-                                <Typography color="textSecondary" gutterBottom variant="body2">
-                                    Total Galones
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.totalGallons.toFixed(2)}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={cardMd}>
-                        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 140 }}>
-                            <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', py: 1.5 }}>
-                                <Typography color="textSecondary" gutterBottom variant="body2">
-                                    Total Gastado
-                                </Typography>
-                                <Typography variant="h4">
-                                    {formatCurrency(statistics.totalAmount)}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={cardMd}>
-                        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 140 }}>
-                            <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', py: 1.5 }}>
-                                <Typography color="textSecondary" gutterBottom variant="body2">
-                                    Precio Promedio/Galón
-                                </Typography>
-                                <Typography variant="h4">
-                                    {formatCurrency(statistics.averagePrice)}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
+                <StatCardGrid columns={SHOW_NEW_FUEL_METRIC ? 5 : 4}>
+                    <StatCard
+                        label="Total registros"
+                        value={statistics.totalRecords}
+                        icon={<GasIcon />}
+                        format="number"
+                        hint={`${clientBreakdown.colegios} de colegios · ${clientBreakdown.corporativos} corporativos`}
+                    />
+                    <StatCard label="Total galones" value={statistics.totalGallons.toFixed(2)} icon={<LocalGasStationIcon />} />
+                    <StatCard label="Total gastado" value={statistics.totalAmount || 0} icon={<PaymentsIcon />} format="money" />
+                    <StatCard label="Precio promedio/galón" value={statistics.averagePrice || 0} icon={<PriceIcon />} format="money" />
                     {SHOW_NEW_FUEL_METRIC && (
-                        <Grid item xs={12} sm={6} md={2.4}>
-                            <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 140 }}>
-                                <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', py: 1.5 }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <Typography color="textSecondary" gutterBottom variant="body2" sx={{ mb: 0 }}>
-                                            Consumo de combustible por días/recorrido
-                                        </Typography>
-                                        <Tooltip title="¿Cómo se calcula esto?">
-                                            <IconButton size="small" onClick={() => setEfficiencyInfoOpen(true)} sx={{ ml: 0.5, p: 0.25 }}>
-                                                <InfoOutlinedIcon fontSize="small" color="action" />
-                                            </IconButton>
-                                        </Tooltip>
-                                    </Box>
-                                    <Typography variant="h5" sx={{ lineHeight: 1.2 }}>
-                                        {(Number(statistics.efficiency?.estimatedConsumptionPerDay) || 0).toFixed(2)} gal/día
-                                    </Typography>
-                                    <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
-                                        {(Number(statistics.efficiency?.estimatedConsumptionPerRoute) || 0).toFixed(2)} gal/recorrido
-                                    </Typography>
-                                </CardContent>
-                            </Card>
-                        </Grid>
+                        <StatCard
+                            label={(
+                                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center' }}>
+                                    Consumo de combustible por días/recorrido
+                                    <Tooltip title="¿Cómo se calcula esto?">
+                                        <IconButton size="small" onClick={() => setEfficiencyInfoOpen(true)} sx={{ ml: 0.5, p: 0.25 }}>
+                                            <InfoOutlinedIcon fontSize="small" color="action" />
+                                        </IconButton>
+                                    </Tooltip>
+                                </Box>
+                            )}
+                            value={`${(Number(statistics.efficiency?.estimatedConsumptionPerDay) || 0).toFixed(2)} gal/día`}
+                            icon={<SpeedIcon />}
+                            hint={`${(Number(statistics.efficiency?.estimatedConsumptionPerRoute) || 0).toFixed(2)} gal/recorrido`}
+                        />
                     )}
-                </Grid>
+                </StatCardGrid>
 
                 {/* Filtros */}
                 <FilterBar
@@ -1103,109 +1029,14 @@ const FuelRecordsPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer sx={{ overflowX: 'auto' }}>
+                            <AppTableContainer>
                                 <Table sx={{ minWidth: 1200 }}>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell sortDirection={orderBy === 'recordDate' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'recordDate'}
-                                                    direction={orderBy === 'recordDate' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('recordDate')}
-                                                >
-                                                    Fecha
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'client' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'client'}
-                                                    direction={orderBy === 'client' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('client')}
-                                                >
-                                                    Cliente
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'routeNumber' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'routeNumber'}
-                                                    direction={orderBy === 'routeNumber' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('routeNumber')}
-                                                >
-                                                    Ruta
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'plate' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'plate'}
-                                                    direction={orderBy === 'plate' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('plate')}
-                                                >
-                                                    Placa
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'pilotName' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'pilotName'}
-                                                    direction={orderBy === 'pilotName' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('pilotName')}
-                                                >
-                                                    Piloto
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'fuelingReason' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'fuelingReason'}
-                                                    direction={orderBy === 'fuelingReason' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('fuelingReason')}
-                                                >
-                                                    Razón
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'fuelType' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'fuelType'}
-                                                    direction={orderBy === 'fuelType' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('fuelType')}
-                                                >
-                                                    Tipo Combustible
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="center">Anotación</TableCell>
-                                            <TableCell align="right" sortDirection={orderBy === 'gallonage' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'gallonage'}
-                                                    direction={orderBy === 'gallonage' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('gallonage')}
-                                                >
-                                                    Galones
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="right" sortDirection={orderBy === 'pricePerGallon' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'pricePerGallon'}
-                                                    direction={orderBy === 'pricePerGallon' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('pricePerGallon')}
-                                                >
-                                                    Precio/Galón
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="right" sortDirection={orderBy === 'totalAmount' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'totalAmount'}
-                                                    direction={orderBy === 'totalAmount' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('totalAmount')}
-                                                >
-                                                    Total
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="center">Acciones</TableCell>
-                                        </TableRow>
-                                    </TableHead>
+                                    <SortableTableHead columns={COLUMNS} {...table.sortProps} />
                                     <TableBody>
                                         {fuelRecords.map((record) => (
                                             <TableRow key={record.id}>
                                                 <TableCell>
-                                                    {moment(record.recordDate).format('DD/MM/YYYY HH:mm')}
+                                                    {formatDateTime(record.recordDate)}
                                                 </TableCell>
                                                 <TableCell>
                                                     {record.school?.name || record.corporation?.name || 'N/A'}
@@ -1251,45 +1082,21 @@ const FuelRecordsPage = () => {
                                                     {Number.parseFloat(record.gallonage).toFixed(2)}
                                                 </TableCell>
                                                 <TableCell align="right">
-                                                    {formatCurrency(record.pricePerGallon)}
+                                                    {formatQ(record.pricePerGallon || 0)}
                                                 </TableCell>
                                                 <TableCell align="right">
                                                     <Typography variant="body2" fontWeight="bold">
-                                                        {formatCurrency(record.totalAmount)}
+                                                        {formatQ(record.totalAmount || 0)}
                                                     </Typography>
                                                 </TableCell>
                                                 <TableCell align="center">
-                                                    <Tooltip title="Ver detalles">
-                                                        <IconButton
-                                                            size="small"
-                                                            onClick={() => handleViewDetails(record.id)}
-                                                            color="primary"
-                                                        >
-                                                            <VisibilityIcon />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                    {record.canEdit && hasPermission('combustible-editar') && (
-                                                        <Tooltip title="Editar registro">
-                                                            <IconButton
-                                                                size="small"
-                                                                onClick={() => handleOpenEdit(record)}
-                                                                color="secondary"
-                                                            >
-                                                                <EditIcon />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    )}
-                                                    <PermissionGuard permission="combustible-eliminar">
-                                                        <Tooltip title="Eliminar registro">
-                                                            <IconButton
-                                                                size="small"
-                                                                onClick={() => handleOpenDelete(record.id)}
-                                                                color="error"
-                                                            >
-                                                                <DeleteIcon />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    </PermissionGuard>
+                                                    <RowActions
+                                                        actions={[
+                                                            { key: 'view', kind: 'view', color: 'primary', label: 'Ver detalles', icon: <VisibilityIcon fontSize="small" />, onClick: () => handleViewDetails(record.id) },
+                                                            record.canEdit && { key: 'edit', kind: 'edit', color: 'secondary', label: 'Editar registro', icon: <EditIcon fontSize="small" />, permission: 'combustible-editar', onClick: () => handleOpenEdit(record) },
+                                                            { key: 'delete', kind: 'delete', label: 'Eliminar registro', icon: <DeleteIcon fontSize="small" />, permission: 'combustible-eliminar', onClick: () => handleDelete(record.id) },
+                                                        ]}
+                                                    />
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -1302,610 +1109,587 @@ const FuelRecordsPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={totalCount}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                labelRowsPerPage="Registros por página:"
-                                labelDisplayedRows={({ from, to, count }) =>
-                                    `${from}-${to} de ${count !== -1 ? count : `más de ${to}`}`
-                                }
-                            />
+                            </AppTableContainer>
+                            <AppTablePagination count={totalCount} {...table.paginationProps} />
                         </>
                     )}
                 </Paper>
 
                 {/* Modal de Crear Registro */}
-                <Dialog
+                <AppDialog
                     open={createOpen}
                     onClose={handleCloseCreate}
-                    maxWidth="sm"
-                    fullWidth
+                    title="Nuevo registro de combustible"
+                    icon={<GasIcon />}
+                    size="sm"
+                    onSubmit={handleCreateSubmit}
+                    submitLabel="Crear"
+                    submitting={creating}
+                    readOnly={!hasPermission('combustible-crear-registro')}
+                    dirty={JSON.stringify(createForm) !== createInitialRef.current}
                 >
-                    <DialogTitle>Crear Registro de Combustible</DialogTitle>
-                    <DialogContent dividers>
-                        <Grid container spacing={2} sx={{ mt: 0.5 }}>
-                            <Grid item xs={12} sm={6}>
-                                <ClientSelector
-                                    size="medium"
-                                    schools={schools}
-                                    corporations={corporations}
-                                    value={createForm.client}
-                                    onChange={(client) => handleCreateChange('client', client)}
-                                />
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <Autocomplete
-                                    options={buses.map(b => ({ label: b.plate, id: b.id, routeNumber: b.routeNumber }))}
-                                    value={createForm.busId ? (buses.find(x => x.id === createForm.busId) ? { label: buses.find(x => x.id === createForm.busId).plate, id: createForm.busId } : null) : null}
-                                    onChange={(e, newValue) => {
-                                        handleCreateChange('busId', newValue ? newValue.id : '');
-                                    }}
-                                    getOptionLabel={(option) => option?.label || ''}
-                                    renderInput={(params) => <TextField {...params} label="Bus (Placa)" variant="outlined" />}
-                                    fullWidth
-                                    isOptionEqualToValue={(opt, val) => opt?.id === val?.id}
-                                />
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <Autocomplete
-                                    options={pilots.map(p => ({ label: p.name, id: p.id }))}
-                                    value={createForm.pilotId ? (pilots.find(x => x.id === createForm.pilotId) ? { label: pilots.find(x => x.id === createForm.pilotId).name, id: createForm.pilotId } : null) : null}
-                                    onChange={(e, newValue) => handleCreateChange('pilotId', newValue ? newValue.id : '')}
-                                    getOptionLabel={(option) => option?.label || ''}
-                                    renderInput={(params) => <TextField {...params} label="Piloto" variant="outlined" />}
-                                    fullWidth
-                                    isOptionEqualToValue={(opt, val) => opt?.id === val?.id}
-                                />
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <Autocomplete
-                                    options={(createForm.client ? (clientRouteNumbers.length ? clientRouteNumbers : []) : []).map(String).sort((a,b) => a - b)}
-                                    value={createForm.routeNumber || null}
-                                    onChange={(e, newValue) => handleCreateChange('routeNumber', newValue || '')}
-                                    getOptionLabel={(option) => String(option)}
-                                    renderInput={(params) => <TextField {...params} label="Número de Ruta" variant="outlined" />}
-                                    fullWidth
-                                    disabled={!createForm.client}
-                                />
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <FormControl fullWidth>
-                                    <InputLabel>Razón de Abastecimiento</InputLabel>
-                                    <Select
-                                        value={createForm.fuelingReason}
-                                        label="Razón de Abastecimiento"
-                                        onChange={(e) => handleCreateChange('fuelingReason', e.target.value)}
-                                    >
-                                        <MenuItem value="">Seleccione</MenuItem>
-                                        {Object.entries(FUELING_REASONS).map(([key, label]) => (
-                                            <MenuItem key={key} value={key}>{label}</MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <FormControl fullWidth>
-                                    <InputLabel>Tipo Combustible</InputLabel>
-                                    <Select
-                                        value={createForm.fuelType}
-                                        label="Tipo Combustible"
-                                        onChange={(e) => handleCreateChange('fuelType', e.target.value)}
-                                    >
-                                        <MenuItem value="">Seleccione</MenuItem>
-                                        {Object.entries(FUEL_TYPES).map(([key, label]) => (
-                                            <MenuItem key={key} value={key}>{label}</MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <TextField
-                                    label="Galones"
-                                    type="number"
-                                    fullWidth
-                                    value={createForm.gallonage}
-                                    onChange={(e) => handleCreateChange('gallonage', e.target.value)}
-                                />
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <TextField
-                                    label="Precio por Galón"
-                                    type="number"
-                                    fullWidth
-                                    value={createForm.pricePerGallon}
-                                    onChange={(e) => handleCreateChange('pricePerGallon', e.target.value)}
-                                />
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <DatePicker
-                                    label="Fecha"
-                                    value={createForm.recordDateDate}
-                                    onChange={(newValue) => handleCreateChange('recordDateDate', newValue)}
-                                    renderInput={(params) => <TextField fullWidth {...params} />}
-                                />
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <TextField
-                                    label="Hora (HH:mm)"
-                                    type="time"
-                                    value={createForm.recordDateTime}
-                                    onChange={(e) => handleCreateChange('recordDateTime', e.target.value)}
-                                    InputLabelProps={{ shrink: true }}
-                                    fullWidth
-                                />
-                            </Grid>
-
-                            <Grid item xs={12}>
-                                <TextField
-                                    label="Notas (opcional)"
-                                    fullWidth
-                                    multiline
-                                    minRows={2}
-                                    value={createForm.notes}
-                                    onChange={(e) => handleCreateChange('notes', e.target.value)}
-                                />
-                            </Grid>
+                    <Grid container spacing={2}>
+                        <Grid item xs={12} sm={6}>
+                            <ClientSelector
+                                size="medium"
+                                schools={schools}
+                                corporations={corporations}
+                                value={createForm.client}
+                                onChange={(client) => handleCreateChange('client', client)}
+                                name="client"
+                                required
+                                error={Boolean(createErrors.client)}
+                                helperText={createErrors.client}
+                            />
                         </Grid>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCloseCreate} disabled={creating}>Cancelar</Button>
-                        <PermissionGuard permission="combustible-crear-registro">
-                            <Button onClick={handleCreateSubmit} variant="contained" color="primary" disabled={creating}>
-                                {creating ? 'Creando...' : 'Crear'}
-                            </Button>
-                        </PermissionGuard>
-                    </DialogActions>
-                </Dialog>
+
+                        <Grid item xs={12} sm={6}>
+                            <EntitySelect
+                                entity="bus"
+                                label="Bus (placa)"
+                                name="busId"
+                                size="medium"
+                                options={buses}
+                                value={createForm.busId}
+                                onChange={(busId) => handleCreateChange('busId', busId)}
+                                required
+                                error={Boolean(createErrors.busId)}
+                                helperText={createErrors.busId}
+                            />
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <EntitySelect
+                                entity="pilot"
+                                size="medium"
+                                options={pilots}
+                                value={createForm.pilotId}
+                                onChange={(pilotId) => handleCreateChange('pilotId', pilotId)}
+                            />
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <Autocomplete
+                                options={(createForm.client ? (clientRouteNumbers.length ? clientRouteNumbers : []) : []).map(String).sort((a,b) => a - b)}
+                                value={createForm.routeNumber || null}
+                                onChange={(e, newValue) => handleCreateChange('routeNumber', newValue || '')}
+                                getOptionLabel={(option) => String(option)}
+                                renderInput={(params) => <TextField {...params} label="Número de ruta" variant="outlined" />}
+                                fullWidth
+                                disabled={!createForm.client}
+                            />
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <FormControl fullWidth required error={Boolean(createErrors.fuelingReason)}>
+                                <InputLabel>Razón de abastecimiento</InputLabel>
+                                <Select
+                                    name="fuelingReason"
+                                    value={createForm.fuelingReason}
+                                    label="Razón de abastecimiento"
+                                    onChange={(e) => handleCreateChange('fuelingReason', e.target.value)}
+                                >
+                                    <MenuItem value="">Seleccione</MenuItem>
+                                    {Object.entries(FUELING_REASONS).map(([key, label]) => (
+                                        <MenuItem key={key} value={key}>{label}</MenuItem>
+                                    ))}
+                                </Select>
+                                {createErrors.fuelingReason ? <FormHelperText>{createErrors.fuelingReason}</FormHelperText> : null}
+                            </FormControl>
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <FormControl fullWidth required error={Boolean(createErrors.fuelType)}>
+                                <InputLabel>Tipo de combustible</InputLabel>
+                                <Select
+                                    name="fuelType"
+                                    value={createForm.fuelType}
+                                    label="Tipo de combustible"
+                                    onChange={(e) => handleCreateChange('fuelType', e.target.value)}
+                                >
+                                    <MenuItem value="">Seleccione</MenuItem>
+                                    {Object.entries(FUEL_TYPES).map(([key, label]) => (
+                                        <MenuItem key={key} value={key}>{label}</MenuItem>
+                                    ))}
+                                </Select>
+                                {createErrors.fuelType ? <FormHelperText>{createErrors.fuelType}</FormHelperText> : null}
+                            </FormControl>
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                label="Galones"
+                                type="number"
+                                fullWidth
+                                name="gallonage"
+                                required
+                                inputProps={{ min: 0, step: '0.01', inputMode: 'decimal' }}
+                                value={createForm.gallonage}
+                                onChange={(e) => handleCreateChange('gallonage', e.target.value)}
+                                error={Boolean(createErrors.gallonage)}
+                                helperText={createErrors.gallonage}
+                            />
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <MoneyField
+                                label="Precio por galón"
+                                name="pricePerGallon"
+                                required
+                                value={createForm.pricePerGallon}
+                                onChange={(e) => handleCreateChange('pricePerGallon', e.target.value)}
+                                error={Boolean(createErrors.pricePerGallon)}
+                                helperText={createErrors.pricePerGallon}
+                            />
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <DatePicker
+                                label="Fecha"
+                                value={createForm.recordDateDate}
+                                onChange={(newValue) => handleCreateChange('recordDateDate', newValue)}
+                                slotProps={{ textField: { fullWidth: true } }}
+                            />
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                label="Hora"
+                                type="time"
+                                value={createForm.recordDateTime}
+                                onChange={(e) => handleCreateChange('recordDateTime', e.target.value)}
+                                InputLabelProps={{ shrink: true }}
+                                fullWidth
+                            />
+                        </Grid>
+
+                        <Grid item xs={12}>
+                            <TextField
+                                label="Notas (opcional)"
+                                fullWidth
+                                multiline
+                                minRows={2}
+                                value={createForm.notes}
+                                onChange={(e) => handleCreateChange('notes', e.target.value)}
+                            />
+                        </Grid>
+                    </Grid>
+                </AppDialog>
 
                 {/* Modal de Detalles */}
-                <Dialog
+                <AppDialog
                     open={detailsOpen}
                     onClose={handleCloseDetails}
-                    maxWidth="md"
-                    fullWidth
+                    title="Detalle del registro de combustible"
+                    icon={<GasIcon />}
+                    size="md"
+                    readOnly
+                    extraActions={selectedRecord?.canEdit ? (
+                        <Button onClick={() => handleOpenEdit(selectedRecord)} variant="outlined" color="secondary">
+                            Editar
+                        </Button>
+                    ) : null}
                 >
-                    <DialogTitle>Detalles del Registro de Combustible</DialogTitle>
-                    <DialogContent dividers>
-                        {selectedRecord && (
-                            <Grid container spacing={2}>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Fecha y Hora
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {moment(selectedRecord.recordDate).format('DD/MM/YYYY HH:mm')}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Placa
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedRecord.plate || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Ruta
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedRecord.routeNumber || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Piloto
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedRecord.pilot?.name || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Cliente
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedRecord.school?.name || selectedRecord.corporation?.name || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Razón de Abastecimiento
-                                    </Typography>
-                                    <Chip 
-                                        label={FUELING_REASONS[selectedRecord.fuelingReason] || selectedRecord.fuelingReason}
-                                        color={getFuelingReasonColor(selectedRecord.fuelingReason)}
-                                        sx={{ mt: 1 }}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Tipo de Combustible
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {FUEL_TYPES[selectedRecord.fuelType] || selectedRecord.fuelType}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={4}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Galones
-                                    </Typography>
-                                    <Typography variant="h6" gutterBottom>
-                                        {Number.parseFloat(selectedRecord.gallonage).toFixed(2)}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={4}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Precio por Galón
-                                    </Typography>
-                                    <Typography variant="h6" gutterBottom>
-                                        {formatCurrency(selectedRecord.pricePerGallon)}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={4}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Total Pagado
-                                    </Typography>
-                                    <Typography variant="h6" color="primary" gutterBottom>
-                                        {formatCurrency(selectedRecord.totalAmount)}
-                                    </Typography>
-                                </Grid>
-                                {selectedRecord.notes && (
-                                    <Grid item xs={12}>
-                                        <Typography variant="subtitle2" color="textSecondary">
-                                            Notas
-                                        </Typography>
-                                        <Paper sx={{ p: 2, mt: 1, backgroundColor: '#f5f5f5' }}>
-                                            <Typography variant="body1">
-                                                {selectedRecord.notes}
-                                            </Typography>
-                                        </Paper>
-                                    </Grid>
-                                )}
+                    {selectedRecord && (
+                        <Grid container spacing={2}>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Fecha y hora
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {formatDateTime(selectedRecord.recordDate)}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Placa
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedRecord.plate || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Ruta
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedRecord.routeNumber || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Piloto
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedRecord.pilot?.name || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Cliente
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedRecord.school?.name || selectedRecord.corporation?.name || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Razón de abastecimiento
+                                </Typography>
+                                <Chip
+                                    label={FUELING_REASONS[selectedRecord.fuelingReason] || selectedRecord.fuelingReason}
+                                    color={getFuelingReasonColor(selectedRecord.fuelingReason)}
+                                    sx={{ mt: 1 }}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Tipo de combustible
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {FUEL_TYPES[selectedRecord.fuelType] || selectedRecord.fuelType}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={4}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Galones
+                                </Typography>
+                                <Typography variant="h6" gutterBottom>
+                                    {Number.parseFloat(selectedRecord.gallonage).toFixed(2)}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={4}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Precio por galón
+                                </Typography>
+                                <Typography variant="h6" gutterBottom>
+                                    {formatQ(selectedRecord.pricePerGallon || 0)}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={4}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Total pagado
+                                </Typography>
+                                <Typography variant="h6" color="primary" gutterBottom>
+                                    {formatQ(selectedRecord.totalAmount || 0)}
+                                </Typography>
+                            </Grid>
+                            {selectedRecord.notes && (
                                 <Grid item xs={12}>
                                     <Typography variant="subtitle2" color="textSecondary">
-                                        Creado por
+                                        Notas
                                     </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedRecord.creator?.name || 'N/A'}
-                                    </Typography>
+                                    <Paper sx={{ p: 2, mt: 1, backgroundColor: '#f5f5f5' }}>
+                                        <Typography variant="body1">
+                                            {selectedRecord.notes}
+                                        </Typography>
+                                    </Paper>
                                 </Grid>
-                            </Grid>
-                        )}
-                    </DialogContent>
-                    <DialogActions>
-                        {selectedRecord?.canEdit && (
-                            <Button onClick={() => handleOpenEdit(selectedRecord)} variant="outlined" color="secondary">
-                                Editar
-                            </Button>
-                        )}
-                        <Button onClick={handleCloseDetails} color="primary">
-                            Cerrar
-                        </Button>
-                    </DialogActions>
-                </Dialog>
-
-                {/* Modal de Edición */}
-                <Dialog
-                    open={editOpen}
-                    onClose={handleCloseEdit}
-                    maxWidth="sm"
-                    fullWidth
-                >
-                    <DialogTitle>Editar Registro de Combustible</DialogTitle>
-                    <DialogContent dividers>
-                        {selectedRecord && (
-                            <Box mb={2}>
-                                <Typography variant="body2" color="textSecondary">
-                                    Cliente: {selectedRecord.school?.name || selectedRecord.corporation?.name || 'N/A'}
-                                </Typography>
-                                <Typography variant="body2" color="textSecondary">
-                                    Bus: {selectedRecord.plate || 'N/A'}
-                                </Typography>
-                            </Box>
-                        )}
-                        <Grid container spacing={2} sx={{ mt: 0.5 }}>
-                            <Grid item xs={12} sm={6}>
-                                <ClientSelector
-                                    size="medium"
-                                    schools={editSchools}
-                                    corporations={editCorporations}
-                                    value={editForm.client}
-                                    onChange={(client) => handleEditChange('client', client)}
-                                />
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <Autocomplete
-                                    options={editPlateOptions.map((plate) => {
-                                        const bus = editBuses.find((item) => item.plate === plate);
-                                        return { label: plate, id: bus?.id ? String(bus.id) : '', plate };
-                                    })}
-                                    value={selectedEditBusValue}
-                                    onChange={(e, newValue) => handleEditChange('busId', newValue ? String(newValue.id) : '')}
-                                    getOptionLabel={(option) => option?.label || ''}
-                                    renderInput={(params) => <TextField {...params} label="Placa / Bus" variant="outlined" />}
-                                    fullWidth
-                                    isOptionEqualToValue={(opt, val) => String(opt?.id) === String(val?.id)}
-                                />
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <Autocomplete
-                                    options={editClientRouteNumbers.map(String).sort((a, b) => a - b)}
-                                    value={editForm.routeNumber || null}
-                                    onChange={(e, newValue) => handleEditChange('routeNumber', newValue || '')}
-                                    getOptionLabel={(option) => String(option)}
-                                    renderInput={(params) => <TextField {...params} label="Número de Ruta" variant="outlined" />}
-                                    fullWidth
-                                    disabled={!editForm.client}
-                                />
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <FormControl fullWidth>
-                                    <InputLabel>Razón de Abastecimiento</InputLabel>
-                                    <Select
-                                        value={editForm.fuelingReason}
-                                        label="Razón de Abastecimiento"
-                                        onChange={(e) => handleEditChange('fuelingReason', e.target.value)}
-                                    >
-                                        <MenuItem value="">Seleccione</MenuItem>
-                                        {Object.entries(FUELING_REASONS).map(([key, label]) => (
-                                            <MenuItem key={key} value={key}>{label}</MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <FormControl fullWidth>
-                                    <InputLabel>Tipo Combustible</InputLabel>
-                                    <Select
-                                        value={editForm.fuelType}
-                                        label="Tipo Combustible"
-                                        onChange={(e) => handleEditChange('fuelType', e.target.value)}
-                                    >
-                                        <MenuItem value="">Seleccione</MenuItem>
-                                        {Object.entries(FUEL_TYPES).map(([key, label]) => (
-                                            <MenuItem key={key} value={key}>{label}</MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <TextField
-                                    label="Galones"
-                                    type="number"
-                                    fullWidth
-                                    value={editForm.gallonage}
-                                    onChange={(e) => handleEditChange('gallonage', e.target.value)}
-                                />
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <TextField
-                                    label="Precio por Galón"
-                                    type="number"
-                                    fullWidth
-                                    value={editForm.pricePerGallon}
-                                    onChange={(e) => handleEditChange('pricePerGallon', e.target.value)}
-                                />
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <DatePicker
-                                    label="Fecha"
-                                    value={editForm.recordDateDate}
-                                    onChange={(newValue) => handleEditChange('recordDateDate', newValue)}
-                                    renderInput={(params) => <TextField fullWidth {...params} />}
-                                />
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <TextField
-                                    label="Hora"
-                                    type="time"
-                                    value={editForm.recordDateTime}
-                                    onChange={(e) => handleEditChange('recordDateTime', e.target.value)}
-                                    InputLabelProps={{ shrink: true }}
-                                    fullWidth
-                                />
-                            </Grid>
-
+                            )}
                             <Grid item xs={12}>
-                                <TextField
-                                    label="Notas (opcional)"
-                                    fullWidth
-                                    multiline
-                                    minRows={2}
-                                    value={editForm.notes}
-                                    onChange={(e) => handleEditChange('notes', e.target.value)}
-                                />
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Creado por
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedRecord.creator?.name || 'N/A'}
+                                </Typography>
                             </Grid>
                         </Grid>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCloseEdit} disabled={updating}>Cancelar</Button>
-                        {/* La regla de mismo día (canEdit) la sigue imponiendo el registro. */}
-                        {selectedRecord?.canEdit && hasPermission('combustible-editar') && (
-                            <Button onClick={handleEditSubmit} variant="contained" color="primary" disabled={updating}>
-                                {updating ? 'Guardando...' : 'Guardar cambios'}
-                            </Button>
-                        )}
-                    </DialogActions>
-                </Dialog>
+                    )}
+                </AppDialog>
 
-                <Dialog open={deleteOpen} onClose={handleCancelDelete} aria-labelledby="delete-fuel-record-dialog-title">
-                    <DialogTitle id="delete-fuel-record-dialog-title">Confirmar eliminación</DialogTitle>
-                    <DialogContent>
-                        <Typography>
-                            ¿Estás seguro que deseas eliminar este registro de combustible? Esta acción no se puede deshacer.
-                        </Typography>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCancelDelete} disabled={deleting}>Cancelar</Button>
-                        <Button onClick={handleConfirmDelete} variant="contained" color="error" disabled={deleting}>
-                            {deleting ? 'Eliminando...' : 'Eliminar'}
-                        </Button>
-                    </DialogActions>
-                </Dialog>
-
-                <Snackbar
-                    open={editSnackbar.open}
-                    autoHideDuration={3500}
-                    onClose={() => setEditSnackbar((prev) => ({ ...prev, open: false }))}
-                    anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+                {/* Modal de Edición. La regla de mismo día (canEdit) la sigue imponiendo el registro. */}
+                <AppDialog
+                    open={editOpen}
+                    onClose={handleCloseEdit}
+                    title="Editar registro de combustible"
+                    subtitle={selectedRecord
+                        ? `${selectedRecord.school?.name || selectedRecord.corporation?.name || 'N/A'} · Bus ${selectedRecord.plate || 'N/A'}`
+                        : undefined}
+                    icon={<EditIcon />}
+                    size="sm"
+                    onSubmit={handleEditSubmit}
+                    submitLabel="Guardar cambios"
+                    submitting={updating}
+                    readOnly={!(selectedRecord?.canEdit && hasPermission('combustible-editar'))}
+                    dirty={JSON.stringify(editForm) !== editInitialRef.current}
                 >
-                    <Alert
-                        onClose={() => setEditSnackbar((prev) => ({ ...prev, open: false }))}
-                        severity={editSnackbar.severity}
-                        variant="filled"
-                        sx={{ width: '100%' }}
-                    >
-                        {editSnackbar.message}
-                    </Alert>
-                </Snackbar>
+                    <Grid container spacing={2}>
+                        <Grid item xs={12} sm={6}>
+                            <ClientSelector
+                                size="medium"
+                                schools={editSchools}
+                                corporations={editCorporations}
+                                value={editForm.client}
+                                onChange={(client) => handleEditChange('client', client)}
+                                name="client"
+                                required
+                                error={Boolean(editErrors.client)}
+                                helperText={editErrors.client}
+                            />
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <Autocomplete
+                                options={editPlateOptions.map((plate) => {
+                                    const bus = editBuses.find((item) => item.plate === plate);
+                                    return { label: plate, id: bus?.id ? String(bus.id) : '', plate };
+                                })}
+                                value={selectedEditBusValue}
+                                onChange={(e, newValue) => handleEditChange('busId', newValue ? String(newValue.id) : '')}
+                                getOptionLabel={(option) => option?.label || ''}
+                                renderInput={(params) => (
+                                    <TextField
+                                        {...params}
+                                        label="Placa / bus"
+                                        variant="outlined"
+                                        name="busId"
+                                        required
+                                        error={Boolean(editErrors.busId)}
+                                        helperText={editErrors.busId}
+                                    />
+                                )}
+                                fullWidth
+                                isOptionEqualToValue={(opt, val) => String(opt?.id) === String(val?.id)}
+                            />
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <Autocomplete
+                                options={editClientRouteNumbers.map(String).sort((a, b) => a - b)}
+                                value={editForm.routeNumber || null}
+                                onChange={(e, newValue) => handleEditChange('routeNumber', newValue || '')}
+                                getOptionLabel={(option) => String(option)}
+                                renderInput={(params) => (
+                                    <TextField
+                                        {...params}
+                                        label="Número de ruta"
+                                        variant="outlined"
+                                        name="routeNumber"
+                                        required
+                                        error={Boolean(editErrors.routeNumber)}
+                                        helperText={editErrors.routeNumber}
+                                    />
+                                )}
+                                fullWidth
+                                disabled={!editForm.client}
+                            />
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <FormControl fullWidth required error={Boolean(editErrors.fuelingReason)}>
+                                <InputLabel>Razón de abastecimiento</InputLabel>
+                                <Select
+                                    name="fuelingReason"
+                                    value={editForm.fuelingReason}
+                                    label="Razón de abastecimiento"
+                                    onChange={(e) => handleEditChange('fuelingReason', e.target.value)}
+                                >
+                                    <MenuItem value="">Seleccione</MenuItem>
+                                    {Object.entries(FUELING_REASONS).map(([key, label]) => (
+                                        <MenuItem key={key} value={key}>{label}</MenuItem>
+                                    ))}
+                                </Select>
+                                {editErrors.fuelingReason ? <FormHelperText>{editErrors.fuelingReason}</FormHelperText> : null}
+                            </FormControl>
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <FormControl fullWidth required error={Boolean(editErrors.fuelType)}>
+                                <InputLabel>Tipo de combustible</InputLabel>
+                                <Select
+                                    name="fuelType"
+                                    value={editForm.fuelType}
+                                    label="Tipo de combustible"
+                                    onChange={(e) => handleEditChange('fuelType', e.target.value)}
+                                >
+                                    <MenuItem value="">Seleccione</MenuItem>
+                                    {Object.entries(FUEL_TYPES).map(([key, label]) => (
+                                        <MenuItem key={key} value={key}>{label}</MenuItem>
+                                    ))}
+                                </Select>
+                                {editErrors.fuelType ? <FormHelperText>{editErrors.fuelType}</FormHelperText> : null}
+                            </FormControl>
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                label="Galones"
+                                type="number"
+                                fullWidth
+                                name="gallonage"
+                                required
+                                inputProps={{ min: 0, step: '0.01', inputMode: 'decimal' }}
+                                value={editForm.gallonage}
+                                onChange={(e) => handleEditChange('gallonage', e.target.value)}
+                                error={Boolean(editErrors.gallonage)}
+                                helperText={editErrors.gallonage}
+                            />
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <MoneyField
+                                label="Precio por galón"
+                                name="pricePerGallon"
+                                required
+                                value={editForm.pricePerGallon}
+                                onChange={(e) => handleEditChange('pricePerGallon', e.target.value)}
+                                error={Boolean(editErrors.pricePerGallon)}
+                                helperText={editErrors.pricePerGallon}
+                            />
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <DatePicker
+                                label="Fecha"
+                                value={editForm.recordDateDate}
+                                onChange={(newValue) => handleEditChange('recordDateDate', newValue)}
+                                slotProps={{ textField: { fullWidth: true } }}
+                            />
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                label="Hora"
+                                type="time"
+                                value={editForm.recordDateTime}
+                                onChange={(e) => handleEditChange('recordDateTime', e.target.value)}
+                                InputLabelProps={{ shrink: true }}
+                                fullWidth
+                            />
+                        </Grid>
+
+                        <Grid item xs={12}>
+                            <TextField
+                                label="Notas (opcional)"
+                                fullWidth
+                                multiline
+                                minRows={2}
+                                value={editForm.notes}
+                                onChange={(e) => handleEditChange('notes', e.target.value)}
+                            />
+                        </Grid>
+                    </Grid>
+                </AppDialog>
 
                 {SHOW_NEW_FUEL_METRIC && (
                     /* ── Modal: Explicación del cálculo de eficiencia ── */
-                    <Dialog
+                    <AppDialog
                         open={efficiencyInfoOpen}
                         onClose={() => setEfficiencyInfoOpen(false)}
-                        maxWidth="sm"
-                        fullWidth
-                        scroll="paper"
-                    >
-                        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <InfoOutlinedIcon color="primary" />
-                            ¿Cómo se calcula el consumo de combustible?
-                        </DialogTitle>
-                        <DialogContent dividers>
-                            {/* ── Resumen ── */}
-                            <Typography variant="body1" gutterBottom>
-                                Estas cifras estiman cuántos galones consume la flota <strong>por día de operación</strong> y <strong>por recorrido completado</strong>. El cálculo se basa en datos reales de distancia recorrida y combustible abastecido.
-                            </Typography>
-
-                            {/* ── Paso 1 ── */}
-                            <Typography variant="subtitle1" sx={{ mt: 2, fontWeight: 700 }}>
-                                Paso 1 — Eficiencia real (km / galón)
-                            </Typography>
-                            <Typography variant="body2" color="textSecondary" gutterBottom>
-                                Cruzamos dos fuentes de datos dentro del mismo período y para los mismos buses:
-                            </Typography>
-                            <Box component="ul" sx={{ pl: 2.5, mt: 0.5 }}>
-                                <li><Typography variant="body2"><strong>Kilómetros recorridos:</strong> suma de la distancia registrada en cada recorrido <em>completado</em> (aquellos que tienen hora de inicio <em>y</em> hora de fin).</Typography></li>
-                                <li><Typography variant="body2"><strong>Galones abastecidos:</strong> suma de todos los registros de combustible del período.</Typography></li>
-                            </Box>
-                            <Box sx={{ bgcolor: 'grey.100', borderRadius: 1, px: 2, py: 1, mt: 1 }}>
-                                <Typography variant="body2" fontFamily="monospace">
-                                    Eficiencia = km totales ÷ galones totales abastecidos
-                                </Typography>
-                            </Box>
-                            <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-                                <strong>¿Por qué galones abastecidos ≈ galones consumidos?</strong> En períodos largos, el nivel del tanque al inicio y al final del período se cancela estadísticamente, de modo que lo que se surtió equivale a lo que se consumió.
-                            </Typography>
-
-                            {/* ── Paso 2 ── */}
-                            <Typography variant="subtitle1" sx={{ mt: 2.5, fontWeight: 700 }}>
-                                Paso 2 — Consumo estimado por recorrido
-                            </Typography>
-                            <Box sx={{ bgcolor: 'grey.100', borderRadius: 1, px: 2, py: 1, mt: 0.5 }}>
-                                <Typography variant="body2" fontFamily="monospace">
-                                    Consumo/recorrido = km promedio por recorrido ÷ eficiencia (km/galón)
-                                </Typography>
-                            </Box>
-                            <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-                                Primero se calcula el promedio de kilómetros por recorrido. Luego, dividiendo esa distancia entre la eficiencia, se obtiene cuántos galones demanda un recorrido típico.
-                            </Typography>
-
-                            {/* ── Paso 3 ── */}
-                            <Typography variant="subtitle1" sx={{ mt: 2.5, fontWeight: 700 }}>
-                                Paso 3 — Consumo estimado por día de operación
-                            </Typography>
-                            <Box sx={{ bgcolor: 'grey.100', borderRadius: 1, px: 2, py: 1, mt: 0.5 }}>
-                                <Typography variant="body2" fontFamily="monospace">
-                                    Consumo/día = (km totales ÷ días con recorridos) ÷ eficiencia (km/galón)
-                                </Typography>
-                            </Box>
-                            <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-                                Se cuentan únicamente los días en que hubo al menos un recorrido completado. Dividir los km de ese día entre la eficiencia da el gasto estimado de combustible para ese día promedio.
-                            </Typography>
-
-                            {/* ── Notas importantes ── */}
-                            <Typography variant="subtitle1" sx={{ mt: 2.5, fontWeight: 700, color: 'warning.dark' }}>
-                                ⚠ Notas importantes
-                            </Typography>
-                            <Box component="ul" sx={{ pl: 2.5, mt: 0.5 }}>
-                                <li>
-                                    <Typography variant="body2">
-                                        <strong>Certeza de los datos:</strong> la precisión depende directamente de que los recorridos se <em>cierren correctamente</em> en el sistema (con hora de fin registrada) y de que todos los abastecimientos se carguen en tiempo real. Datos faltantes o incompletos reducen la exactitud.
-                                    </Typography>
-                                </li>
-                                <li>
-                                    <Typography variant="body2" sx={{ mt: 0.75 }}>
-                                        <strong>Período corto:</strong> con pocos días o pocos abastecimientos, el nivel inicial/final del tanque puede distorsionar el resultado. Los valores son más confiables en períodos de al menos 2–3 semanas.
-                                    </Typography>
-                                </li>
-                                <li>
-                                    <Typography variant="body2" sx={{ mt: 0.75 }}>
-                                        <strong>Buses sin datos cruzados:</strong> si un bus tiene registros de combustible pero ningún recorrido completado (o viceversa) en el período, no se incluye en el cálculo global de eficiencia.
-                                    </Typography>
-                                </li>
-                                <li>
-                                    <Typography variant="body2" sx={{ mt: 0.75 }}>
-                                        <strong>Mejora futura:</strong> cuando se activen las lecturas de odómetro y el indicador de tanque lleno, el sistema pasará al método <em>tank-to-tank</em> (lleno a lleno), que es el estándar de mayor precisión en gestión de flotas.
-                                    </Typography>
-                                </li>
-                            </Box>
-
-                            {/* ── Datos del período actual ── */}
-                            {statistics.efficiency?.kmPerGallon > 0 && (
-                                <>
-                                    <Typography variant="subtitle1" sx={{ mt: 2.5, fontWeight: 700 }}>
-                                        Datos del período actual
-                                    </Typography>
-                                    <Box sx={{ bgcolor: 'primary.50', border: '1px solid', borderColor: 'primary.200', borderRadius: 1, px: 2, py: 1.5, mt: 0.5 }}>
-                                        <Grid container spacing={1}>
-                                            <Grid item xs={6}><Typography variant="body2"><strong>Eficiencia:</strong> {(statistics.efficiency.kmPerGallon || 0).toFixed(3)} km/gal</Typography></Grid>
-                                            <Grid item xs={6}><Typography variant="body2"><strong>Km totales:</strong> {(statistics.efficiency.totalKmTraveled || 0).toFixed(1)} km</Typography></Grid>
-                                            <Grid item xs={6}><Typography variant="body2"><strong>Recorridos completados:</strong> {statistics.efficiency.totalRoutesCompleted || 0}</Typography></Grid>
-                                            <Grid item xs={6}><Typography variant="body2"><strong>Días con operación:</strong> {statistics.efficiency.drivingDaysCount || 0}</Typography></Grid>
-                                            <Grid item xs={6}><Typography variant="body2"><strong>Km prom./recorrido:</strong> {(statistics.efficiency.avgKmPerRoute || 0).toFixed(2)} km</Typography></Grid>
-                                            <Grid item xs={6}><Typography variant="body2"><strong>Galones/km:</strong> {(statistics.efficiency.gallonsPerKm || 0).toFixed(4)} gal/km</Typography></Grid>
-                                        </Grid>
-                                    </Box>
-                                </>
-                            )}
-                            {(!statistics.efficiency?.kmPerGallon || statistics.efficiency.kmPerGallon === 0) && (
-                                <Box sx={{ mt: 2, p: 1.5, bgcolor: 'grey.100', borderRadius: 1 }}>
-                                    <Typography variant="body2" color="textSecondary">
-                                        No hay datos suficientes para calcular la eficiencia en el período o filtros seleccionados actualmente.
-                                    </Typography>
-                                </Box>
-                            )}
-                        </DialogContent>
-                        <DialogActions>
+                        title="¿Cómo se calcula el consumo de combustible?"
+                        icon={<InfoOutlinedIcon />}
+                        size="sm"
+                        actions={(
                             <Button onClick={() => setEfficiencyInfoOpen(false)} variant="contained" disableElevation>
                                 Entendido
                             </Button>
-                        </DialogActions>
-                    </Dialog>
+                        )}
+                    >
+                        {/* ── Resumen ── */}
+                        <Typography variant="body1" gutterBottom>
+                            Estas cifras estiman cuántos galones consume la flota <strong>por día de operación</strong> y <strong>por recorrido completado</strong>. El cálculo se basa en datos reales de distancia recorrida y combustible abastecido.
+                        </Typography>
+
+                        {/* ── Paso 1 ── */}
+                        <Typography variant="subtitle1" sx={{ mt: 2, fontWeight: 700 }}>
+                            Paso 1 — Eficiencia real (km / galón)
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary" gutterBottom>
+                            Cruzamos dos fuentes de datos dentro del mismo período y para los mismos buses:
+                        </Typography>
+                        <Box component="ul" sx={{ pl: 2.5, mt: 0.5 }}>
+                            <li><Typography variant="body2"><strong>Kilómetros recorridos:</strong> suma de la distancia registrada en cada recorrido <em>completado</em> (aquellos que tienen hora de inicio <em>y</em> hora de fin).</Typography></li>
+                            <li><Typography variant="body2"><strong>Galones abastecidos:</strong> suma de todos los registros de combustible del período.</Typography></li>
+                        </Box>
+                        <Box sx={{ bgcolor: 'grey.100', borderRadius: 1, px: 2, py: 1, mt: 1 }}>
+                            <Typography variant="body2" fontFamily="monospace">
+                                Eficiencia = km totales ÷ galones totales abastecidos
+                            </Typography>
+                        </Box>
+                        <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+                            <strong>¿Por qué galones abastecidos ≈ galones consumidos?</strong> En períodos largos, el nivel del tanque al inicio y al final del período se cancela estadísticamente, de modo que lo que se surtió equivale a lo que se consumió.
+                        </Typography>
+
+                        {/* ── Paso 2 ── */}
+                        <Typography variant="subtitle1" sx={{ mt: 2.5, fontWeight: 700 }}>
+                            Paso 2 — Consumo estimado por recorrido
+                        </Typography>
+                        <Box sx={{ bgcolor: 'grey.100', borderRadius: 1, px: 2, py: 1, mt: 0.5 }}>
+                            <Typography variant="body2" fontFamily="monospace">
+                                Consumo/recorrido = km promedio por recorrido ÷ eficiencia (km/galón)
+                            </Typography>
+                        </Box>
+                        <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+                            Primero se calcula el promedio de kilómetros por recorrido. Luego, dividiendo esa distancia entre la eficiencia, se obtiene cuántos galones demanda un recorrido típico.
+                        </Typography>
+
+                        {/* ── Paso 3 ── */}
+                        <Typography variant="subtitle1" sx={{ mt: 2.5, fontWeight: 700 }}>
+                            Paso 3 — Consumo estimado por día de operación
+                        </Typography>
+                        <Box sx={{ bgcolor: 'grey.100', borderRadius: 1, px: 2, py: 1, mt: 0.5 }}>
+                            <Typography variant="body2" fontFamily="monospace">
+                                Consumo/día = (km totales ÷ días con recorridos) ÷ eficiencia (km/galón)
+                            </Typography>
+                        </Box>
+                        <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+                            Se cuentan únicamente los días en que hubo al menos un recorrido completado. Dividir los km de ese día entre la eficiencia da el gasto estimado de combustible para ese día promedio.
+                        </Typography>
+
+                        {/* ── Notas importantes ── */}
+                        <Typography variant="subtitle1" sx={{ mt: 2.5, fontWeight: 700, color: 'warning.dark' }}>
+                            ⚠ Notas importantes
+                        </Typography>
+                        <Box component="ul" sx={{ pl: 2.5, mt: 0.5 }}>
+                            <li>
+                                <Typography variant="body2">
+                                    <strong>Certeza de los datos:</strong> la precisión depende directamente de que los recorridos se <em>cierren correctamente</em> en el sistema (con hora de fin registrada) y de que todos los abastecimientos se carguen en tiempo real. Datos faltantes o incompletos reducen la exactitud.
+                                </Typography>
+                            </li>
+                            <li>
+                                <Typography variant="body2" sx={{ mt: 0.75 }}>
+                                    <strong>Período corto:</strong> con pocos días o pocos abastecimientos, el nivel inicial/final del tanque puede distorsionar el resultado. Los valores son más confiables en períodos de al menos 2–3 semanas.
+                                </Typography>
+                            </li>
+                            <li>
+                                <Typography variant="body2" sx={{ mt: 0.75 }}>
+                                    <strong>Buses sin datos cruzados:</strong> si un bus tiene registros de combustible pero ningún recorrido completado (o viceversa) en el período, no se incluye en el cálculo global de eficiencia.
+                                </Typography>
+                            </li>
+                            <li>
+                                <Typography variant="body2" sx={{ mt: 0.75 }}>
+                                    <strong>Mejora futura:</strong> cuando se activen las lecturas de odómetro y el indicador de tanque lleno, el sistema pasará al método <em>tank-to-tank</em> (lleno a lleno), que es el estándar de mayor precisión en gestión de flotas.
+                                </Typography>
+                            </li>
+                        </Box>
+
+                        {/* ── Datos del período actual ── */}
+                        {statistics.efficiency?.kmPerGallon > 0 && (
+                            <>
+                                <Typography variant="subtitle1" sx={{ mt: 2.5, fontWeight: 700 }}>
+                                    Datos del período actual
+                                </Typography>
+                                <Box sx={{ bgcolor: 'primary.50', border: '1px solid', borderColor: 'primary.200', borderRadius: 1, px: 2, py: 1.5, mt: 0.5 }}>
+                                    <Grid container spacing={1}>
+                                        <Grid item xs={6}><Typography variant="body2"><strong>Eficiencia:</strong> {(statistics.efficiency.kmPerGallon || 0).toFixed(3)} km/gal</Typography></Grid>
+                                        <Grid item xs={6}><Typography variant="body2"><strong>Km totales:</strong> {(statistics.efficiency.totalKmTraveled || 0).toFixed(1)} km</Typography></Grid>
+                                        <Grid item xs={6}><Typography variant="body2"><strong>Recorridos completados:</strong> {statistics.efficiency.totalRoutesCompleted || 0}</Typography></Grid>
+                                        <Grid item xs={6}><Typography variant="body2"><strong>Días con operación:</strong> {statistics.efficiency.drivingDaysCount || 0}</Typography></Grid>
+                                        <Grid item xs={6}><Typography variant="body2"><strong>Km prom./recorrido:</strong> {(statistics.efficiency.avgKmPerRoute || 0).toFixed(2)} km</Typography></Grid>
+                                        <Grid item xs={6}><Typography variant="body2"><strong>Galones/km:</strong> {(statistics.efficiency.gallonsPerKm || 0).toFixed(4)} gal/km</Typography></Grid>
+                                    </Grid>
+                                </Box>
+                            </>
+                        )}
+                        {(!statistics.efficiency?.kmPerGallon || statistics.efficiency.kmPerGallon === 0) && (
+                            <Box sx={{ mt: 2, p: 1.5, bgcolor: 'grey.100', borderRadius: 1 }}>
+                                <Typography variant="body2" color="textSecondary">
+                                    No hay datos suficientes para calcular la eficiencia en el período o filtros seleccionados actualmente.
+                                </Typography>
+                            </Box>
+                        )}
+                    </AppDialog>
                 )}
             </PageContainer>
         </LocalizationProvider>

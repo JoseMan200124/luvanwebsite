@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, TextField, Alert, Grid, Typography, Divider, InputAdornment, IconButton, Checkbox, FormControlLabel } from '@mui/material';
+import { Box, TextField, Alert, Grid, Typography, Divider, Checkbox, FormControlLabel } from '@mui/material';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
-import CloseIcon from '@mui/icons-material/Close';
-import CircularProgress from '@mui/material/CircularProgress';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import { esES } from '@mui/x-date-pickers/locales';
 import moment from 'moment';
 import api from '../../utils/axiosConfig';
+import AppDialog from '../dialogs/AppDialog';
+import MoneyField from '../form/MoneyField';
 
 const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSchedules = null }) => {
     const [period, setPeriod] = useState('');
@@ -87,113 +87,85 @@ const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSch
     };
 
     return (
-        <Dialog 
-            open={open} 
-            onClose={handleClose} 
-            fullWidth 
-            maxWidth="sm"
-            PaperProps={{ sx: { borderRadius: { xs: 0, sm: 2 } } }}
+        <AppDialog
+            open={open}
+            onClose={handleClose}
+            title="Nuevo período extracurricular"
+            subtitle="Aplica a todas las familias activas del colegio"
+            icon={<CalendarMonthIcon />}
+            size="sm"
+            onSubmit={handleCreate}
+            submitLabel="Crear período"
+            submitting={loading}
         >
-            <DialogTitle sx={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center',
-                gap: 1,
-                backgroundColor: 'primary.main',
-                color: 'white',
-                py: 2
-            }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-                    <CalendarMonthIcon />
-                    <Box>
-                        <Typography variant="h6" component="div" sx={{ overflowWrap: 'anywhere' }}>
-                            Crear Período Extracurricular
-                        </Typography>
-                        <Typography variant="body2" sx={{ opacity: 0.95 }}>
-                            Aplica a todas las familias activas del colegio
-                        </Typography>
-                    </Box>
-                </Box>
-                <IconButton onClick={handleClose} sx={{ color: 'white' }} size="small">
-                    <CloseIcon />
-                </IconButton>
-            </DialogTitle>
-            <DialogContent sx={{ p: 3 }}>
-                {error && <Box sx={{ mb: 1 }}><Alert severity="error">{error}</Alert></Box>}
-                <Box sx={{ display: 'grid', gap: 1, mt: 1 }}>
-                    <Divider sx={{ mb: 1 }} />
-                    <LocalizationProvider dateAdapter={AdapterMoment} adapterLocale="es" localeText={esES.components.MuiLocalizationProvider.defaultProps.localeText}>
-                        <Grid container spacing={2} alignItems="flex-start">
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Período</Typography>
-                                <DatePicker
-                                    views={[ 'year', 'month' ]}
-                                    openTo="month"
-                                    label="Período (YYYY-MM)"
-                                    value={period ? moment(period + '-01') : null}
-                                    onChange={(v) => setPeriod(v ? v.format('YYYY-MM') : '')}
-                                    format="YYYY-MM"
-                                    components={{ OpenPickerIcon: CalendarTodayIcon }}
-                                    renderInput={(params) => <TextField {...params} size="small" fullWidth />}
-                                />
-                                <Typography variant="caption" color="text.secondary">Selecciona el mes del periodo que se creará.</Typography>
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Tarifa base</Typography>
-                                <TextField
-                                    label=""
-                                    size="small"
-                                    type="number"
-                                    fullWidth
-                                    value={originalAmount}
-                                    onChange={(e) => setOriginalAmount(e.target.value)}
-                                    InputProps={{
-                                        startAdornment: (
-                                            <InputAdornment position="start">Q</InputAdornment>
-                                        )
-                                    }}
-                                />
-                                <Typography variant="caption" color="text.secondary">Tarifa por alumno.</Typography>
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Fecha de vencimiento</Typography>
-                                <DatePicker
-                                    label=""
-                                    value={dueDateEnd}
-                                    onChange={setDueDateEnd}
-                                    format="YYYY-MM-DD"
-                                    renderInput={(params) => <TextField {...params} size="small" fullWidth />}
-                                />
-                                <Typography variant="caption" color="text.secondary">Última fecha en la que se puede pagar el período sin acumular mora.</Typography>
-                            </Grid>
-
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Opciones</Typography>
-                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1 }}>
-                                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                                        <FormControlLabel
-                                            control={<Checkbox checked={noAccruePenalty} onChange={(e) => setNoAccruePenalty(e.target.checked)} size="small" />}
-                                            label="Congelar mora"
-                                        />
-                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, ml: 4 }}>Marcar esta opción para que el período no acumule mora. Se creará el período con mora congelada.</Typography>
-                                    </Box>
-                                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                                        <FormControlLabel
-                                            control={<Checkbox checked={applyFamilyDiscounts} onChange={(e) => setApplyFamilyDiscounts(e.target.checked)} size="small" />}
-                                            label="Aplicar descuentos familiares"
-                                        />
-                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, ml: 4 }}>Marcar esta opción para que al período se le aplique el descuento familiar configurado para cada familia.</Typography>
-                                    </Box>
-                                </Box>
-                            </Grid>
-
+            {error && <Box sx={{ mb: 1 }}><Alert severity="error">{error}</Alert></Box>}
+            <Box sx={{ display: 'grid', gap: 1, mt: 1 }}>
+                <Divider sx={{ mb: 1 }} />
+                <LocalizationProvider dateAdapter={AdapterMoment} adapterLocale="es" localeText={esES.components.MuiLocalizationProvider.defaultProps.localeText}>
+                    <Grid container spacing={2} alignItems="flex-start">
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Período</Typography>
+                            <DatePicker
+                                views={[ 'year', 'month' ]}
+                                openTo="month"
+                                label="Período (YYYY-MM)"
+                                value={period ? moment(period + '-01') : null}
+                                onChange={(v) => setPeriod(v ? v.format('YYYY-MM') : '')}
+                                format="YYYY-MM"
+                                components={{ OpenPickerIcon: CalendarTodayIcon }}
+                                renderInput={(params) => <TextField {...params} size="small" fullWidth />}
+                            />
+                            <Typography variant="caption" color="text.secondary">Selecciona el mes del periodo que se creará.</Typography>
                         </Grid>
-                    </LocalizationProvider>
-                </Box>
-            </DialogContent>
-            <Box sx={{ px: 3, pb: 1 }}>
+
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Tarifa base</Typography>
+                            <MoneyField
+                                label=""
+                                size="small"
+                                fullWidth
+                                value={originalAmount}
+                                onChange={(e) => setOriginalAmount(e.target.value)}
+                            />
+                            <Typography variant="caption" color="text.secondary">Tarifa por alumno.</Typography>
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Fecha de vencimiento</Typography>
+                            <DatePicker
+                                label=""
+                                value={dueDateEnd}
+                                onChange={setDueDateEnd}
+                                format="YYYY-MM-DD"
+                                renderInput={(params) => <TextField {...params} size="small" fullWidth />}
+                            />
+                            <Typography variant="caption" color="text.secondary">Última fecha en la que se puede pagar el período sin acumular mora.</Typography>
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Opciones</Typography>
+                            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1 }}>
+                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                    <FormControlLabel
+                                        control={<Checkbox checked={noAccruePenalty} onChange={(e) => setNoAccruePenalty(e.target.checked)} size="small" />}
+                                        label="Congelar mora"
+                                    />
+                                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, ml: 4 }}>Marcar esta opción para que el período no acumule mora. Se creará el período con mora congelada.</Typography>
+                                </Box>
+                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                    <FormControlLabel
+                                        control={<Checkbox checked={applyFamilyDiscounts} onChange={(e) => setApplyFamilyDiscounts(e.target.checked)} size="small" />}
+                                        label="Aplicar descuentos familiares"
+                                    />
+                                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, ml: 4 }}>Marcar esta opción para que al período se le aplique el descuento familiar configurado para cada familia.</Typography>
+                                </Box>
+                            </Box>
+                        </Grid>
+
+                    </Grid>
+                </LocalizationProvider>
+            </Box>
+            <Box sx={{ mt: 2 }}>
                 <Alert severity="info" sx={{ mt: 1 }}>
                     <Typography variant="body2" sx={{ marginBottom: '8px' }}>
                         Tener en cuenta la fecha de vencimiento del período que se desea crear.
@@ -209,36 +181,7 @@ const CreateSchoolPeriodModal = ({ open, onClose, schoolId, onCreated, schoolSch
                     </Box>
                 </Alert>
             </Box>
-            <DialogActions sx={{ px: 3, pb: 2 }}>
-                <Button onClick={handleClose} disabled={loading}>Cancelar</Button>
-                <Button
-                    variant="contained"
-                    color="primary"
-                    onClick={handleCreate}
-                    disabled={loading}
-                    sx={{
-                        minWidth: 150,
-                        transition: 'all 0.2s ease-in-out',
-                        '&:disabled': {
-                            opacity: 0.85,
-                            cursor: 'not-allowed'
-                        },
-                        '&:hover': {
-                            transform: loading ? 'none' : 'translateY(-1px)'
-                        }
-                    }}
-                >
-                    {loading ? (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <CircularProgress size={18} color="inherit" />
-                            <span>Creando…</span>
-                        </Box>
-                    ) : (
-                        'Crear período'
-                    )}
-                </Button>
-            </DialogActions>
-        </Dialog>
+        </AppDialog>
     );
 };
 

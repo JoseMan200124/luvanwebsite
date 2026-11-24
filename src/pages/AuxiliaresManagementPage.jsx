@@ -6,15 +6,11 @@ import {
     Table,
     TableBody,
     TableCell,
-    TableContainer,
     TableHead,
-    TablePagination,
     TableRow,
     Accordion,
     AccordionSummary,
     AccordionDetails,
-    useTheme,
-    useMediaQuery,
     Box,
     Button,
     MenuItem,
@@ -30,7 +26,12 @@ import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { matchSearchTokens } from '../utils/clientFilter';
 import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
-import styled from 'styled-components';
+import useTableState from '../hooks/useTableState';
+import useIsMobile from '../hooks/useIsMobile';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import { MobileCard, MobileField } from '../components/table/MobileCard';
 
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
@@ -61,41 +62,27 @@ const groupByOrganization = (arr) => {
     return result;
 };
 
-// Componentes para vista móvil (tarjetas)
-const MobileCard = styled(Paper)`
-  padding: 16px;
-  margin-bottom: 16px;
-`;
-const MobileField = styled(Box)`
-  margin-bottom: 8px;
-  display: flex;
-  flex-direction: column;
-`;
-const MobileLabel = styled(Typography)`
-  font-weight: bold;
-  font-size: 0.875rem;
-  color: #555;
-`;
-const MobileValue = styled(Typography)`
-  font-size: 1rem;
-`;
+// Columnas de la tabla de auxiliares
+const COLUMNS = [
+    { id: 'name', label: 'Nombre' },
+    { id: 'email', label: 'Email' },
+    { id: 'monitoras', label: 'Monitoras Asignadas' },
+];
 
 const MONITORAS_PER_PAGE = 5;
 
 const AuxiliaresManagementPage = () => {
     const { auth } = useContext(AuthContext);
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
 
     const [auxiliares, setAuxiliares] = useState([]);
     const [loading, setLoading] = useState(false);
 
     // Para búsqueda y paginación
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(5);
+    const table = useTableState();
     const pageFilters = useFilters({
         fields: [F.search('search', { placeholder: 'Nombre o correo' })],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const { search: searchQuery } = pageFilters.applied;
 
@@ -131,14 +118,7 @@ const AuxiliaresManagementPage = () => {
     // Filtrar auxiliares
     const filteredAuxiliares = auxiliares.filter((a) => matchSearchTokens(searchQuery, [a.name, a.email]));
 
-    // Paginación
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
+    const pageAuxiliares = table.paginate(filteredAuxiliares);
 
     const handleChangeAccordion = (panel) => (event, isExpanded) => {
         setExpanded(isExpanded ? panel : false);
@@ -185,8 +165,7 @@ const AuxiliaresManagementPage = () => {
                     ) : isMobile ? (
                         // Vista móvil: renderizar una lista de tarjetas (MobileCard) para cada auxiliar
                         <>
-                            {filteredAuxiliares
-                                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                            {pageAuxiliares
                                 .map((aux, index) => {
                                     const orgGroups = groupByOrganization(aux.assignedMonitoras || []);
                                     const orgKeys = Object.keys(orgGroups);
@@ -202,16 +181,9 @@ const AuxiliaresManagementPage = () => {
                                     );
                                     return (
                                         <MobileCard key={aux.email || index}>
-                                            <MobileField>
-                                                <MobileLabel>Nombre</MobileLabel>
-                                                <MobileValue>{aux.name}</MobileValue>
-                                            </MobileField>
-                                            <MobileField>
-                                                <MobileLabel>Email</MobileLabel>
-                                                <MobileValue>{aux.email}</MobileValue>
-                                            </MobileField>
-                                            <MobileField>
-                                                <MobileLabel>Monitoras Asignadas</MobileLabel>
+                                            <MobileField label="Nombre">{aux.name}</MobileField>
+                                            <MobileField label="Email">{aux.email}</MobileField>
+                                            <MobileField label="Monitoras Asignadas">
                                                 <Accordion
                                                     expanded={expanded === `panel-${index}`}
                                                     onChange={handleChangeAccordion(`panel-${index}`)}
@@ -295,34 +267,16 @@ const AuxiliaresManagementPage = () => {
                                         </MobileCard>
                                     );
                                 })}
-                            <TablePagination
-                                component="div"
-                                count={filteredAuxiliares.length}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                rowsPerPageOptions={[5, 10, 25]}
-                                labelRowsPerPage="Filas por página"
-                            />
+                            <AppTablePagination count={filteredAuxiliares.length} {...table.paginationProps} />
                         </>
                     ) : (
                         // Vista desktop: renderizar la tabla original
                         <Paper sx={{ width: '100%', overflowX: 'auto' }}>
-                            <TableContainer
-                                sx={{ maxHeight: { xs: 400, sm: 'none' }, overflowX: 'auto' }}
-                            >
+                            <AppTableContainer>
                                 <Table stickyHeader sx={{ minWidth: 760 }}>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>Nombre</TableCell>
-                                            <TableCell>Email</TableCell>
-                                            <TableCell>Monitoras Asignadas</TableCell>
-                                        </TableRow>
-                                    </TableHead>
+                                    <SortableTableHead columns={COLUMNS} />
                                     <TableBody>
-                                        {filteredAuxiliares
-                                            .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                                        {pageAuxiliares
                                             .map((aux, index) => {
                                                 const orgGroups = groupByOrganization(aux.assignedMonitoras || []);
                                                 const orgKeys = Object.keys(orgGroups);
@@ -440,17 +394,8 @@ const AuxiliaresManagementPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={filteredAuxiliares.length}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                rowsPerPageOptions={[5, 10, 25]}
-                                labelRowsPerPage="Filas por página"
-                            />
+                            </AppTableContainer>
+                            <AppTablePagination count={filteredAuxiliares.length} {...table.paginationProps} />
                         </Paper>
                     )}
                 </>

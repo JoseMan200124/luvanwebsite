@@ -5,14 +5,13 @@ import {
     Typography,
     Dialog,
     CircularProgress,
-    Divider,
-    Snackbar,
-    Alert
+    Divider
 } from '@mui/material';
 import api from '../utils/axiosConfig';
 import parse from 'html-react-parser';
 import SignatureCanvas from 'react-signature-canvas';
 import ErrorBoundary from '../components/ErrorBoundary';
+import useNotify from '../hooks/useNotify';
 
 const ContractFillPage = () => {
     const { uuid } = useParams();
@@ -35,11 +34,7 @@ const ContractFillPage = () => {
     const [loginLoading, setLoginLoading] = useState(false);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
-    const [snackbar, setSnackbar] = useState({
-        open: false,
-        message: '',
-        severity: 'success'
-    });
+    const notify = useNotify();
     const signaturePads = useRef({});
     const fieldRefs = useRef({});
     const redirectTimeoutRef = useRef(null);
@@ -54,7 +49,7 @@ const ContractFillPage = () => {
     }, []);
 
     const handleSuccessRedirect = (message) => {
-        setSnackbar({ open: true, message: message || 'Contrato generado y almacenado exitosamente.', severity: 'success' });
+        notify.success(message || 'Contrato generado y almacenado exitosamente.');
         // after 8 seconds redirect to login
         if (redirectTimeoutRef.current) {
             clearTimeout(redirectTimeoutRef.current);
@@ -72,16 +67,12 @@ const ContractFillPage = () => {
                 setLoading(false);
             } catch (error) {
                 console.error('Error al obtener el contrato:', error);
-                setSnackbar({
-                    open: true,
-                    message: 'No se pudo cargar el contrato. Verifica el enlace.',
-                    severity: 'error'
-                });
+                notify.error('No se pudo cargar el contrato. Verifica el enlace.');
                 setLoading(false);
             }
         };
         fetchContract();
-    }, [uuid]);
+    }, [uuid, notify]);
 
     // Extraer placeholders
     const extractPlaceholders = (content) => {
@@ -149,11 +140,7 @@ const ContractFillPage = () => {
                 newlyMissing.forEach((n) => set.add(n));
                 return Array.from(set);
             });
-            setSnackbar({
-                open: true,
-                message: `Faltan campos por completar: ${newlyMissing.slice(0, 3).join(', ')}${newlyMissing.length > 3 ? '...' : ''}`,
-                severity: 'warning'
-            });
+            notify.warning(`Faltan campos por completar: ${newlyMissing.slice(0, 3).join(', ')}${newlyMissing.length > 3 ? '...' : ''}`);
             // focus first missing
             const first = newlyMissing[0];
             setTimeout(() => {
@@ -207,11 +194,7 @@ const ContractFillPage = () => {
             handleSuccessRedirect('Contrato generado y almacenado exitosamente.');
         } catch (error) {
             console.error('Error al generar el contrato:', error);
-            setSnackbar({
-                open: true,
-                message: 'Ocurrió un error al generar el contrato.',
-                severity: 'error'
-            });
+            notify.error('Ocurrió un error al generar el contrato');
         } finally {
             setSubmitting(false);
         }
@@ -225,7 +208,7 @@ const ContractFillPage = () => {
     // Handle login from modal
     const handleLogin = async () => {
         if (!loginEmail || !loginPassword) {
-            setSnackbar({ open: true, message: 'Email y contraseña son obligatorios.', severity: 'warning' });
+            notify.warning('Email y contraseña son obligatorios');
             return;
         }
         setLoginLoading(true);
@@ -246,7 +229,7 @@ const ContractFillPage = () => {
                 // Set parentId and close modal
                 setLoginOpen(false);
                 setSessionParentId(user.id);
-                setSnackbar({ open: true, message: 'Ingreso exitoso.', severity: 'success' });
+                notify.success('Ingreso exitoso');
 
                 // Resolver familyDetailId después del login
                 // Buscar el FamilyDetail para este usuario en el contexto actual
@@ -269,17 +252,17 @@ const ContractFillPage = () => {
                         setPendingPayload(null);
                     } catch (err) {
                         console.error('Error al generar el contrato tras login:', err);
-                        setSnackbar({ open: true, message: 'Error al generar el contrato después de iniciar sesión.', severity: 'error' });
+                        notify.error('Error al generar el contrato después de iniciar sesión');
                     } finally {
                         setSubmitting(false);
                     }
                 }
             } else {
-                setSnackbar({ open: true, message: 'No se pudo obtener información del usuario.', severity: 'error' });
+                notify.error('No se pudo obtener información del usuario');
             }
         } catch (err) {
             console.error('Login error:', err);
-            setSnackbar({ open: true, message: 'Credenciales incorrectas o error de servidor.', severity: 'error' });
+            notify.error('Credenciales incorrectas o error de servidor');
         } finally {
             setLoginLoading(false);
         }
@@ -447,20 +430,6 @@ const ContractFillPage = () => {
                     {submitting ? 'Generando...' : 'Generar y Enviar PDF'}
                 </Button>
             </ErrorBoundary>
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert
-                    onClose={() => setSnackbar({ ...snackbar, open: false })}
-                    severity={snackbar.severity}
-                    sx={{ width: '100%' }}
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
 
             {/* Styled login dialog matching platform login */}
             <Dialog open={loginOpen} onClose={() => setLoginOpen(false)}>

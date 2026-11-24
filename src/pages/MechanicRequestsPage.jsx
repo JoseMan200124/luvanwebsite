@@ -6,31 +6,19 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
+    Paper,
     Box,
     Typography,
-    Paper,
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    TablePagination,
     TextField,
     MenuItem,
     Grid,
     Chip,
-    IconButton,
     Tooltip,
     CircularProgress,
-    Card,
-    CardContent,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Button,
-    TableSortLabel,
     FormControl,
     InputLabel,
     Select,
@@ -48,8 +36,6 @@ import {
     Edit as EditIcon,
     Add as AddIcon,
 } from '@mui/icons-material';
-import tw from 'twin.macro';
-import styled from 'styled-components';
 import moment from 'moment-timezone';
 import {
     getAllMechanicRequests,
@@ -58,28 +44,56 @@ import {
     createMechanicRequest,
     deleteMechanicRequest,
     updateMechanicRequestStatus,
-    WORK_TYPES,
-    REQUEST_STATES,
-    STATE_COLORS
+    WORK_TYPES
 } from '../services/mechanicRequestService';
 import api from '../utils/axiosConfig';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import ClientSelector from '../components/ClientSelector';
 import { getClientSchoolId, getClientCorporationId } from '../utils/clientValue';
 import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
-import PermissionGuard from '../components/PermissionGuard';
+import usePermissions from '../hooks/usePermissions';
+import { validate, hasErrors, focusFirstError, clearError } from '../utils/validators';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import RowActions from '../components/table/RowActions';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F, YES_NO_OPTIONS, toRouteOptions } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
+import { formatDateTime, formatDate } from '../utils/dateFormat';
+import { MECHANIC_STATUS, getStatusLabel, getStatusMeta, toStatusOptions } from '../constants/statuses';
+import AppDialog from '../components/dialogs/AppDialog';
+import { EmojiEvents as TopIcon } from '@mui/icons-material';
+import { StatCard, StatCardGrid } from '../components/StatCard';
+import { loadCatalog } from '../services/catalogStore';
 
-const StatsCard = styled(Card)`
-    ${tw`h-full`}
-`;
+// Columnas de la tabla de solicitudes
+const COLUMNS = [
+    { id: 'fechaSolicitud', label: 'Fecha', sortable: true },
+    { id: 'tipoTrabajo', label: 'Tipo de Trabajo', sortable: true },
+    { id: 'solicitud', label: 'Solicitud' },
+    { id: 'placa', label: 'Placa' },
+    { id: 'ruta', label: 'Ruta' },
+    { id: 'cliente', label: 'Colegio/Corp.' },
+    { id: 'solicitante', label: 'Solicitante' },
+    { id: 'urgente', label: 'Urgente', sortable: true },
+    { id: 'estado', label: 'Estado', sortable: true },
+    { id: 'acciones', label: 'Acciones', align: 'center' },
+];
+
+// Campos obligatorios de una solicitud nueva.
+const CREATE_RULES = { busId: ['required'], solicitud: ['required'] };
 
 const MechanicRequestsPage = () => {
+    const notify = useNotify();
+    const { hasPermission } = usePermissions();
+    const confirm = useConfirm();
     // Estados para datos
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -89,9 +103,9 @@ const MechanicRequestsPage = () => {
     const [plateOptions, setPlateOptions] = useState([]);
     const [routeOptions, setRouteOptions] = useState([]);
 
-    // Estados para paginación
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
+    // Paginación y orden (en el servidor)
+    const table = useTableState({ defaultOrderBy: 'fechaSolicitud', defaultOrder: 'desc' });
+    const { page, rowsPerPage, orderBy: sortBy, order: sortOrder } = table;
     const [totalCount, setTotalCount] = useState(0);
     const [clientBreakdown, setClientBreakdown] = useState({ colegios: 0, corporativos: 0 });
 
@@ -102,11 +116,11 @@ const MechanicRequestsPage = () => {
             F.plate({ options: [...new Set(plateOptions.map((option) => option.label).filter(Boolean))].map((plateLabel) => ({ value: plateLabel, label: plateLabel })) }),
             F.route({ options: toRouteOptions(routeOptions) }),
             F.select('tipoTrabajo', { label: 'Tipo de trabajo', options: WORK_TYPES }),
-            F.select('estado', { label: 'Estado', options: REQUEST_STATES }),
+            F.select('estado', { label: 'Estado', options: toStatusOptions(MECHANIC_STATUS) }),
             F.select('urgente', { label: 'Urgente', width: 'sm', options: YES_NO_OPTIONS }),
             F.dateRange('dates'),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const {
         cycle: selectedCicloEscolar,
@@ -130,15 +144,9 @@ const MechanicRequestsPage = () => {
     // agrupar por ciclo evita que se elija el año equivocado de un colegio con nombre repetido.
     const isSpecificCicloEscolarSelected = selectedCicloEscolar && selectedCicloEscolar !== ALL_CYCLES_VALUE;
 
-    // Estados para ordenamiento
-    const [sortBy, setSortBy] = useState('fechaSolicitud');
-    const [sortOrder, setSortOrder] = useState('desc');
-
     // Estados para modales
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [detailModalOpen, setDetailModalOpen] = useState(false);
-    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-    const [requestToDelete, setRequestToDelete] = useState(null);
     const [statusModalOpen, setStatusModalOpen] = useState(false);
     const [newStatus, setNewStatus] = useState('');
     const [statusNotes, setStatusNotes] = useState('');
@@ -157,21 +165,17 @@ const MechanicRequestsPage = () => {
     const [createLoadingPlates, setCreateLoadingPlates] = useState(false);
     const [createSubmitting, setCreateSubmitting] = useState(false);
     const [createError, setCreateError] = useState(null);
+    const [createErrors, setCreateErrors] = useState({});
+    const [statusSaving, setStatusSaving] = useState(false);
 
     // Cargar colegios y corporaciones
     useEffect(() => {
         const loadFiltersData = async () => {
             try {
-                const [schoolsResponse, corpsResponse] = await Promise.all([
-                    api.get('/schools', { params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true } }),
-                    api.get('/corporations', { params: getCicloEscolarFilterParams(draftCycle) })
+                const [schoolsData, corpsData] = await Promise.all([
+                    loadCatalog('schools', { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true }),
+                    loadCatalog('corporations', getCicloEscolarFilterParams(draftCycle))
                 ]);
-                const schoolsData = Array.isArray(schoolsResponse.data) 
-                    ? schoolsResponse.data 
-                    : (schoolsResponse.data?.schools || []);
-                const corpsData = Array.isArray(corpsResponse.data) 
-                    ? corpsResponse.data 
-                    : (corpsResponse.data?.corporations || []);
                 setSchools(schoolsData);
                 setCorporations(corpsData);
             } catch (error) {
@@ -266,10 +270,11 @@ const MechanicRequestsPage = () => {
             setClientBreakdown({ colegios: Number(response.clientBreakdown?.colegios || 0), corporativos: Number(response.clientBreakdown?.corporativos || 0) });
         } catch (error) {
             console.error('Error fetching mechanic requests:', error);
+            notify.fromError(error, 'Error al cargar las solicitudes de mecánica');
         } finally {
             setLoading(false);
         }
-    }, [page, rowsPerPage, schoolId, corporationId, plate, routeNumber, tipoTrabajo, estado, urgente, selectedCicloEscolar, startDate, endDate, sortBy, sortOrder]);
+    }, [page, rowsPerPage, schoolId, corporationId, plate, routeNumber, tipoTrabajo, estado, urgente, selectedCicloEscolar, startDate, endDate, sortBy, sortOrder, notify]);
 
     // Función para cargar estadísticas
     const fetchStatistics = useCallback(async () => {
@@ -312,23 +317,6 @@ const MechanicRequestsPage = () => {
 
     // Manejadores de filtros: usamos setters individuales abajo en los inputs
 
-    // Manejadores de paginación
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
-
-    // Manejador de ordenamiento
-    const handleSort = (column) => {
-        const isAsc = sortBy === column && sortOrder === 'asc';
-        setSortOrder(isAsc ? 'desc' : 'asc');
-        setSortBy(column);
-    };
-
     // Abrir modal de detalle
     const handleViewDetail = async (request) => {
         try {
@@ -337,28 +325,41 @@ const MechanicRequestsPage = () => {
             setDetailModalOpen(true);
         } catch (error) {
             console.error('Error fetching request detail:', error);
+            notify.fromError(error, 'Error al cargar el detalle de la solicitud');
         }
     };
 
-    // Abrir modal de eliminar
-    const handleOpenDeleteModal = (request) => {
-        setRequestToDelete(request);
-        setDeleteModalOpen(true);
-    };
-
-    // Confirmar eliminación
-    const handleConfirmDelete = async () => {
-        if (!requestToDelete) {
-            return;
-        }
-        try {
-            await deleteMechanicRequest(requestToDelete.id);
-            setDeleteModalOpen(false);
-            setRequestToDelete(null);
+    // Eliminar con confirmación (muestra bus, tipo y fecha de la solicitud)
+    const handleDelete = async (request) => {
+        const ok = await confirm({
+            title: 'Eliminar solicitud de mecánica',
+            message: (
+                <>
+                    <Typography color="text.secondary">
+                        Se eliminará la solicitud de mecánica. Esta acción no se puede deshacer.
+                    </Typography>
+                    <Box mt={2}>
+                        <Typography variant="body2" color="textSecondary">
+                            <strong>Bus:</strong> {request.bus?.plate || '-'}
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                            <strong>Tipo:</strong> {WORK_TYPES[request.tipoTrabajo] || request.tipoTrabajo}
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                            <strong>Fecha:</strong> {formatDateTime(request.fechaSolicitud)}
+                        </Typography>
+                    </Box>
+                </>
+            ),
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: () => deleteMechanicRequest(request.id),
+            errorMessage: 'Error al eliminar la solicitud',
+        });
+        if (ok) {
+            notify.success('Solicitud eliminada');
             fetchRequests();
             fetchStatistics();
-        } catch (error) {
-            console.error('Error deleting request:', error);
         }
     };
 
@@ -380,6 +381,7 @@ const MechanicRequestsPage = () => {
         if (!selectedRequest) {
             return;
         }
+        setStatusSaving(true);
         try {
             const updateData = {
                 estado: newStatus,
@@ -397,8 +399,12 @@ const MechanicRequestsPage = () => {
             setFechaCompletado('');
             fetchRequests();
             fetchStatistics();
+            notify.success('Estado actualizado');
         } catch (error) {
             console.error('Error updating status:', error);
+            notify.fromError(error, 'Error al actualizar el estado');
+        } finally {
+            setStatusSaving(false);
         }
     };
 
@@ -413,6 +419,7 @@ const MechanicRequestsPage = () => {
         setCreateSolicitud('');
         setCreateUrgente(false);
         setCreateError(null);
+        setCreateErrors({});
         setCreateModalOpen(true);
     };
 
@@ -448,12 +455,10 @@ const MechanicRequestsPage = () => {
 
     const handleConfirmCreate = async () => {
         setCreateError(null);
-        if (!createBusId) {
-            setCreateError('Seleccione un bus válido.');
-            return;
-        }
-        if (!createSolicitud || String(createSolicitud).trim() === '') {
-            setCreateError('La descripción de la solicitud es requerida.');
+        const found = validate({ busId: createBusId, solicitud: createSolicitud }, CREATE_RULES);
+        setCreateErrors(found);
+        if (hasErrors(found)) {
+            focusFirstError(found);
             return;
         }
         setCreateSubmitting(true);
@@ -470,6 +475,7 @@ const MechanicRequestsPage = () => {
             setCreateSubmitting(false);
             fetchRequests();
             fetchStatistics();
+            notify.success('Solicitud creada');
         } catch (e) {
             console.error('Error creating mechanic request:', e);
             setCreateError(e?.response?.data?.message || 'Error al crear la solicitud.');
@@ -493,22 +499,6 @@ const MechanicRequestsPage = () => {
         }
     };
 
-    // Formatear fecha con hora
-    const formatDate = (date) => {
-        if (!date) {
-            return '-';
-        }
-        return moment(date).tz('America/Guatemala').format('DD/MM/YYYY HH:mm');
-    };
-
-    // Formatear solo fecha (sin hora)
-    const formatDateOnly = (date) => {
-        if (!date) {
-            return '-';
-        }
-        return moment(date).tz('America/Guatemala').format('DD/MM/YYYY');
-    };
-
     return (
         <PageContainer width="xl">
             <PageHeader
@@ -519,86 +509,28 @@ const MechanicRequestsPage = () => {
 
             {/* Estadísticas */}
             {statistics && (
-                <Grid container spacing={3} sx={{ mb: 3 }}>
-                    <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Total
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.totalRequests}
-                                </Typography>
-                                <Typography variant="caption" color="textSecondary" display="block">
-                                    {clientBreakdown.colegios} de colegios · {clientBreakdown.corporativos} corporativos
-                                </Typography>
-                            </CardContent>
-                        </StatsCard>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard sx={{ borderLeft: '4px solid #ff9800' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Urgentes
-                                </Typography>
-                                <Typography variant="h4" color="warning.main">
-                                    {statistics.urgentRequests}
-                                </Typography>
-                            </CardContent>
-                        </StatsCard>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard sx={{ borderLeft: '4px solid #2196f3' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Pendientes
-                                </Typography>
-                                <Typography variant="h4" color="info.main">
-                                    {statistics.pendingRequests}
-                                </Typography>
-                            </CardContent>
-                        </StatsCard>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard sx={{ borderLeft: '4px solid #9c27b0' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    En Proceso
-                                </Typography>
-                                <Typography variant="h4" color="secondary.main">
-                                    {statistics.inProgressRequests}
-                                </Typography>
-                            </CardContent>
-                        </StatsCard>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard sx={{ borderLeft: '4px solid #4caf50' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Completados
-                                </Typography>
-                                <Typography variant="h4" color="success.main">
-                                    {statistics.completedRequests}
-                                </Typography>
-                            </CardContent>
-                        </StatsCard>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={2}>
-                        <StatsCard>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Más Solicitudes
-                                </Typography>
-                                <Typography variant="body1" noWrap>
-                                    {statistics.topSchool?.name || statistics.topCorporation?.name || 'N/A'}
-                                </Typography>
-                                <Typography variant="caption" color="textSecondary">
-                                    {statistics.topSchool?.count || statistics.topCorporation?.count || 0} solicitudes
-                                </Typography>
-                            </CardContent>
-                        </StatsCard>
-                    </Grid>
-                </Grid>
+                <StatCardGrid columns={{ md: 3, lg: 6 }}>
+                    <StatCard
+                        label="Total"
+                        value={statistics.totalRequests}
+                        icon={<BuildIcon />}
+                        format="number"
+                        hint={`${clientBreakdown.colegios} de colegios · ${clientBreakdown.corporativos} corporativos`}
+                    />
+                    <StatCard label="Urgentes" value={statistics.urgentRequests} icon={<WarningIcon />} color="#ff9800" valueColor="warning.main" format="number" />
+                    <StatCard label="Pendientes" value={statistics.pendingRequests} icon={<PendingIcon />} color="#2196f3" valueColor="info.main" format="number" />
+                    <StatCard label="En proceso" value={statistics.inProgressRequests} icon={<InProgressIcon />} color="#9c27b0" valueColor="secondary.main" format="number" />
+                    <StatCard label="Completados" value={statistics.completedRequests} icon={<CheckCircleIcon />} color="#4caf50" valueColor="success.main" format="number" />
+                    <StatCard
+                        label="Más solicitudes"
+                        icon={<TopIcon />}
+                        hint={`${statistics.topSchool?.count || statistics.topCorporation?.count || 0} solicitudes`}
+                    >
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>
+                            {statistics.topSchool?.name || statistics.topCorporation?.name || 'N/A'}
+                        </Typography>
+                    </StatCard>
+                </StatCardGrid>
             )}
 
             {/* Filtros */}
@@ -611,7 +543,7 @@ const MechanicRequestsPage = () => {
             />
 
             {/* Tabla */}
-            <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
+            <AppTableContainer component={Paper}>
                 {loading ? (
                     <Box display="flex" justifyContent="center" p={4}>
                         <CircularProgress />
@@ -619,52 +551,7 @@ const MechanicRequestsPage = () => {
                 ) : (
                     <>
                         <Table size="small" sx={{ minWidth: 1100 }}>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell>
-                                        <TableSortLabel
-                                            active={sortBy === 'fechaSolicitud'}
-                                            direction={sortBy === 'fechaSolicitud' ? sortOrder : 'asc'}
-                                            onClick={() => handleSort('fechaSolicitud')}
-                                        >
-                                            Fecha
-                                        </TableSortLabel>
-                                    </TableCell>
-                                    <TableCell>
-                                        <TableSortLabel
-                                            active={sortBy === 'tipoTrabajo'}
-                                            direction={sortBy === 'tipoTrabajo' ? sortOrder : 'asc'}
-                                            onClick={() => handleSort('tipoTrabajo')}
-                                        >
-                                            Tipo de Trabajo
-                                        </TableSortLabel>
-                                    </TableCell>
-                                    <TableCell>Solicitud</TableCell>
-                                    <TableCell>Placa</TableCell>
-                                    <TableCell>Ruta</TableCell>
-                                    <TableCell>Colegio/Corp.</TableCell>
-                                    <TableCell>Solicitante</TableCell>
-                                    <TableCell>
-                                        <TableSortLabel
-                                            active={sortBy === 'urgente'}
-                                            direction={sortBy === 'urgente' ? sortOrder : 'asc'}
-                                            onClick={() => handleSort('urgente')}
-                                        >
-                                            Urgente
-                                        </TableSortLabel>
-                                    </TableCell>
-                                    <TableCell>
-                                        <TableSortLabel
-                                            active={sortBy === 'estado'}
-                                            direction={sortBy === 'estado' ? sortOrder : 'asc'}
-                                            onClick={() => handleSort('estado')}
-                                        >
-                                            Estado
-                                        </TableSortLabel>
-                                    </TableCell>
-                                    <TableCell align="center">Acciones</TableCell>
-                                </TableRow>
-                            </TableHead>
+                            <SortableTableHead columns={COLUMNS} {...table.sortProps} />
                             <TableBody>
                                 {requests.length === 0 ? (
                                     <TableRow>
@@ -676,7 +563,7 @@ const MechanicRequestsPage = () => {
                                     requests.map((request) => (
                                         <TableRow key={request.id} hover>
                                             <TableCell>
-                                                {formatDate(request.fechaSolicitud)}
+                                                {formatDateTime(request.fechaSolicitud)}
                                             </TableCell>
                                             <TableCell>
                                                 <Chip
@@ -722,401 +609,309 @@ const MechanicRequestsPage = () => {
                                             <TableCell>
                                                 <Chip
                                                     icon={getStatusIcon(request.estado)}
-                                                    label={REQUEST_STATES[request.estado] || request.estado}
+                                                    label={getStatusLabel(MECHANIC_STATUS, request.estado)}
                                                     size="small"
-                                                    color={STATE_COLORS[request.estado] || 'default'}
+                                                    color={getStatusMeta(MECHANIC_STATUS, request.estado).color}
                                                 />
                                             </TableCell>
                                             <TableCell align="center">
-                                                <Tooltip title="Ver Detalle">
-                                                    <IconButton
-                                                        size="small"
-                                                        onClick={() => handleViewDetail(request)}
-                                                    >
-                                                        <VisibilityIcon fontSize="small" />
-                                                    </IconButton>
-                                                </Tooltip>
-                                                <PermissionGuard permission="mecanica-actualizar-estado">
-                                                    <Tooltip title="Cambiar Estado">
-                                                        <IconButton
-                                                            size="small"
-                                                            color="primary"
-                                                            onClick={() => handleOpenStatusModal(request)}
-                                                        >
-                                                            <EditIcon fontSize="small" />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                </PermissionGuard>
-                                                <PermissionGuard permission="mecanica-eliminar-solicitud">
-                                                    <Tooltip title="Eliminar">
-                                                        <IconButton
-                                                            size="small"
-                                                            color="error"
-                                                            onClick={() => handleOpenDeleteModal(request)}
-                                                        >
-                                                            <DeleteIcon fontSize="small" />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                </PermissionGuard>
+                                                <RowActions
+                                                    actions={[
+                                                        { key: 'view', kind: 'view', label: 'Ver detalle', icon: <VisibilityIcon fontSize="small" />, onClick: () => handleViewDetail(request) },
+                                                        { key: 'status', kind: 'edit', color: 'primary', label: 'Cambiar estado', icon: <EditIcon fontSize="small" />, permission: 'mecanica-actualizar-estado', onClick: () => handleOpenStatusModal(request) },
+                                                        { key: 'delete', kind: 'delete', label: 'Eliminar', icon: <DeleteIcon fontSize="small" />, permission: 'mecanica-eliminar-solicitud', onClick: () => handleDelete(request) },
+                                                    ]}
+                                                />
                                             </TableCell>
                                         </TableRow>
                                     ))
                                 )}
                             </TableBody>
                         </Table>
-                        <TablePagination
-                            component="div"
-                            count={totalCount}
-                            page={page}
-                            onPageChange={handleChangePage}
-                            rowsPerPage={rowsPerPage}
-                            onRowsPerPageChange={handleChangeRowsPerPage}
-                            rowsPerPageOptions={[5, 10, 25, 50]}
-                            labelRowsPerPage="Filas por página"
-                            labelDisplayedRows={({ from, to, count }) =>
-                                `${from}-${to} de ${count !== -1 ? count : `más de ${to}`}`
-                            }
-                        />
+                        <AppTablePagination count={totalCount} {...table.paginationProps} />
                     </>
                 )}
-            </TableContainer>
+            </AppTableContainer>
 
             {/* Modal de Crear Solicitud */}
-            <Dialog
+            <AppDialog
                 open={createModalOpen}
                 onClose={() => setCreateModalOpen(false)}
-                maxWidth="sm"
-                fullWidth
+                title="Nueva solicitud de mecánica"
+                icon={<BuildIcon />}
+                size="sm"
+                onSubmit={handleConfirmCreate}
+                submitLabel="Crear"
+                submitting={createSubmitting}
             >
-                <DialogTitle>
-                    <BuildIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Nueva Solicitud de Mecánica
-                </DialogTitle>
-                <DialogContent dividers>
-                    {createError && (
-                        <Alert severity="error" sx={{ mb: 2 }}>{createError}</Alert>
-                    )}
-                    <Grid container spacing={2}>
-                        <Grid item xs={12}>
-                            <ClientSelector
-                                schools={schools}
-                                corporations={corporations}
-                                value={createClient}
-                                onChange={(client) => { setCreateClient(client); setCreateBusId(''); }}
-                            />
-                        </Grid>
-
-                        <Grid item xs={12} sm={6}>
-                            <TextField
-                                select
-                                fullWidth
-                                size="small"
-                                label="Placa/Bus"
-                                value={createBusId}
-                                onChange={(e) => setCreateBusId(e.target.value)}
-                                disabled={(!createSchoolId && !createCorporationId) || createLoadingPlates}
-                            >
-                                <MenuItem value="">Seleccione</MenuItem>
-                                {createPlateOptions.map((p) => (
-                                    <MenuItem key={p.id} value={p.id}>{p.label}</MenuItem>
-                                ))}
-                            </TextField>
-                        </Grid>
-                        <Grid item xs={12} sm={6}>
-                            <TextField
-                                select
-                                fullWidth
-                                size="small"
-                                label="Tipo Trabajo"
-                                value={createTipoTrabajo}
-                                onChange={(e) => setCreateTipoTrabajo(e.target.value)}
-                            >
-                                {Object.entries(WORK_TYPES).map(([key, label]) => (
-                                    <MenuItem key={key} value={key}>{label}</MenuItem>
-                                ))}
-                            </TextField>
-                        </Grid>
-                        {createTipoTrabajo === 'otro' && (
-                            <Grid item xs={12}>
-                                <TextField
-                                    fullWidth
-                                    size="small"
-                                    label="Detalle de Otro Trabajo"
-                                    value={createOtroTrabajoDetalle}
-                                    onChange={(e) => setCreateOtroTrabajoDetalle(e.target.value)}
-                                />
-                            </Grid>
-                        )}
-                        <Grid item xs={12}>
-                            <TextField
-                                fullWidth
-                                multiline
-                                rows={4}
-                                label="Solicitud"
-                                value={createSolicitud}
-                                onChange={(e) => setCreateSolicitud(e.target.value)}
-                            />
-                        </Grid>
-                        <Grid item xs={12}>
-                            <FormControl fullWidth>
-                                <InputLabel>Urgente</InputLabel>
-                                <Select
-                                    value={createUrgente ? 'true' : 'false'}
-                                    onChange={(e) => setCreateUrgente(e.target.value === 'true')}
-                                    label="Urgente"
-                                >
-                                    <MenuItem value="false">No</MenuItem>
-                                    <MenuItem value="true">Sí</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Grid>
+                {createError && (
+                    <Alert severity="error" sx={{ mb: 2 }}>{createError}</Alert>
+                )}
+                <Grid container spacing={2}>
+                    <Grid item xs={12}>
+                        <ClientSelector
+                            schools={schools}
+                            corporations={corporations}
+                            value={createClient}
+                            onChange={(client) => { setCreateClient(client); setCreateBusId(''); }}
+                        />
                     </Grid>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setCreateModalOpen(false)} disabled={createSubmitting}>Cancelar</Button>
-                    <Button variant="contained" onClick={handleConfirmCreate} disabled={createSubmitting}>
-                        {createSubmitting ? 'Guardando...' : 'Crear'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
+
+                    <Grid item xs={12} sm={6}>
+                        <TextField
+                            select
+                            fullWidth
+                            size="small"
+                            label="Placa/bus"
+                            name="busId"
+                            required
+                            error={Boolean(createErrors.busId)}
+                            helperText={createErrors.busId}
+                            value={createBusId}
+                            onChange={(e) => { setCreateBusId(e.target.value); setCreateErrors((prev) => clearError(prev, 'busId')); }}
+                            disabled={(!createSchoolId && !createCorporationId) || createLoadingPlates}
+                        >
+                            <MenuItem value="">Seleccione</MenuItem>
+                            {createPlateOptions.map((p) => (
+                                <MenuItem key={p.id} value={p.id}>{p.label}</MenuItem>
+                            ))}
+                        </TextField>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                        <TextField
+                            select
+                            fullWidth
+                            size="small"
+                            label="Tipo de trabajo"
+                            value={createTipoTrabajo}
+                            onChange={(e) => setCreateTipoTrabajo(e.target.value)}
+                        >
+                            {Object.entries(WORK_TYPES).map(([key, label]) => (
+                                <MenuItem key={key} value={key}>{label}</MenuItem>
+                            ))}
+                        </TextField>
+                    </Grid>
+                    {createTipoTrabajo === 'otro' && (
+                        <Grid item xs={12}>
+                            <TextField
+                                fullWidth
+                                size="small"
+                                label="Detalle de otro trabajo"
+                                value={createOtroTrabajoDetalle}
+                                onChange={(e) => setCreateOtroTrabajoDetalle(e.target.value)}
+                            />
+                        </Grid>
+                    )}
+                    <Grid item xs={12}>
+                        <TextField
+                            fullWidth
+                            multiline
+                            rows={4}
+                            label="Solicitud"
+                            name="solicitud"
+                            required
+                            error={Boolean(createErrors.solicitud)}
+                            helperText={createErrors.solicitud}
+                            value={createSolicitud}
+                            onChange={(e) => { setCreateSolicitud(e.target.value); setCreateErrors((prev) => clearError(prev, 'solicitud')); }}
+                        />
+                    </Grid>
+                    <Grid item xs={12}>
+                        <FormControl fullWidth>
+                            <InputLabel>Urgente</InputLabel>
+                            <Select
+                                value={createUrgente ? 'true' : 'false'}
+                                onChange={(e) => setCreateUrgente(e.target.value === 'true')}
+                                label="Urgente"
+                            >
+                                <MenuItem value="false">No</MenuItem>
+                                <MenuItem value="true">Sí</MenuItem>
+                            </Select>
+                        </FormControl>
+                    </Grid>
+                </Grid>
+            </AppDialog>
 
             {/* Modal de Detalle */}
-            <Dialog
+            <AppDialog
                 open={detailModalOpen}
                 onClose={() => setDetailModalOpen(false)}
-                maxWidth="md"
-                fullWidth
+                title="Detalle de la solicitud de mecánica"
+                icon={<BuildIcon />}
+                size="md"
+                readOnly
             >
-                <DialogTitle>
-                    <BuildIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Detalle de Solicitud de Mecánica
-                </DialogTitle>
-                <DialogContent dividers>
-                    {selectedRequest && (
-                        <Grid container spacing={2}>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Fecha de Solicitud
-                                </Typography>
-                                <Typography>
-                                    {formatDate(selectedRequest.fechaSolicitud)}
-                                </Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Estado
-                                </Typography>
-                                <Chip
-                                    icon={getStatusIcon(selectedRequest.estado)}
-                                    label={REQUEST_STATES[selectedRequest.estado] || selectedRequest.estado}
-                                    color={STATE_COLORS[selectedRequest.estado] || 'default'}
-                                />
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Tipo de Trabajo
-                                </Typography>
-                                <Typography>
-                                    {WORK_TYPES[selectedRequest.tipoTrabajo] || selectedRequest.tipoTrabajo}
-                                    {selectedRequest.tipoTrabajo === 'otro' && selectedRequest.otroTrabajoDetalle && (
-                                        <span> - {selectedRequest.otroTrabajoDetalle}</span>
-                                    )}
-                                </Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Urgente
-                                </Typography>
-                                {selectedRequest.urgente ? (
-                                    <Chip icon={<WarningIcon />} label="Sí" size="small" color="error" />
-                                ) : (
-                                    <Chip label="No" size="small" variant="outlined" />
-                                )}
-                            </Grid>
-                            <Grid item xs={12}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Solicitud
-                                </Typography>
-                                <Typography>{selectedRequest.solicitud}</Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Bus
-                                </Typography>
-                                <Typography>
-                                    {selectedRequest.bus?.plate || '-'}
-                                    {selectedRequest.bus?.description && ` - ${selectedRequest.bus.description}`}
-                                </Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Ruta
-                                </Typography>
-                                <Typography>
-                                    {selectedRequest.routeNumber || selectedRequest.bus?.routeNumber || '-'}
-                                </Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Colegio
-                                </Typography>
-                                <Typography>{selectedRequest.school?.name || '-'}</Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Corporación
-                                </Typography>
-                                <Typography>{selectedRequest.corporation?.name || '-'}</Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Piloto del Bus
-                                </Typography>
-                                <Typography>
-                                    {selectedRequest.pilot?.name || '-'}
-                                </Typography>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <Typography variant="subtitle2" color="textSecondary">
-                                    Solicitante
-                                </Typography>
-                                <Typography>
-                                    {selectedRequest.supervisorId 
-                                        ? `${selectedRequest.supervisor?.name || '-'} (Supervisor)`
-                                        : `${selectedRequest.pilot?.name || '-'} (Piloto)`}
-                                </Typography>
-                            </Grid>
-                            {selectedRequest.fechaCompletado && (
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Fecha de Completado
-                                    </Typography>
-                                    <Typography>
-                                        {formatDateOnly(selectedRequest.fechaCompletado)}
-                                    </Typography>
-                                </Grid>
-                            )}
-                            {selectedRequest.notas && (
-                                <Grid item xs={12}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Notas
-                                    </Typography>
-                                    <Typography>{selectedRequest.notas}</Typography>
-                                </Grid>
-                            )}
-                        </Grid>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setDetailModalOpen(false)}>Cerrar</Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Modal de Cambio de Estado */}
-            <Dialog
-                open={statusModalOpen}
-                onClose={() => setStatusModalOpen(false)}
-                maxWidth="sm"
-                fullWidth
-            >
-                <DialogTitle>
-                    <EditIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Cambiar Estado de Solicitud
-                </DialogTitle>
-                <DialogContent dividers>
+                {selectedRequest && (
                     <Grid container spacing={2}>
-                        <Grid item xs={12}>
-                            <FormControl fullWidth>
-                                <InputLabel>Estado</InputLabel>
-                                <Select
-                                        value={newStatus}
-                                        onChange={(e) => setNewStatus(e.target.value)}
-                                        label="Estado"
-                                        MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
-                                    >
-                                    {Object.entries(REQUEST_STATES).map(([key, label]) => (
-                                        <MenuItem key={key} value={key}>
-                                            {label}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Fecha de Solicitud
+                            </Typography>
+                            <Typography>
+                                {formatDateTime(selectedRequest.fechaSolicitud)}
+                            </Typography>
                         </Grid>
-                        <Grid item xs={12}>
-                            <TextField
-                                fullWidth
-                                multiline
-                                rows={3}
-                                label="Notas"
-                                value={statusNotes}
-                                onChange={(e) => setStatusNotes(e.target.value)}
-                                placeholder="Agregar notas sobre el cambio de estado..."
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Estado
+                            </Typography>
+                            <Chip
+                                icon={getStatusIcon(selectedRequest.estado)}
+                                label={getStatusLabel(MECHANIC_STATUS, selectedRequest.estado)}
+                                color={getStatusMeta(MECHANIC_STATUS, selectedRequest.estado).color}
                             />
                         </Grid>
-                        {newStatus === 'completado' && (
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Tipo de Trabajo
+                            </Typography>
+                            <Typography>
+                                {WORK_TYPES[selectedRequest.tipoTrabajo] || selectedRequest.tipoTrabajo}
+                                {selectedRequest.tipoTrabajo === 'otro' && selectedRequest.otroTrabajoDetalle && (
+                                    <span> - {selectedRequest.otroTrabajoDetalle}</span>
+                                )}
+                            </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Urgente
+                            </Typography>
+                            {selectedRequest.urgente ? (
+                                <Chip icon={<WarningIcon />} label="Sí" size="small" color="error" />
+                            ) : (
+                                <Chip label="No" size="small" variant="outlined" />
+                            )}
+                        </Grid>
+                        <Grid item xs={12}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Solicitud
+                            </Typography>
+                            <Typography>{selectedRequest.solicitud}</Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Bus
+                            </Typography>
+                            <Typography>
+                                {selectedRequest.bus?.plate || '-'}
+                                {selectedRequest.bus?.description && ` - ${selectedRequest.bus.description}`}
+                            </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Ruta
+                            </Typography>
+                            <Typography>
+                                {selectedRequest.routeNumber || selectedRequest.bus?.routeNumber || '-'}
+                            </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Colegio
+                            </Typography>
+                            <Typography>{selectedRequest.school?.name || '-'}</Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Corporación
+                            </Typography>
+                            <Typography>{selectedRequest.corporation?.name || '-'}</Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Piloto del Bus
+                            </Typography>
+                            <Typography>
+                                {selectedRequest.pilot?.name || '-'}
+                            </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <Typography variant="subtitle2" color="textSecondary">
+                                Solicitante
+                            </Typography>
+                            <Typography>
+                                {selectedRequest.supervisorId 
+                                    ? `${selectedRequest.supervisor?.name || '-'} (Supervisor)`
+                                    : `${selectedRequest.pilot?.name || '-'} (Piloto)`}
+                            </Typography>
+                        </Grid>
+                        {selectedRequest.fechaCompletado && (
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Fecha de Completado
+                                </Typography>
+                                <Typography>
+                                    {formatDate(selectedRequest.fechaCompletado)}
+                                </Typography>
+                            </Grid>
+                        )}
+                        {selectedRequest.notas && (
                             <Grid item xs={12}>
-                                <TextField
-                                    fullWidth
-                                    type="date"
-                                    label="Fecha de Completado"
-                                    value={fechaCompletado}
-                                    onChange={(e) => setFechaCompletado(e.target.value)}
-                                    InputLabelProps={{ shrink: true }}
-                                    required
-                                />
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Notas
+                                </Typography>
+                                <Typography>{selectedRequest.notas}</Typography>
                             </Grid>
                         )}
                     </Grid>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setStatusModalOpen(false)}>Cancelar</Button>
-                    <PermissionGuard permission="mecanica-actualizar-estado">
-                        <Button
-                            variant="contained"
-                            color="primary"
-                            onClick={handleConfirmStatusChange}
-                        >
-                            Guardar
-                        </Button>
-                    </PermissionGuard>
-                </DialogActions>
-            </Dialog>
+                )}
+            </AppDialog>
 
-            {/* Modal de Confirmación de Eliminación */}
-            <Dialog
-                open={deleteModalOpen}
-                onClose={() => setDeleteModalOpen(false)}
+            {/* Modal de Cambio de Estado */}
+            <AppDialog
+                open={statusModalOpen}
+                onClose={() => setStatusModalOpen(false)}
+                title="Cambiar estado de la solicitud"
+                icon={<EditIcon />}
+                size="sm"
+                onSubmit={handleConfirmStatusChange}
+                submitting={statusSaving}
+                readOnly={!hasPermission('mecanica-actualizar-estado')}
             >
-                <DialogTitle>Confirmar Eliminación</DialogTitle>
-                <DialogContent>
-                    <Typography>
-                        ¿Está seguro de que desea eliminar esta solicitud de mecánica?
-                    </Typography>
-                    {requestToDelete && (
-                        <Box mt={2}>
-                            <Typography variant="body2" color="textSecondary">
-                                <strong>Bus:</strong> {requestToDelete.bus?.plate || '-'}
-                            </Typography>
-                            <Typography variant="body2" color="textSecondary">
-                                <strong>Tipo:</strong> {WORK_TYPES[requestToDelete.tipoTrabajo] || requestToDelete.tipoTrabajo}
-                            </Typography>
-                            <Typography variant="body2" color="textSecondary">
-                                <strong>Fecha:</strong> {formatDate(requestToDelete.fechaSolicitud)}
-                            </Typography>
-                        </Box>
+                <Grid container spacing={2}>
+                    <Grid item xs={12}>
+                        <FormControl fullWidth>
+                            <InputLabel>Estado</InputLabel>
+                            <Select
+                                    value={newStatus}
+                                    onChange={(e) => setNewStatus(e.target.value)}
+                                    label="Estado"
+                                    MenuProps={{ PaperProps: { style: { maxHeight: 300 } } }}
+                                >
+                                {toStatusOptions(MECHANIC_STATUS).map(({ value: key, label }) => (
+                                    <MenuItem key={key} value={key}>
+                                        {label}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    </Grid>
+                    <Grid item xs={12}>
+                        <TextField
+                            fullWidth
+                            multiline
+                            rows={3}
+                            label="Notas"
+                            value={statusNotes}
+                            onChange={(e) => setStatusNotes(e.target.value)}
+                            placeholder="Agregar notas sobre el cambio de estado..."
+                        />
+                    </Grid>
+                    {newStatus === 'completado' && (
+                        <Grid item xs={12}>
+                            <TextField
+                                fullWidth
+                                type="date"
+                                label="Fecha de completado"
+                                value={fechaCompletado}
+                                onChange={(e) => setFechaCompletado(e.target.value)}
+                                InputLabelProps={{ shrink: true }}
+                                required
+                            />
+                        </Grid>
                     )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setDeleteModalOpen(false)}>Cancelar</Button>
-                    <Button
-                        variant="contained"
-                        color="error"
-                        onClick={handleConfirmDelete}
-                    >
-                        Eliminar
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                </Grid>
+            </AppDialog>
         </PageContainer>
     );
 };

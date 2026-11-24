@@ -5,15 +5,9 @@ import {
     Typography,
     Button,
     CircularProgress,
-    Snackbar,
-    Alert,
     Box,
-    Select,
-    MenuItem,
     ToggleButton,
     ToggleButtonGroup,
-    TextField,
-    InputAdornment,
     IconButton,
     Tooltip,
     Chip,
@@ -26,31 +20,32 @@ import {
     Paper,
     Collapse
 } from '@mui/material';
-import { InfoOutlined, Search, ChevronLeft, ChevronRight, Download, KeyboardArrowRight, KeyboardArrowDown } from '@mui/icons-material';
+import { InfoOutlined,  Download, KeyboardArrowRight, KeyboardArrowDown } from '@mui/icons-material';
 import api from '../../utils/axiosConfig';
 import useRegisterPageRefresh from '../../hooks/useRegisterPageRefresh';
 import FilterBar from '../filters/FilterBar';
 import useFilters from '../../hooks/useFilters';
 import { F } from '../filters/filterFields';
 import { getCurrentDateSync } from '../../hooks/useCurrentDate';
+import useNotify from '../../hooks/useNotify';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import moment from 'moment-timezone';
 import 'moment/locale/es';
+import { formatMonth, formatDateTime } from '../../utils/dateFormat';
+import { formatQ } from '../../utils/currency';
+import { Payments as PaymentsIcon, TrendingUp as TrendingUpIcon, TrendingDown as TrendingDownIcon, FamilyRestroom as FamilyIcon, WarningAmber as WarningIcon } from '@mui/icons-material';
+import { StatCard, StatCardGrid } from '../StatCard';
+import AppTablePagination from '../table/AppTablePagination';
+import { DEFAULT_ROWS_PER_PAGE } from '../table/tableConfig';
+import { loadCatalog } from '../../services/catalogStore';
+import SearchInput from '../form/SearchInput';
 
-moment.tz.setDefault('America/Guatemala');
-moment.locale('es');
-
-const ROWS_PER_PAGE_OPTIONS = [5, 8, 10, 15, 25, 50];
-const DEFAULT_ROWS_PER_PAGE = 8;
 
 // ----------------------------------------------------------------------------
 // Presentación: el backend calcula TODAS las métricas; el frontend sólo formatea.
 // `null`/`undefined` => "N/A" (p. ej. divisiones por cero resueltas en el backend).
 // ----------------------------------------------------------------------------
-const formatMoneyOrNA = (value) => (value === null || value === undefined)
-    ? 'N/A'
-    : `Q ${Number(value).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const formatPercentOrNA = (value) => (value === null || value === undefined)
     ? 'N/A'
     : `${Number(value).toFixed(1)}%`;
@@ -143,7 +138,7 @@ const formatMetric = (metrics, col, basis) => {
     if (col.type === 'int') {
         return (raw === null || raw === undefined) ? 'N/A' : String(raw);
     }
-    return formatMoneyOrNA(raw);
+    return formatQ(raw, { nullText: 'N/A' });
 };
 
 // Tooltip text helper por métrica — devuelve JSX con descripción principal + secundaria
@@ -296,12 +291,12 @@ const IncomeStatisticsTab = () => {
 
     const [result, setResult] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const notify = useNotify();
 
     const fetchSchools = useCallback(async () => {
         try {
-            const res = await api.get('/schools', { params: { allCycles: true, includeArchived: true } });
-            setSchools((res.data.schools || []).filter((s) => s.paymentsEnabled !== false));
+            const schoolsList = await loadCatalog('schools', { allCycles: true, includeArchived: true });
+            setSchools(schoolsList.filter((s) => s.paymentsEnabled !== false));
         } catch (e) {
             console.error('fetchSchools error', e);
         }
@@ -310,7 +305,6 @@ const IncomeStatisticsTab = () => {
     // Recibe los filtros aplicados. Sin colegios elegidos = todos los colegios.
     const fetchAll = useCallback(async (values) => {
         setLoading(true);
-        setError(null);
         try {
             const schoolIdsParam = values.schools.length === 0 ? 'all' : values.schools.join(',');
             const statsRes = await api.get('/financial-statistics', { params: { schoolIds: schoolIdsParam, from: values.months.from, to: values.months.to, groupBy: 'school' } });
@@ -320,12 +314,12 @@ const IncomeStatisticsTab = () => {
             setBreakdownCache({});
         } catch (e) {
             console.error('fetchAll error', e);
-            setError('Error al obtener las estadísticas financieras. Por favor, inténtalo de nuevo más tarde.');
+            notify.fromError(e, 'Error al obtener las estadísticas financieras');
             setResult(null);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [notify]);
 
     const toggleExpand = useCallback(async (schoolId) => {
         if (expandedSchoolId === schoolId) {
@@ -400,8 +394,8 @@ const IncomeStatisticsTab = () => {
 
     let rangeLabel = '';
     if (result) {
-        const fromLabel = moment(`${result.from}-01`).format('MMMM YYYY');
-        const toLabel = moment(`${result.to}-01`).format('MMMM YYYY');
+        const fromLabel = formatMonth(`${result.from}-01`);
+        const toLabel = formatMonth(`${result.to}-01`);
         rangeLabel = `${fromLabel} — ${toLabel}`;
     }
 
@@ -439,7 +433,7 @@ const IncomeStatisticsTab = () => {
         pdf.text(`${rangeLabel}  ·  Base ${basisLabel}  ·  ${scope}  ·  ${totalRows} colegio${totalRows === 1 ? '' : 's'}`, marginX, 22);
 
         pdf.setFontSize(9);
-        pdf.text(`Generado el ${now.format('DD/MM/YYYY HH:mm')} (hora Guatemala)`, pageWidth - marginX, 16, { align: 'right' });
+        pdf.text(`Generado el ${formatDateTime(now)} (hora Guatemala)`, pageWidth - marginX, 16, { align: 'right' });
 
         pdf.setDrawColor(230);
         pdf.line(marginX, 26, pageWidth - marginX, 26);
@@ -661,16 +655,16 @@ const IncomeStatisticsTab = () => {
         const maxVal = Math.max(1, ...sorted.map((s) => basisValue(s.metrics?.ingresoTotal, metricsBasis) || 0));
         return sorted.map((s) => {
             const val = basisValue(s.metrics?.ingresoTotal, metricsBasis) || 0;
-            return { name: s.schoolName, pct: Math.round((val / maxVal) * 100), valueText: formatMoneyOrNA(val) };
+            return { name: s.schoolName, pct: Math.round((val / maxVal) * 100), valueText: formatQ(val, { nullText: 'N/A' }) };
         });
     }, [result, metricsBasis]);
 
     const kpis = totales ? [
-        { key: 'ingresoTotal', label: 'Ingreso Total', type: 'money', basis: true, color: '#2e7d32' },
-        { key: 'tasaDePago', label: 'Tasa de Pago', type: 'percent', color: '#4caf50' },
-        { key: 'tasaDeMora', label: 'Tasa de Mora', type: 'percent', color: '#f44336' },
-        { key: 'familiasActivas', label: 'Familias Facturadas', type: 'int', color: '#1976d2' },
-        { key: 'moraPendiente', label: 'Mora Pendiente', type: 'money', color: '#d32f2f' }
+        { key: 'ingresoTotal', label: 'Ingreso Total', type: 'money', basis: true, color: '#2e7d32', icon: PaymentsIcon },
+        { key: 'tasaDePago', label: 'Tasa de Pago', type: 'percent', color: '#4caf50', icon: TrendingUpIcon },
+        { key: 'tasaDeMora', label: 'Tasa de Mora', type: 'percent', color: '#f44336', icon: TrendingDownIcon },
+        { key: 'familiasActivas', label: 'Familias Facturadas', type: 'int', color: '#1976d2', icon: FamilyIcon },
+        { key: 'moraPendiente', label: 'Mora Pendiente', type: 'money', color: '#d32f2f', icon: WarningIcon }
     ] : [];
 
     return (
@@ -719,28 +713,28 @@ const IncomeStatisticsTab = () => {
                 <div style={{ backgroundColor: '#fff', padding: '16px', overflowX: 'auto' }}>
                     {/* KPI cards */}
                     {kpis.length > 0 && (
-                        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 2, mb: 3 }}>
+                        <StatCardGrid columns={{ md: 3, lg: 5 }}>
                             {kpis.map((kpi) => {
                                 const kpiTooltip = getMetricTooltip(kpi.key);
+                                const KpiIcon = kpi.icon;
                                 return (
-                                    <Box key={kpi.key} sx={{ bgcolor: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 1, p: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.75 }}>
-                                            <Typography sx={{ fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#6B7280', fontWeight: 600 }}>
+                                    <StatCard
+                                        key={kpi.key}
+                                        label={kpiTooltip ? (
+                                            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
                                                 {kpi.label}
-                                            </Typography>
-                                            {kpiTooltip ? (
                                                 <Tooltip title={kpiTooltip} arrow>
                                                     <InfoOutlined sx={{ fontSize: 13, color: 'text.disabled', cursor: 'help' }} />
                                                 </Tooltip>
-                                            ) : null}
-                                        </Box>
-                                        <Typography sx={{ fontWeight: 700, fontSize: 26, color: kpi.color }}>
-                                            {formatMetric(totales, kpi, metricsBasis)}
-                                        </Typography>
-                                    </Box>
+                                            </Box>
+                                        ) : kpi.label}
+                                        value={formatMetric(totales, kpi, metricsBasis)}
+                                        icon={<KpiIcon />}
+                                        valueColor={kpi.color}
+                                    />
                                 );
                             })}
-                        </Box>
+                        </StatCardGrid>
                     )}
 
                     {/* Top colegios */}
@@ -793,19 +787,11 @@ const IncomeStatisticsTab = () => {
                                 );
                             })}
                         </Box>
-                        <TextField
-                            size="small"
-                            placeholder="Buscar colegio…"
+                        <SearchInput
+                            label="Buscar colegio"
                             value={search}
-                            onChange={onSearchChange}
+                            onChange={(value) => onSearchChange({ target: { value } })}
                             sx={{ width: 220, bgcolor: '#fff', borderRadius: 1 }}
-                            InputProps={{
-                                startAdornment: (
-                                    <InputAdornment position="start">
-                                        <Search sx={{ fontSize: 18, opacity: 0.5 }} />
-                                    </InputAdornment>
-                                )
-                            }}
                         />
                     </Box>
 
@@ -918,7 +904,7 @@ const IncomeStatisticsTab = () => {
                                                                         <TableBody>
                                                                             {periods.map((p) => (
                                                                                 <TableRow key={p.period}>
-                                                                                    <TableCell sx={{ textTransform: 'capitalize' }}>{moment(`${p.period}-01`).format('MMMM YYYY')}</TableCell>
+                                                                                    <TableCell sx={{ textTransform: 'capitalize' }}>{formatMonth(`${p.period}-01`)}</TableCell>
                                                                                     {visibleColumns.map((col) => {
                                                                                         const text = formatMetric(p.metrics, col, metricsBasis);
                                                                                         let trendColor;
@@ -958,40 +944,16 @@ const IncomeStatisticsTab = () => {
                         </Table>
                     </TableContainer>
 
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1.5, flexWrap: 'wrap', gap: 1.5 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                            <Typography variant="caption" color="text.secondary">Filas por página</Typography>
-                            <Select
-                                size="small"
-                                value={rowsPerPage}
-                                onChange={onRowsPerPageChange}
-                                sx={{ height: 30, fontSize: 12, bgcolor: '#fff', borderRadius: 1 }}
-                            >
-                                {ROWS_PER_PAGE_OPTIONS.map((n) => (
-                                    <MenuItem key={n} value={n} sx={{ fontSize: 12 }}>{n}</MenuItem>
-                                ))}
-                            </Select>
-                            <Typography variant="caption" color="text.secondary">
-                                Página {currentPage + 1} de {totalPages} · {totalRows} colegio{totalRows === 1 ? '' : 's'}
-                            </Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                            <IconButton size="small" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={currentPage <= 0} sx={{ border: '1px solid rgba(0,0,0,0.12)', borderRadius: 1, width: 32, height: 32 }}>
-                                <ChevronLeft fontSize="small" />
-                            </IconButton>
-                            <IconButton size="small" onClick={() => setPage((p) => p + 1)} disabled={currentPage >= totalPages - 1} sx={{ border: '1px solid rgba(0,0,0,0.12)', borderRadius: 1, width: 32, height: 32 }}>
-                                <ChevronRight fontSize="small" />
-                            </IconButton>
-                        </Box>
-                    </Box>
+                    <AppTablePagination
+                        count={totalRows}
+                        page={currentPage}
+                        rowsPerPage={rowsPerPage}
+                        onPageChange={(_event, newPage) => setPage(newPage)}
+                        onRowsPerPageChange={onRowsPerPageChange}
+                    />
                 </div>
             )}
 
-            <Snackbar open={Boolean(error)} autoHideDuration={6000} onClose={() => setError(null)}>
-                <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>
-                    {error}
-                </Alert>
-            </Snackbar>
         </>
     );
 };

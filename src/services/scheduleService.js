@@ -4,6 +4,8 @@
  */
 
 import api from '../utils/axiosConfig';
+import { downloadBlob, todayForFileName } from '../utils/download';
+import { buildFileName, parseContentDisposition } from '../utils/fileName';
 
 /**
  * Actualiza SOLO los horarios de una escuela y propaga los cambios a ScheduleSlots
@@ -61,25 +63,6 @@ export const updateSchoolSchedules = async (schoolId, schedules, options = {}) =
   }
 };
 
-function getFilenameFromDisposition(contentDisposition, fallback) {
-  if (!contentDisposition) {
-      return fallback;
-  }
-  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
-  if (utf8Match?.[1]) {
-    try {
-      return decodeURIComponent(utf8Match[1]);
-    } catch {
-      return utf8Match[1];
-    }
-  }
-  const plainMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
-  if (plainMatch?.[1]) {
-      return plainMatch[1];
-  }
-  return fallback;
-}
-
 export const downloadScheduleDeletionZip = async (token) => {
   if (!token) {
     throw new Error('No se recibió token de descarga.');
@@ -89,20 +72,10 @@ export const downloadScheduleDeletionZip = async (token) => {
     responseType: 'blob'
   });
 
-  const contentDisposition = response.headers?.['content-disposition'] || '';
-  const fallbackName = `Estudiantes afectados eliminacion horarios ${new Date().toISOString().slice(0, 10)}.zip`;
-  const fileName = getFilenameFromDisposition(contentDisposition, fallbackName);
+  const fallbackName = buildFileName({ object: 'estudiantes afectados eliminacion horarios', date: todayForFileName(), extension: 'zip' });
+  const fileName = parseContentDisposition(response.headers?.['content-disposition']) || fallbackName;
   const contentType = response.headers?.['content-type'] || 'application/zip';
-  const blob = new Blob([response.data], { type: contentType });
-
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
+  downloadBlob(new Blob([response.data], { type: contentType }), fileName);
 };
 
 export const getScheduleDeletionImpact = async (schoolId, schedulePayload) => {

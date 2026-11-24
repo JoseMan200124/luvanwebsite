@@ -3,35 +3,22 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import {
-    Typography,
     Paper,
+    Typography,
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    TablePagination,
     CircularProgress,
     Box,
-    Grid,
-    Card,
-    CardContent,
     Chip,
-    IconButton,
-    Tooltip,
-    TableSortLabel,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogContentText,
-    DialogActions,
-    Button,
 } from '@mui/material';
 import { Delete as DeleteIcon } from '@mui/icons-material';
-import moment from 'moment-timezone';
 import { getRouteTimeLogs, getAllRouteTimeLogs, deleteRouteTimeLog } from '../services/routeTimeLogService';
 import ExcelJS from 'exceljs';
+import { downloadWorkbook } from '../utils/excel';
+import { buildFileName } from '../utils/fileName';
+import { todayForFileName } from '../utils/download';
 import api from '../utils/axiosConfig';
 import { getScheduleLabel, getScheduleColor, DEFAULT_SCHEDULE_CODES, getScheduleCodesFromSchool } from '../utils/scheduleConfig';
 import { getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
@@ -42,20 +29,44 @@ import { F, toPlateOptions, toRouteOptions } from '../components/filters/filterF
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
-import PermissionGuard from '../components/PermissionGuard';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import RowActions from '../components/table/RowActions';
+import { formatTime, formatDate } from '../utils/dateFormat';
+import { FactCheck as FactCheckIcon, Timer as TimerIcon } from '@mui/icons-material';
+import { StatCard, StatCardGrid } from '../components/StatCard';
 
-moment.tz.setDefault('America/Guatemala');
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'fecha', label: 'Fecha', sortable: true },
+    { id: 'day', label: 'Día', sortable: true },
+    { id: 'schedule', label: 'Horario', sortable: true },
+    { id: 'school', label: 'Colegio', sortable: true },
+    { id: 'monitora', label: 'Monitora', sortable: true },
+    { id: 'plate', label: 'Placa', sortable: true },
+    { id: 'routeNumber', label: 'Ruta', sortable: true },
+    { id: 'schoolDepartureTime', label: 'Salida Colegio', sortable: true },
+    { id: 'boardingTime', label: 'Abordaje', sortable: true },
+    { id: 'firstStopTime', label: 'Primera Parada', sortable: true },
+    { id: 'lastStopTime', label: 'Última Parada', sortable: true },
+    { id: 'schoolArrivalTime', label: 'Llegada Colegio', sortable: true },
+    { id: 'tripDuration', label: 'Duración Total', sortable: true, align: 'center' },
+    { id: 'acciones', label: 'Acciones', align: 'center' },
+];
 
 const RouteTimeLogsPage = () => {
+    const notify = useNotify();
+    const confirm = useConfirm();
     const [timeLogs, setTimeLogs] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(25);
+    // Paginación y orden (en el servidor)
+    const table = useTableState();
+    const { page, rowsPerPage, orderBy, order } = table;
     const [totalCount, setTotalCount] = useState(0);
-
-    // Sorting (client-side)
-    const [orderBy, setOrderBy] = useState(''); // column key
-    const [order, setOrder] = useState('asc'); // 'asc' | 'desc'
 
     // Filtros
     const [schools, setSchools] = useState([]);
@@ -91,7 +102,7 @@ const RouteTimeLogsPage = () => {
             F.weekday(),
             F.dateRange('dates'),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const {
         cycle: selectedCicloEscolar,
@@ -113,9 +124,6 @@ const RouteTimeLogsPage = () => {
         averageDuration: 0,
     });
     const [exporting, setExporting] = useState(false);
-    // Delete dialog state
-    const [deleteId, setDeleteId] = useState(null);
-    const [deleteOpen, setDeleteOpen] = useState(false);
 
     // ignoramos la respuesta vieja para que el primer click no "se pierda".
     const timeLogsRequestSeqRef = useRef(0);
@@ -258,6 +266,7 @@ const RouteTimeLogsPage = () => {
             // Solo entrar si esta request aún es la vigente
             if (requestSeq === timeLogsRequestSeqRef.current) {
                 console.error('Error al cargar registros de tiempo:', error);
+                notify.fromError(error, 'Error al cargar los registros de tiempo');
             }
         } finally {
             if (requestSeq === timeLogsRequestSeqRef.current) {
@@ -276,60 +285,29 @@ const RouteTimeLogsPage = () => {
         selectedDay,
         selectedCicloEscolar,
         dates,
+        notify,
     ]);
 
     useEffect(() => {
         fetchTimeLogs();
     }, [fetchTimeLogs]);
 
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
-
     // Register page-level refresh handler for the global refresh control
     useRegisterPageRefresh(fetchTimeLogs);
 
-    const handleOpenDelete = (id) => {
-        setDeleteId(id);
-        setDeleteOpen(true);
-    };
-
-    const handleCancelDelete = () => {
-        setDeleteId(null);
-        setDeleteOpen(false);
-    };
-
-    const handleConfirmDelete = async () => {
-        if (!deleteId) {
-            return;
-        }
-        try {
-            await deleteRouteTimeLog(deleteId);
-            // refresh list
-            setDeleteOpen(false);
-            setDeleteId(null);
+    const handleDelete = async (id) => {
+        const ok = await confirm({
+            title: 'Eliminar registro de tiempo',
+            message: 'Se eliminará el registro de tiempo de la ruta. Esta acción no se puede deshacer.',
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: () => deleteRouteTimeLog(id),
+            errorMessage: 'Error al eliminar el registro',
+        });
+        if (ok) {
+            notify.success('Registro eliminado');
             fetchTimeLogs();
-        } catch (error) {
-            console.error('Error al eliminar registro:', error);
-            setDeleteOpen(false);
-            setDeleteId(null);
         }
-    };
-
-    const handleSort = (col) => {
-        if (orderBy === col) {
-            setOrder(prev => prev === 'asc' ? 'desc' : 'asc');
-        } else {
-            setOrderBy(col);
-            setOrder('asc');
-        }
-        // reset page to first when changing sort
-        setPage(0);
     };
 
     // Server returns ordered results; use them directly
@@ -349,14 +327,6 @@ const RouteTimeLogsPage = () => {
         return labels[day] || day;
     };
 
-    const formatTime = (dateTime) => {
-        return dateTime ? moment(dateTime).format('hh:mm A') : 'N/A';
-    };
-
-    const formatDateOnly = (dateTime) => {
-        return dateTime ? moment(dateTime).format('DD/MM/YYYY') : '';
-    };
-
     const formatDuration = (minutes) => {
         if (!minutes) {
             return 'N/A';
@@ -369,7 +339,7 @@ const RouteTimeLogsPage = () => {
     const handleDownloadExcel = async () => {
         try {
             if (!totalCount || totalCount === 0) {
-                window.alert('No hay registros para exportar con los filtros seleccionados.');
+                notify.warning('No hay registros para exportar con los filtros seleccionados');
                 return;
             }
             setExporting(true);
@@ -440,18 +410,18 @@ const RouteTimeLogsPage = () => {
                 const routeValue = (rawRoute !== '' && /^\d+$/.test(String(rawRoute).trim())) ? Number(String(rawRoute).trim()) : (rawRoute || '');
 
                 const rowValues = [
-                    log.fecha ? moment(log.fecha).format('DD/MM/YYYY') : '',
+                    log.fecha ? formatDate(log.fecha) : '',
                     getDayLabel(log.day),
                     getScheduleLabel(log.schedule),
                     log.school?.name || '',
                     log.monitora?.name || '',
                     log.bus?.plate || '',
                     routeValue,
-                    log.schoolDepartureTime ? moment(log.schoolDepartureTime).format('hh:mm A') : '',
-                    log.boardingTime ? moment(log.boardingTime).format('hh:mm A') : '',
-                    log.firstStopTime ? moment(log.firstStopTime).format('hh:mm A') : '',
-                    log.lastStopTime ? moment(log.lastStopTime).format('hh:mm A') : '',
-                    log.schoolArrivalTime ? moment(log.schoolArrivalTime).format('hh:mm A') : '',
+                    log.schoolDepartureTime ? formatTime(log.schoolDepartureTime) : '',
+                    log.boardingTime ? formatTime(log.boardingTime) : '',
+                    log.firstStopTime ? formatTime(log.firstStopTime) : '',
+                    log.lastStopTime ? formatTime(log.lastStopTime) : '',
+                    log.schoolArrivalTime ? formatTime(log.schoolArrivalTime) : '',
                     typeof log.tripDuration === 'number' ? formatDuration(log.tripDuration) : ''
                 ];
 
@@ -482,19 +452,11 @@ const RouteTimeLogsPage = () => {
             const lastCol = String.fromCharCode(64 + headers.length);
             sheet.autoFilter = { from: 'A1', to: `${lastCol}1` };
 
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `horarios_rutas_${moment().format('YYYYMMDD_HHmmss')}.xlsx`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            window.URL.revokeObjectURL(url);
+            await downloadWorkbook(workbook, buildFileName({ object: 'horarios rutas', date: todayForFileName(), extension: 'xlsx' }));
 
         } catch (err) {
             console.error('Error generando Excel:', err);
+            notify.fromError(err, 'Error al generar el reporte');
         } finally {
             setExporting(false);
         }
@@ -510,47 +472,14 @@ const RouteTimeLogsPage = () => {
                 />
 
                 {/* Estadísticas */}
-                <Grid container spacing={3} mb={3}>
-                    <Grid item xs={12} sm={6}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Total Registros
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.total}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Duración Promedio
-                                </Typography>
-                                <Box display="flex" alignItems="baseline" gap={2}>
-                                    <Box>
-                                        <Typography variant="h3" component="span">
-                                            {Math.floor(Number.parseFloat(statistics.averageDuration) / 60) || 0}
-                                        </Typography>
-                                        <Typography variant="h6" component="span" color="textSecondary">
-                                            {' h '}
-                                        </Typography>
-                                    </Box>
-                                    <Box>
-                                        <Typography variant="h3" component="span">
-                                            {Math.round(Number.parseFloat(statistics.averageDuration) % 60) || 0}
-                                        </Typography>
-                                        <Typography variant="h6" component="span" color="textSecondary">
-                                            {' min'}
-                                        </Typography>
-                                    </Box>
-                                </Box>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                </Grid>
+                <StatCardGrid columns={2}>
+                    <StatCard label="Total registros" value={statistics.total} icon={<FactCheckIcon />} format="number" />
+                    <StatCard
+                        label="Duración promedio"
+                        icon={<TimerIcon />}
+                        value={`${Math.floor(Number.parseFloat(statistics.averageDuration) / 60) || 0} h ${Math.round(Number.parseFloat(statistics.averageDuration) % 60) || 0} min`}
+                    />
+                </StatCardGrid>
 
                 {/* Filtros */}
                 <FilterBar {...pageFilters.barProps} loading={loading} />
@@ -563,137 +492,14 @@ const RouteTimeLogsPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer sx={{ overflowX: 'auto' }}>
+                            <AppTableContainer>
                                 <Table sx={{ minWidth: 1320 }}>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell sortDirection={orderBy === 'fecha' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'fecha'}
-                                                    direction={orderBy === 'fecha' ? order : 'asc'}
-                                                    onClick={() => handleSort('fecha')}
-                                                >
-                                                    Fecha
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'day' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'day'}
-                                                    direction={orderBy === 'day' ? order : 'asc'}
-                                                    onClick={() => handleSort('day')}
-                                                >
-                                                    Día
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'schedule' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'schedule'}
-                                                    direction={orderBy === 'schedule' ? order : 'asc'}
-                                                    onClick={() => handleSort('schedule')}
-                                                >
-                                                    Horario
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'school' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'school'}
-                                                    direction={orderBy === 'school' ? order : 'asc'}
-                                                    onClick={() => handleSort('school')}
-                                                >
-                                                    Colegio
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'monitora' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'monitora'}
-                                                    direction={orderBy === 'monitora' ? order : 'asc'}
-                                                    onClick={() => handleSort('monitora')}
-                                                >
-                                                    Monitora
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'plate' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'plate'}
-                                                    direction={orderBy === 'plate' ? order : 'asc'}
-                                                    onClick={() => handleSort('plate')}
-                                                >
-                                                    Placa
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'routeNumber' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'routeNumber'}
-                                                    direction={orderBy === 'routeNumber' ? order : 'asc'}
-                                                    onClick={() => handleSort('routeNumber')}
-                                                >
-                                                    Ruta
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'schoolDepartureTime' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'schoolDepartureTime'}
-                                                    direction={orderBy === 'schoolDepartureTime' ? order : 'asc'}
-                                                    onClick={() => handleSort('schoolDepartureTime')}
-                                                >
-                                                    Salida Colegio
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'boardingTime' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'boardingTime'}
-                                                    direction={orderBy === 'boardingTime' ? order : 'asc'}
-                                                    onClick={() => handleSort('boardingTime')}
-                                                >
-                                                    Abordaje
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'firstStopTime' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'firstStopTime'}
-                                                    direction={orderBy === 'firstStopTime' ? order : 'asc'}
-                                                    onClick={() => handleSort('firstStopTime')}
-                                                >
-                                                    Primera Parada
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'lastStopTime' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'lastStopTime'}
-                                                    direction={orderBy === 'lastStopTime' ? order : 'asc'}
-                                                    onClick={() => handleSort('lastStopTime')}
-                                                >
-                                                    Última Parada
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'schoolArrivalTime' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'schoolArrivalTime'}
-                                                    direction={orderBy === 'schoolArrivalTime' ? order : 'asc'}
-                                                    onClick={() => handleSort('schoolArrivalTime')}
-                                                >
-                                                    Llegada Colegio
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="center" sortDirection={orderBy === 'tripDuration' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'tripDuration'}
-                                                    direction={orderBy === 'tripDuration' ? order : 'asc'}
-                                                    onClick={() => handleSort('tripDuration')}
-                                                >
-                                                    Duración Total
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="center">
-                                                Acciones
-                                            </TableCell>
-                                        </TableRow>
-                                    </TableHead>
+                                    <SortableTableHead columns={COLUMNS} {...table.sortProps} />
                                     <TableBody>
                                         {displayedLogs.map((log) => (
                                             <TableRow key={log.id}>
                                                 <TableCell>
-                                                    {moment(log.fecha).format('DD/MM/YYYY')}
+                                                    {formatDate(log.fecha)}
                                                 </TableCell>
                                                 <TableCell>{getDayLabel(log.day)}</TableCell>
                                                 <TableCell>
@@ -719,7 +525,7 @@ const RouteTimeLogsPage = () => {
                                                     <div>
                                                         <div>{formatTime(log.schoolDepartureTime)}</div>
                                                         <Typography variant="caption" color="textSecondary">
-                                                            {formatDateOnly(log.schoolDepartureTime)}
+                                                            {formatDate(log.schoolDepartureTime)}
                                                         </Typography>
                                                     </div>
                                                 </TableCell>
@@ -727,7 +533,7 @@ const RouteTimeLogsPage = () => {
                                                     <div>
                                                         <div>{formatTime(log.boardingTime)}</div>
                                                         <Typography variant="caption" color="textSecondary">
-                                                            {formatDateOnly(log.boardingTime)}
+                                                            {formatDate(log.boardingTime)}
                                                         </Typography>
                                                     </div>
                                                 </TableCell>
@@ -735,7 +541,7 @@ const RouteTimeLogsPage = () => {
                                                     <div>
                                                         <div>{formatTime(log.firstStopTime)}</div>
                                                         <Typography variant="caption" color="textSecondary">
-                                                            {formatDateOnly(log.firstStopTime)}
+                                                            {formatDate(log.firstStopTime)}
                                                         </Typography>
                                                     </div>
                                                 </TableCell>
@@ -743,7 +549,7 @@ const RouteTimeLogsPage = () => {
                                                     <div>
                                                         <div>{formatTime(log.lastStopTime)}</div>
                                                         <Typography variant="caption" color="textSecondary">
-                                                            {formatDateOnly(log.lastStopTime)}
+                                                            {formatDate(log.lastStopTime)}
                                                         </Typography>
                                                     </div>
                                                 </TableCell>
@@ -751,7 +557,7 @@ const RouteTimeLogsPage = () => {
                                                     <div>
                                                         <div>{formatTime(log.schoolArrivalTime)}</div>
                                                         <Typography variant="caption" color="textSecondary">
-                                                            {formatDateOnly(log.schoolArrivalTime)}
+                                                            {formatDate(log.schoolArrivalTime)}
                                                         </Typography>
                                                     </div>
                                                 </TableCell>
@@ -767,13 +573,11 @@ const RouteTimeLogsPage = () => {
                                                     />
                                                 </TableCell>
                                                 <TableCell align="center">
-                                                    <PermissionGuard permission="monitora-eliminar-tiempos">
-                                                        <Tooltip title="Eliminar registro">
-                                                            <IconButton onClick={() => handleOpenDelete(log.id)} size="small" color="error">
-                                                                <DeleteIcon fontSize="small" />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    </PermissionGuard>
+                                                    <RowActions
+                                                        actions={[
+                                                            { key: 'delete', kind: 'delete', label: 'Eliminar registro', icon: <DeleteIcon fontSize="small" />, permission: 'monitora-eliminar-tiempos', onClick: () => handleDelete(log.id) },
+                                                        ]}
+                                                    />
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -786,35 +590,8 @@ const RouteTimeLogsPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={totalCount}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                labelRowsPerPage="Registros por página:"
-                                labelDisplayedRows={({ from, to, count }) =>
-                                    `${from}-${to} de ${count !== -1 ? count : `más de ${to}`}`
-                                }
-                            />
-                            <Dialog
-                                open={deleteOpen}
-                                onClose={handleCancelDelete}
-                                aria-labelledby="delete-dialog-title"
-                            >
-                                <DialogTitle id="delete-dialog-title">Confirmar eliminación</DialogTitle>
-                                <DialogContent>
-                                    <DialogContentText>
-                                        ¿Estás seguro que deseas eliminar este registro? Esta acción no se puede deshacer.
-                                    </DialogContentText>
-                                </DialogContent>
-                                <DialogActions>
-                                    <Button onClick={handleCancelDelete}>Cancelar</Button>
-                                    <Button onClick={handleConfirmDelete} color="error">Eliminar</Button>
-                                </DialogActions>
-                            </Dialog>
+                            </AppTableContainer>
+                            <AppTablePagination count={totalCount} {...table.paginationProps} />
                         </>
                     )}
                 </Paper>

@@ -1,22 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { alpha } from '@mui/material/styles';
 import {
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Button,
     Box,
     Typography,
     Checkbox,
     Paper,
     Switch,
-    FormControlLabel,
-    Snackbar,
-    Alert
+    FormControlLabel
 } from '@mui/material';
 import api from '../../utils/axiosConfig';
 import moment from 'moment';
+import useNotify from '../../hooks/useNotify';
+import { formatMonth } from '../../utils/dateFormat';
+import { formatQ } from '../../utils/currency';
+import { useCurrentDate } from '../../hooks/useCurrentDate';
+import AppDialog from '../dialogs/AppDialog';
 
 /**
  * Modal genérico para aplicar cambios de forma retroactiva con alcance por períodos.
@@ -40,13 +38,14 @@ const RetroactiveApplyModal = ({
 
     onApplied = () => {}
 }) => {
+    const { currentDate } = useCurrentDate();
     const normalizedMode = String(mode || 'DISCOUNT').toUpperCase();
 
     const [option, setOption] = useState(null);
     const [selectedPeriods, setSelectedPeriods] = useState([]);
     const [selectAll, setSelectAll] = useState(false);
     const [applying, setApplying] = useState(false);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
+    const notify = useNotify();
 
     // allow fetching full payment details if the provided `payment` prop is partial
     const [payment, setPayment] = useState(null);
@@ -71,7 +70,7 @@ const RetroactiveApplyModal = ({
         }
     }, [effectivePayment]);
 
-    const currentPeriod = effectivePayment?.currentPeriod || moment().format('YYYY-MM');
+    const currentPeriod = effectivePayment?.currentPeriod || moment(currentDate).format('YYYY-MM');
 
     const familyFromUser = effectivePayment?.User || effectivePayment?.user || null;
     const familyFromDetail = familyFromUser?.FamilyDetail || familyFromUser?.familyDetail || null;
@@ -83,7 +82,6 @@ const RetroactiveApplyModal = ({
         setSelectedPeriods([]);
         setSelectAll(false);
         setApplying(false);
-        setSnackbar({ open: false, message: '', severity: 'info' });
         setPayment(null);
         setFullPayment(null);
     }, [open]);
@@ -106,11 +104,11 @@ const RetroactiveApplyModal = ({
                 setPayment(p);
             } catch (err) {
                 console.error('Error fetching payment by user for modal:', err?.response?.data || err.message);
-                setSnackbar({ open: true, message: 'No se pudo cargar el pago de la familia.', severity: 'error' });
+                notify.error('No se pudo cargar el pago de la familia');
             }
         };
         fetchPaymentByUser();
-    }, [open, userId, paymentProp?.id]);
+    }, [open, userId, paymentProp?.id, notify]);
 
     useEffect(() => {
         // If modal opens and the effective payment lacks FamilyDetail, fetch full payment
@@ -192,12 +190,12 @@ const RetroactiveApplyModal = ({
     const handleApply = async () => {
         const paymentId = effectivePayment?.id || paymentProp?.id;
         if (!paymentId) {
-            setSnackbar({ open: true, message: 'No se encontró un pago asociado.', severity: 'warning' });
+            notify.warning('No se encontró un pago asociado');
             return;
         }
 
         if (!option) {
-            setSnackbar({ open: true, message: 'Por favor selecciona una opción antes de aplicar.', severity: 'warning' });
+            notify.warning('Por favor selecciona una opción antes de aplicar');
             return;
         }
 
@@ -205,7 +203,7 @@ const RetroactiveApplyModal = ({
         if (normalizedMode === 'ROUTE_TYPE') {
             const newRouteType = String(routeType || '').trim();
             if (!newRouteType) {
-                setSnackbar({ open: true, message: 'Selecciona un tipo de ruta antes de aplicar.', severity: 'warning' });
+                notify.warning('Selecciona un tipo de ruta antes de aplicar');
                 return;
             }
         } else {
@@ -213,7 +211,7 @@ const RetroactiveApplyModal = ({
             if (percentMode) {
                 const pct = Number(currentPercent);
                 if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
-                    setSnackbar({ open: true, message: 'Ingresa un porcentaje válido (0-100) antes de aplicar.', severity: 'warning' });
+                    notify.warning('Ingresa un porcentaje válido (0-100) antes de aplicar');
                     return;
                 }
             } else {
@@ -226,7 +224,7 @@ const RetroactiveApplyModal = ({
                 const familySpecial = typedIsValid ? typedDiscount : (configuredIsValid ? configuredDiscount : 0);
 
                 if (!Number.isFinite(familySpecial) || familySpecial < 0) {
-                    setSnackbar({ open: true, message: 'Ingresa un descuento familiar válido (0 o mayor) antes de aplicar.', severity: 'warning' });
+                    notify.warning('Ingresa un descuento familiar válido (0 o mayor) antes de aplicar');
                     return;
                 }
             }
@@ -234,7 +232,7 @@ const RetroactiveApplyModal = ({
 
         const requiresPeriodsSelection = option === 'CURRENT_OR_PENDING';
         if (requiresPeriodsSelection && !selectAll && (!Array.isArray(selectedPeriods) || selectedPeriods.length === 0)) {
-            setSnackbar({ open: true, message: 'Selecciona al menos un período antes de aplicar.', severity: 'warning' });
+            notify.warning('Selecciona al menos un período antes de aplicar');
             return;
         }
 
@@ -303,250 +301,227 @@ const RetroactiveApplyModal = ({
                 ? 'Error aplicando cambio de tipo de ruta: '
                 : 'Error aplicando descuento: ';
 
-            setSnackbar({
-                open: true,
-                message: prefix + (err.response?.data?.error || err.message),
-                severity: 'error'
-            });
+            notify.error(prefix + (err.response?.data?.error || err.message));
         } finally {
             setApplying(false);
         }
     };
 
+    const retroactiveUnit = (currentPercent === null || currentPercent === '' || typeof currentPercent === 'undefined') ? 'Q' : '%';
+
     return (
-        <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-            {(() => {
-                const percentModeProp = !(currentPercent === null || currentPercent === '' || typeof currentPercent === 'undefined');
-                const unit = percentModeProp ? '%' : 'Q';
-                return <DialogTitle><strong>{getHeader()} ({unit})</strong></DialogTitle>;
-            })()}
-            <DialogContent>
-                <Box sx={{ mb: 2 }}>
-                    <Paper variant="outlined" sx={(theme) => ({
-                        p: 2,
-                        borderColor: theme.palette.warning.main,
-                        backgroundColor: alpha(theme.palette.warning.main, 0.10)
-                    })}>
-                        <Typography variant="body1" sx={(theme) => ({ fontWeight: 700, color: theme.palette.warning.dark })}>
-                            {getIntroTitle()}
+        <AppDialog
+            open={open}
+            onClose={onClose}
+            title={`${getHeader()} (${retroactiveUnit})`}
+            size="md"
+            onSubmit={handleApply}
+            submitLabel="Aplicar"
+            submitting={applying}
+        >
+            <Box sx={{ mb: 2 }}>
+                <Paper variant="outlined" sx={(theme) => ({
+                    p: 2,
+                    borderColor: theme.palette.warning.main,
+                    backgroundColor: alpha(theme.palette.warning.main, 0.10)
+                })}>
+                    <Typography variant="body1" sx={(theme) => ({ fontWeight: 700, color: theme.palette.warning.dark })}>
+                        {getIntroTitle()}
+                    </Typography>
+                    {getIntroBody()}
+                </Paper>
+            </Box>
+
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <Box sx={{ width: '100%' }}>
+                    <Paper
+                        variant="outlined"
+                        sx={(theme) => ({
+                            p: 2,
+                            cursor: 'pointer',
+                            borderColor: option === 'CURRENT_OR_PENDING' ? theme.palette.primary.main : alpha(theme.palette.primary.main, 0.5),
+                            backgroundColor: option === 'CURRENT_OR_PENDING' ? alpha(theme.palette.primary.main, 0.06) : theme.palette.background.paper,
+                            transition: 'transform 200ms, box-shadow 200ms, border-color 200ms, background-color 200ms',
+                            boxShadow: option === 'CURRENT_OR_PENDING' ? theme.shadows[2] : 'none',
+                            borderRadius: 2,
+                            '&:hover': {
+                                transform: 'translateY(-3px)',
+                                boxShadow: theme.shadows[3],
+                                borderColor: theme.palette.primary.main,
+                                backgroundColor: option === 'CURRENT_OR_PENDING' ? alpha(theme.palette.primary.main, 0.12) : alpha(theme.palette.primary.main, 0.03)
+                            }
+                        })}
+                        onClick={() => setOption('CURRENT_OR_PENDING')}
+                    >
+                        <Typography variant="subtitle1" sx={(theme) => ({ textTransform: 'uppercase', fontWeight: 700, color: theme.palette.primary.main, display: 'flex', alignItems: 'center' })}>
+                            <Box component="span" sx={{ mr: 1, fontSize: 18 }}>📅</Box>
+                            APLICAR A PERIODOS PENDIENTES
                         </Typography>
-                        {getIntroBody()}
-                    </Paper>
-                </Box>
+                        <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                            {normalizedMode === 'ROUTE_TYPE' ? (
+                                <>Selecciona los periodos pendientes a los que deseas aplicar el cambio de tipo de ruta. <strong>No quedará configurado para periodos futuros.</strong></>
+                            ) : (
+                                <>Selecciona los periodos pendientes a los que deseas aplicar el descuento. <strong>No quedará configurado para periodos futuros.</strong></>
+                            )}
+                        </Typography>
 
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <Box sx={{ width: '100%' }}>
-                        <Paper
-                            variant="outlined"
-                            sx={(theme) => ({
-                                p: 2,
-                                cursor: 'pointer',
-                                borderColor: option === 'CURRENT_OR_PENDING' ? theme.palette.primary.main : alpha(theme.palette.primary.main, 0.5),
-                                backgroundColor: option === 'CURRENT_OR_PENDING' ? alpha(theme.palette.primary.main, 0.06) : theme.palette.background.paper,
-                                transition: 'transform 200ms, box-shadow 200ms, border-color 200ms, background-color 200ms',
-                                boxShadow: option === 'CURRENT_OR_PENDING' ? theme.shadows[2] : 'none',
-                                borderRadius: 2,
-                                '&:hover': {
-                                    transform: 'translateY(-3px)',
-                                    boxShadow: theme.shadows[3],
-                                    borderColor: theme.palette.primary.main,
-                                    backgroundColor: option === 'CURRENT_OR_PENDING' ? alpha(theme.palette.primary.main, 0.12) : alpha(theme.palette.primary.main, 0.03)
-                                }
-                            })}
-                            onClick={() => setOption('CURRENT_OR_PENDING')}
-                        >
-                            <Typography variant="subtitle1" sx={(theme) => ({ textTransform: 'uppercase', fontWeight: 700, color: theme.palette.primary.main, display: 'flex', alignItems: 'center' })}>
-                                <Box component="span" sx={{ mr: 1, fontSize: 18 }}>📅</Box>
-                                APLICAR A PERIODOS PENDIENTES
-                            </Typography>
-                            <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                                {normalizedMode === 'ROUTE_TYPE' ? (
-                                    <>Selecciona los periodos pendientes a los que deseas aplicar el cambio de tipo de ruta. <strong>No quedará configurado para periodos futuros.</strong></>
-                                ) : (
-                                    <>Selecciona los periodos pendientes a los que deseas aplicar el descuento. <strong>No quedará configurado para periodos futuros.</strong></>
-                                )}
-                            </Typography>
+                        <Box sx={{ mt: 2 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, mb: 1 }}>
+                                <FormControlLabel
+                                    control={<Switch checked={selectAll} onChange={(e) => handleToggleSelectAll(e.target.checked)} />}
+                                    label="Seleccionar todos los períodos pendientes"
+                                />
+                            </Box>
 
-                            <Box sx={{ mt: 2 }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, mb: 1 }}>
-                                    <FormControlLabel
-                                        control={<Switch checked={selectAll} onChange={(e) => handleToggleSelectAll(e.target.checked)} />}
-                                        label="Seleccionar todos los períodos pendientes"
-                                    />
-                                </Box>
+                            <Box sx={{ maxHeight: 220, overflow: 'auto', borderTop: '1px solid rgba(0,0,0,0.06)', pt: 1 }}>
+                                {unpaidPeriods?.length ? (
+                                    unpaidPeriods.map(p => {
+                                        const original = Number(p.originalAmount ?? p.amount ?? 0);
+                                        const net = Number(p.netAmount ?? p.net ?? p.amount ?? 0);
 
-                                <Box sx={{ maxHeight: 220, overflow: 'auto', borderTop: '1px solid rgba(0,0,0,0.06)', pt: 1 }}>
-                                    {unpaidPeriods?.length ? (
-                                        unpaidPeriods.map(p => {
-                                            const original = Number(p.originalAmount ?? p.amount ?? 0);
-                                            const net = Number(p.netAmount ?? p.net ?? p.amount ?? 0);
+                                        const studentCountRaw = Number(p.studentsCount);
+                                        const studentCountFromFamily = Number(
+                                            familyFromDetail?.studentsCount || effectivePayment?.studentCount || 1
+                                        );
+                                        const studentCount = (Number.isFinite(studentCountRaw) && studentCountRaw > 0)
+                                            ? studentCountRaw
+                                            : Math.max(1, studentCountFromFamily || 1);
 
-                                            const studentCountRaw = Number(p.studentsCount);
-                                            const studentCountFromFamily = Number(
-                                                familyFromDetail?.studentsCount || effectivePayment?.studentCount || 1
-                                            );
-                                            const studentCount = (Number.isFinite(studentCountRaw) && studentCountRaw > 0)
-                                                ? studentCountRaw
-                                                : Math.max(1, studentCountFromFamily || 1);
+                                        // Use snapshot fields from new_PaymentPeriods for per-period labels
+                                        const routeTypeForLabel = String(p.routeType || '').trim();
 
-                                            // Use snapshot fields from new_PaymentPeriods for per-period labels
-                                            const routeTypeForLabel = String(p.routeType || '').trim();
+                                        const baseFromPeriod = original / studentCount;
+                                        const baseFee = Number.isFinite(baseFromPeriod) ? baseFromPeriod : 0;
+                                        const monthlyFee = original;
 
-                                            const baseFromPeriod = original / studentCount;
-                                            const baseFee = Number.isFinite(baseFromPeriod) ? baseFromPeriod : 0;
-                                            const monthlyFee = original;
+                                        const discount = Math.max(0, monthlyFee - net) || Number(p.discountApplied ?? p.discount ?? 0);
+                                        const monthRaw = p.period ? formatMonth(p.period + '-01') : p.period;
+                                        const monthLabel = monthRaw ? (monthRaw.charAt(0).toUpperCase() + monthRaw.slice(1)) : monthRaw;
 
-                                            const discount = Math.max(0, monthlyFee - net) || Number(p.discountApplied ?? p.discount ?? 0);
-                                            const monthRaw = p.period ? moment(p.period + '-01').locale('es').format('MMMM YYYY') : p.period;
-                                            const monthLabel = monthRaw ? (monthRaw.charAt(0).toUpperCase() + monthRaw.slice(1)) : monthRaw;
+                                        const studentsLabel = `${studentCount} estudiante${studentCount === 1 ? '' : 's'}`;
 
-                                            const studentsLabel = `${studentCount} estudiante${studentCount === 1 ? '' : 's'}`;
+                                        // Keep old labels exactly as the previous modal
+                                        const baseLabel = `Tarifa base${routeTypeForLabel ? ` (${routeTypeForLabel})` : ''}`;
+                                        const monthlyLabel = `Tarifa mensual (${studentsLabel})`;
 
-                                            // Keep old labels exactly as the previous modal
-                                            const baseLabel = `Tarifa base${routeTypeForLabel ? ` (${routeTypeForLabel})` : ''}`;
-                                            const monthlyLabel = `Tarifa mensual (${studentsLabel})`;
+                                        return (
+                                            <Box key={p.period} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1, px: 1, borderBottom: '1px dashed rgba(0,0,0,0.06)' }}>
+                                                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                                                    <Checkbox checked={selectAll || selectedPeriods.includes(p.period)} onChange={() => togglePeriod(p.period)} disabled={selectAll} />
+                                                    <Box>
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                            <Typography component="span" sx={{ fontWeight: p.period === currentPeriod ? 700 : 600 }}>{monthLabel}</Typography>
+                                                            {p.period === currentPeriod && (
+                                                                <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 700 }}>(Periodo actual)</Typography>
+                                                            )}
+                                                        </Box>
 
-                                            return (
-                                                <Box key={p.period} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1, px: 1, borderBottom: '1px dashed rgba(0,0,0,0.06)' }}>
-                                                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                                                        <Checkbox checked={selectAll || selectedPeriods.includes(p.period)} onChange={() => togglePeriod(p.period)} disabled={selectAll} />
-                                                        <Box>
-                                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                                <Typography component="span" sx={{ fontWeight: p.period === currentPeriod ? 700 : 600 }}>{monthLabel}</Typography>
-                                                                {p.period === currentPeriod && (
-                                                                    <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 700 }}>(Periodo actual)</Typography>
-                                                                )}
+                                                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mt: 0.5 }}>
+                                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>{baseLabel}</Typography>
+                                                                <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 700, minWidth: 120, textAlign: 'right' }}>{formatQ(baseFee || 0)}</Typography>
                                                             </Box>
 
-                                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mt: 0.5 }}>
-                                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>{baseLabel}</Typography>
-                                                                    <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 700, minWidth: 120, textAlign: 'right' }}>{`Q ${Number(baseFee || 0).toFixed(2)}`}</Typography>
-                                                                </Box>
+                                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>{monthlyLabel}</Typography>
+                                                                <Typography variant="body2" sx={{ color: 'text.primary', minWidth: 120, textAlign: 'right' }}>{formatQ(monthlyFee || 0)}</Typography>
+                                                            </Box>
 
-                                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>{monthlyLabel}</Typography>
-                                                                    <Typography variant="body2" sx={{ color: 'text.primary', minWidth: 120, textAlign: 'right' }}>{`Q ${Number(monthlyFee || 0).toFixed(2)}`}</Typography>
-                                                                </Box>
+                                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>Descuento</Typography>
+                                                                <Typography variant="body2" sx={{ color: 'text.primary', minWidth: 120, textAlign: 'right' }}>{formatQ(discount > 0 ? discount : 0)}</Typography>
+                                                            </Box>
 
-                                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>Descuento</Typography>
-                                                                    <Typography variant="body2" sx={{ color: 'text.primary', minWidth: 120, textAlign: 'right' }}>{`Q ${discount > 0 ? discount.toFixed(2) : '0.00'}`}</Typography>
-                                                                </Box>
-
-                                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                                    <Typography component="span" sx={{ fontWeight: 700 }}>Subtotal período:</Typography>
-                                                                    <Typography component="span" sx={{ ml: 1, color: 'primary.main', fontWeight: 700, minWidth: 120, textAlign: 'right' }}>Q {net.toFixed(2)}</Typography>
-                                                                </Box>
+                                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                <Typography component="span" sx={{ fontWeight: 700 }}>Subtotal período:</Typography>
+                                                                <Typography component="span" sx={{ ml: 1, color: 'primary.main', fontWeight: 700, minWidth: 120, textAlign: 'right' }}>{formatQ(net)}</Typography>
                                                             </Box>
                                                         </Box>
                                                     </Box>
-                                                    <Box>
-                                                        {p.isOverdue && <Typography variant="caption" color="error">Vencido</Typography>}
-                                                    </Box>
                                                 </Box>
-                                            );
-                                        })
-                                    ) : (
-                                        <Typography variant="body2">No hay períodos pendientes disponibles.</Typography>
-                                    )}
-                                </Box>
+                                                <Box>
+                                                    {p.isOverdue && <Typography variant="caption" color="error">Vencido</Typography>}
+                                                </Box>
+                                            </Box>
+                                        );
+                                    })
+                                ) : (
+                                    <Typography variant="body2">No hay períodos pendientes disponibles.</Typography>
+                                )}
                             </Box>
-                        </Paper>
-                    </Box>
-
-                    <Box sx={{ width: '100%' }}>
-                        <Paper
-                            variant="outlined"
-                            sx={(theme) => ({
-                                p: 2,
-                                cursor: 'pointer',
-                                borderColor: option === 'CURRENT_AND_NEXT' ? theme.palette.success.main : alpha(theme.palette.success.main, 0.5),
-                                backgroundColor: option === 'CURRENT_AND_NEXT' ? alpha(theme.palette.success.main, 0.06) : theme.palette.background.paper,
-                                transition: 'transform 200ms, box-shadow 200ms, border-color 200ms, background-color 200ms',
-                                boxShadow: option === 'CURRENT_AND_NEXT' ? theme.shadows[2] : 'none',
-                                borderRadius: 2,
-                                '&:hover': {
-                                    transform: 'translateY(-3px)',
-                                    boxShadow: theme.shadows[3],
-                                    borderColor: theme.palette.success.main,
-                                    backgroundColor: option === 'CURRENT_AND_NEXT' ? alpha(theme.palette.success.main, 0.12) : alpha(theme.palette.success.main, 0.03)
-                                }
-                            })}
-                            onClick={() => setOption('CURRENT_AND_NEXT')}
-                        >
-                            <Typography variant="subtitle1" sx={(theme) => ({ textTransform: 'uppercase', fontWeight: 700, color: theme.palette.success.main, display: 'flex', alignItems: 'center' })}>
-                                <Box component="span" sx={{ mr: 1, fontSize: 18 }}>📅</Box>
-                                APLICAR AL PERIODO ACTUAL
-                            </Typography>
-                            <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                                {normalizedMode === 'ROUTE_TYPE' ? (
-                                    <>Aplica el cambio de tipo de ruta a partir del periodo actual pendiente. <strong>Quedará configurado para periodos futuros.</strong></>
-                                ) : (
-                                    <>Aplica el descuento a partir del periodo actual pendiente. <strong>Quedará configurado para periodos futuros.</strong></>
-                                )}
-                            </Typography>
-                        </Paper>
-                    </Box>
-
-                    <Box sx={{ width: '100%' }}>
-                        <Paper
-                            variant="outlined"
-                            sx={(theme) => ({
-                                p: 2,
-                                cursor: 'pointer',
-                                borderColor: option === 'NEXT' ? theme.palette.secondary.main : alpha(theme.palette.secondary.main, 0.5),
-                                backgroundColor: option === 'NEXT' ? alpha(theme.palette.secondary.main, 0.06) : theme.palette.background.paper,
-                                transition: 'transform 200ms, box-shadow 200ms, border-color 200ms, background-color 200ms',
-                                boxShadow: option === 'NEXT' ? theme.shadows[2] : 'none',
-                                borderRadius: 2,
-                                '&:hover': {
-                                    transform: 'translateY(-3px)',
-                                    boxShadow: theme.shadows[3],
-                                    borderColor: theme.palette.secondary.main,
-                                    backgroundColor: option === 'NEXT' ? alpha(theme.palette.secondary.main, 0.12) : alpha(theme.palette.secondary.main, 0.03)
-                                }
-                            })}
-                            onClick={() => setOption('NEXT')}
-                        >
-                            <Typography variant="subtitle1" sx={(theme) => ({ textTransform: 'uppercase', fontWeight: 700, color: theme.palette.secondary.main, display: 'flex', alignItems: 'center' })}>
-                                <Box component="span" sx={{ mr: 1, fontSize: 18 }}>📅</Box>
-                                APLICAR AL SIGUIENTE PERIODO
-                            </Typography>
-                            <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                                {normalizedMode === 'ROUTE_TYPE' ? (
-                                    <>El cambio se aplicará en los cargos futuros a partir del siguiente período. <strong>No modifica períodos ya generados.</strong></>
-                                ) : (
-                                    <>El descuento se aplicará en los cargos futuros a partir del siguiente período. <strong>No modifica períodos ya generados.</strong></>
-                                )}
-                            </Typography>
-                        </Paper>
-                    </Box>
+                        </Box>
+                    </Paper>
                 </Box>
-            </DialogContent>
 
-            <DialogActions>
-                <Button onClick={onClose} disabled={applying}>Cancelar</Button>
-                <Button variant="contained" onClick={handleApply} disabled={applying}>
-                    {applying ? 'Aplicando...' : 'Aplicar'}
-                </Button>
-            </DialogActions>
+                <Box sx={{ width: '100%' }}>
+                    <Paper
+                        variant="outlined"
+                        sx={(theme) => ({
+                            p: 2,
+                            cursor: 'pointer',
+                            borderColor: option === 'CURRENT_AND_NEXT' ? theme.palette.success.main : alpha(theme.palette.success.main, 0.5),
+                            backgroundColor: option === 'CURRENT_AND_NEXT' ? alpha(theme.palette.success.main, 0.06) : theme.palette.background.paper,
+                            transition: 'transform 200ms, box-shadow 200ms, border-color 200ms, background-color 200ms',
+                            boxShadow: option === 'CURRENT_AND_NEXT' ? theme.shadows[2] : 'none',
+                            borderRadius: 2,
+                            '&:hover': {
+                                transform: 'translateY(-3px)',
+                                boxShadow: theme.shadows[3],
+                                borderColor: theme.palette.success.main,
+                                backgroundColor: option === 'CURRENT_AND_NEXT' ? alpha(theme.palette.success.main, 0.12) : alpha(theme.palette.success.main, 0.03)
+                            }
+                        })}
+                        onClick={() => setOption('CURRENT_AND_NEXT')}
+                    >
+                        <Typography variant="subtitle1" sx={(theme) => ({ textTransform: 'uppercase', fontWeight: 700, color: theme.palette.success.main, display: 'flex', alignItems: 'center' })}>
+                            <Box component="span" sx={{ mr: 1, fontSize: 18 }}>📅</Box>
+                            APLICAR AL PERIODO ACTUAL
+                        </Typography>
+                        <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                            {normalizedMode === 'ROUTE_TYPE' ? (
+                                <>Aplica el cambio de tipo de ruta a partir del periodo actual pendiente. <strong>Quedará configurado para periodos futuros.</strong></>
+                            ) : (
+                                <>Aplica el descuento a partir del periodo actual pendiente. <strong>Quedará configurado para periodos futuros.</strong></>
+                            )}
+                        </Typography>
+                    </Paper>
+                </Box>
 
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={4000}
-                onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert
-                    severity={snackbar.severity}
-                    onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
-                    sx={{ width: '100%' }}
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
-        </Dialog>
+                <Box sx={{ width: '100%' }}>
+                    <Paper
+                        variant="outlined"
+                        sx={(theme) => ({
+                            p: 2,
+                            cursor: 'pointer',
+                            borderColor: option === 'NEXT' ? theme.palette.secondary.main : alpha(theme.palette.secondary.main, 0.5),
+                            backgroundColor: option === 'NEXT' ? alpha(theme.palette.secondary.main, 0.06) : theme.palette.background.paper,
+                            transition: 'transform 200ms, box-shadow 200ms, border-color 200ms, background-color 200ms',
+                            boxShadow: option === 'NEXT' ? theme.shadows[2] : 'none',
+                            borderRadius: 2,
+                            '&:hover': {
+                                transform: 'translateY(-3px)',
+                                boxShadow: theme.shadows[3],
+                                borderColor: theme.palette.secondary.main,
+                                backgroundColor: option === 'NEXT' ? alpha(theme.palette.secondary.main, 0.12) : alpha(theme.palette.secondary.main, 0.03)
+                            }
+                        })}
+                        onClick={() => setOption('NEXT')}
+                    >
+                        <Typography variant="subtitle1" sx={(theme) => ({ textTransform: 'uppercase', fontWeight: 700, color: theme.palette.secondary.main, display: 'flex', alignItems: 'center' })}>
+                            <Box component="span" sx={{ mr: 1, fontSize: 18 }}>📅</Box>
+                            APLICAR AL SIGUIENTE PERIODO
+                        </Typography>
+                        <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                            {normalizedMode === 'ROUTE_TYPE' ? (
+                                <>El cambio se aplicará en los cargos futuros a partir del siguiente período. <strong>No modifica períodos ya generados.</strong></>
+                            ) : (
+                                <>El descuento se aplicará en los cargos futuros a partir del siguiente período. <strong>No modifica períodos ya generados.</strong></>
+                            )}
+                        </Typography>
+                    </Paper>
+                </Box>
+            </Box>
+        </AppDialog>
     );
 };
 

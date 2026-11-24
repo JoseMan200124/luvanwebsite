@@ -1,31 +1,20 @@
 // src/pages/ColaboradoresPage.jsx
-import React, { useState, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useContext, useCallback, useRef } from 'react';
 import {
+    Paper,
     Typography,
     Box,
     Card,
     CardContent,
-    Button,
     CircularProgress,
-    Snackbar,
-    Alert,
     Grid,
     Chip,
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    Paper,
-    TablePagination,
-    TableSortLabel,
     TextField,
     IconButton,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     DialogContentText,
     FormControl,
     InputLabel,
@@ -40,8 +29,6 @@ import {
     Delete,
     Add,
     ExpandMore,
-    FileUpload,
-    GetApp,
     Mail,
     DirectionsBus,
     ToggleOn,
@@ -55,11 +42,18 @@ import styled from 'styled-components';
 import ColaboradorScheduleModal from '../components/modals/ColaboradorScheduleModal';
 import BulkScheduleColaboradoresModal from '../components/modals/BulkScheduleColaboradoresModal';
 import ExcelJS from 'exceljs';
-import moment from 'moment-timezone';
+import BulkUploadDialog from '../components/dialogs/BulkUploadDialog';
+import { ROUTE_TYPE_OPTIONS } from '../constants/options';
+import { downloadWorkbook } from '../utils/excel';
+import { buildFileName } from '../utils/fileName';
+import { todayForFileName } from '../utils/download';
 import { normalizeKey } from '../utils/stringHelpers';
-import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
 import UserServiceStatusModal from '../components/UserServiceStatusModal';
 import PermissionGuard from '../components/PermissionGuard';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
 import usePermissions from '../hooks/usePermissions';
 import useManageableRoles from '../hooks/useManageableRoles';
 import FilterBar from '../components/filters/FilterBar';
@@ -69,6 +63,11 @@ import { matchSearchTokens } from '../utils/clientFilter';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import useClientScope from '../hooks/useClientScope';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
+import { formatClock, formatDateTime } from '../utils/dateFormat';
+import { SERVICE_STATUS } from '../constants/statuses';
+import AppDialog from '../components/dialogs/AppDialog';
 
 const COLABORADOR_STATUS_OPTIONS = ['Nuevo', 'Duplicado', 'Actualizado', 'Sin asignaciones', 'Activo', 'Inactivo']
     .map((status) => ({ value: status, label: status }));
@@ -107,31 +106,19 @@ const StyledAccordion = styled(Accordion)`
     }
 `;
 
-// Función para convertir tiempo de 24h a 12h con AM/PM
-const formatTime12Hour = (time24) => {
-    if (!time24) {
-        return '';
-    }
-    const [hours, minutes] = time24.split(':');
-    const hour = Number.parseInt(hours, 10);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const hour12 = hour % 12 || 12;
-    return `${hour12}:${minutes} ${ampm}`;
-};
-
 // Traduce el estado de servicio canónico a su etiqueta en español usada en el sistema
-const translateServiceStatus = (status) => {
-    if (!status) {
-        return '';
-    }
-    switch ((status || '').toString()) {
-        case 'ACTIVE': return 'Activo';
-        case 'PAUSED': return 'Pausado';
-        case 'SUSPENDED': return 'Suspendido';
-        case 'INACTIVE': return 'Inactivo';
-        default: return '';
-    }
-};
+const translateServiceStatus = (status) => (status === 'PENDING_START' ? '' : SERVICE_STATUS[status]?.label || '');
+
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'serviceStatus', label: 'Estado del Servicio', sortable: true },
+    { id: 'name', label: 'Nombre', sortable: true },
+    { id: 'email', label: 'Email', sortable: true },
+    { id: 'horario', label: 'Horario' },
+    { id: 'updatedAt', label: 'Fecha de actualización', sortable: true },
+    { id: 'status', label: 'Estado', sortable: true },
+    { id: 'acciones', label: 'Acciones', align: 'center' },
+];
 
 const ColaboradoresPage = () => {
     const { auth } = useContext(AuthContext);
@@ -157,27 +144,25 @@ const ColaboradoresPage = () => {
     const [colaboradores, setColaboradores] = useState([]);
     const [filteredColaboradores, setFilteredColaboradores] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [sortBy, setSortBy] = useState(null);
-    const [sortOrder, setSortOrder] = useState('asc');
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
+    // Paginación y orden (el orden se calcula en sortedUsers con su lógica propia)
+    const table = useTableState();
+    const { page, rowsPerPage, orderBy: sortBy, order: sortOrder } = table;
     const pageFilters = useFilters({
         fields: [
             F.search('search', { placeholder: 'Nombre o correo' }),
             F.select('status', { label: 'Estado', options: COLABORADOR_STATUS_OPTIONS }),
             F.serviceStatus({ options: COLABORADOR_SERVICE_OPTIONS }),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const { search: searchQuery, status: statusFilter, serviceStatus: serviceStatusFilter } = pageFilters.applied;
     const [selectedColaborador, setSelectedColaborador] = useState(null);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
+    const confirm = useConfirm();
     
     // Diálogos
     const [openCreateDialog, setOpenCreateDialog] = useState(false);
     const [openEditDialog, setOpenEditDialog] = useState(false);
-    const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
-    const [openToggleStateDialog, setOpenToggleStateDialog] = useState(false);
     const [openScheduleDialog, setOpenScheduleDialog] = useState(false);
     const [openBulkDialog, setOpenBulkDialog] = useState(false);
     const [openBulkScheduleDialog, setOpenBulkScheduleDialog] = useState(false);
@@ -186,10 +171,6 @@ const ColaboradoresPage = () => {
     // Dialogo unificado para descargas (Nuevos / Todos)
     const [openDownloadDialog, setOpenDownloadDialog] = useState(false);
     const [downloadChoice, setDownloadChoice] = useState('new'); // 'new' | 'all'
-    
-    // Estados para carga masiva
-    const [bulkFile, setBulkFile] = useState(null);
-    const [bulkLoading, setBulkLoading] = useState(false);
     
     // Estados para circular
     const [circularSubject, setCircularSubject] = useState('');
@@ -231,25 +212,13 @@ const ColaboradoresPage = () => {
         extraFields: false
     });
 
-    // Función para obtener fecha/hora formateada para nombres de archivo
-    const getFormattedDateTime = () => {
-        const currentDate = new Date();
-        const year = currentDate.getFullYear();
-        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-        const day = String(currentDate.getDate()).padStart(2, '0');
-        const hours = String(currentDate.getHours()).padStart(2, '0');
-        const minutes = String(currentDate.getMinutes()).padStart(2, '0');
-        const seconds = String(currentDate.getSeconds()).padStart(2, '0');
-        return `${year}${month}${day}_${hours}${minutes}${seconds}`;
-    };
-
     // Descargar colaboradores filtrados por estado de servicio explícito
     const handleDownloadByServiceStatusColaboradores = async (serviceStatus) => {
         try {
             const resp = await api.get(`/corporations/${corporationId}/colaboradores/download`, { params: { serviceStatus } });
             const list = resp.data.colaboradores || [];
             if (list.length === 0) {
-                setSnackbar({ open: true, message: `No hay colaboradores con estado ${serviceStatus} para descargar`, severity: 'info' });
+                notify.info(`No hay colaboradores con estado ${serviceStatus} para descargar`);
                 return;
             }
 
@@ -275,7 +244,7 @@ const ColaboradoresPage = () => {
                 let scheduleName = 'Sin horario';
                 if (scheduleIndex >= 0 && corporationData?.schedules?.[scheduleIndex]) {
                     const sched = corporationData.schedules[scheduleIndex];
-                    scheduleName = `${sched.name} (${formatTime12Hour(sched.entryTime)} - ${formatTime12Hour(sched.exitTime)})`;
+                    scheduleName = `${sched.name} (${formatClock(sched.entryTime)} - ${formatClock(sched.exitTime)})`;
                 }
 
                 worksheet.addRow({
@@ -288,8 +257,8 @@ const ColaboradoresPage = () => {
                     schedule: scheduleName,
                     status: col.status || '',
                     serviceStatus: translateServiceStatus(col.serviceStatus || col.ColaboradorDetail?.serviceStatus || ''),
-                    createdAt: col.createdAt ? moment(col.createdAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : '',
-                    updatedAt: col.updatedAt ? moment(col.updatedAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : ''
+                    createdAt: col.createdAt ? formatDateTime(col.createdAt) : '',
+                    updatedAt: col.updatedAt ? formatDateTime(col.updatedAt) : ''
                 });
             });
 
@@ -298,19 +267,12 @@ const ColaboradoresPage = () => {
             worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
             addSchedulesSheet(workbook);
 
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Colaboradores_${serviceStatus}_${currentCorporation?.name || 'Corporativo'}_${moment().format('YYYYMMDD')}.xlsx`;
-            a.click();
-            window.URL.revokeObjectURL(url);
+            await downloadWorkbook(workbook, buildFileName({ object: `colaboradores ${serviceStatus}`, client: currentCorporation?.name, date: todayForFileName(), extension: 'xlsx' }));
 
-            setSnackbar({ open: true, message: 'Archivo descargado exitosamente', severity: 'success' });
+            notify.success('Archivo descargado');
         } catch (err) {
             console.error('Error downloading colaboradores by service status:', err);
-            setSnackbar({ open: true, message: 'Error al descargar colaboradores', severity: 'error' });
+            notify.error('Error al descargar colaboradores');
         }
     };
 
@@ -487,15 +449,11 @@ const ColaboradoresPage = () => {
             setFilteredColaboradores(colaboradoresData);
         } catch (err) {
             console.error('Error fetching colaboradores:', err);
-            setSnackbar({ 
-                open: true, 
-                message: 'Error al obtener colaboradores.', 
-                severity: 'error' 
-            });
+            notify.error('Error al obtener colaboradores');
         } finally {
             setLoading(false);
         }
-    }, [auth.token, corporationId, fiscalYear]);
+    }, [auth.token, corporationId, fiscalYear, notify]);
 
     useEffect(() => {
         if (auth.token && corporationId) {
@@ -538,15 +496,6 @@ const ColaboradoresPage = () => {
         setFilteredColaboradores(filtered);
     }, [colaboradores, searchQuery, statusFilter, serviceStatusFilter, getColaboradorStatus]);
 
-    const handleSortChange = (field) => {
-        if (sortBy === field) {
-            setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
-        } else {
-            setSortBy(field);
-            setSortOrder('asc');
-        }
-        setPage(0);
-    };
 
     const handleOpenCreateDialog = () => {
         setColaboradorForm({
@@ -683,16 +632,6 @@ const ColaboradoresPage = () => {
         setOpenEditDialog(true);
     };
 
-    const handleOpenDeleteDialog = (colaborador) => {
-        setSelectedColaborador(colaborador);
-        setOpenDeleteDialog(true);
-    };
-
-    const handleOpenToggleStateDialog = (colaborador) => {
-        setSelectedColaborador(colaborador);
-        setOpenToggleStateDialog(true);
-    };
-
     const handleServiceStatusClick = (colaborador) => {
         if (!colaborador) {
             return;
@@ -702,7 +641,7 @@ const ColaboradoresPage = () => {
     };
 
     const handleServiceStatusSuccess = () => {
-        setSnackbar({ open: true, message: 'Estado del servicio actualizado correctamente', severity: 'success' });
+        notify.success('Estado del servicio actualizado');
         setSelectedColaborador(null);
         fetchColaboradores();
     };
@@ -715,8 +654,6 @@ const ColaboradoresPage = () => {
     const handleCloseDialogs = () => {
         setOpenCreateDialog(false);
         setOpenEditDialog(false);
-        setOpenDeleteDialog(false);
-        setOpenToggleStateDialog(false);
         setOpenScheduleDialog(false);
         setSelectedColaborador(null);
     };
@@ -761,29 +698,13 @@ const ColaboradoresPage = () => {
                 }
             });
             
-            setSnackbar({
-                open: true,
-                message: 'Colaborador creado exitosamente',
-                severity: 'success'
-            });
+            notify.success('Colaborador creado');
             
             handleCloseDialogs();
             fetchColaboradores();
         } catch (err) {
-            try {
-                if (showDuplicateEmailFromError(err, setSnackbar)) {
-                    return;
-                }
-            } catch (e) {
-                // fallthrough to generic handling
-            }
-
             console.error('Error creating colaborador:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.error || 'Error al crear colaborador',
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error al crear colaborador');
         }
     };
 
@@ -826,88 +747,63 @@ const ColaboradoresPage = () => {
                 }
             });
             
-            setSnackbar({
-                open: true,
-                message: 'Colaborador actualizado exitosamente',
-                severity: 'success'
-            });
+            notify.success('Colaborador actualizado');
             
             handleCloseDialogs();
             fetchColaboradores();
         } catch (err) {
             console.error('Error updating colaborador:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.error || 'Error al actualizar colaborador',
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error al actualizar colaborador');
         }
     };
 
-    const handleDeleteColaborador = async () => {
-        if (!selectedColaborador) {
-            return;
-        }
-        
-        try {
-            await api.delete(`/users/${selectedColaborador.id}`, {
+    const handleDeleteColaborador = async (colaborador) => {
+        const ok = await confirm({
+            title: 'Eliminar colaborador',
+            message: `Se eliminará al colaborador "${colaborador.name}". Esta acción no se puede deshacer.`,
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: () => api.delete(`/users/${colaborador.id}`, {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 }
-            });
-            
-            setSnackbar({
-                open: true,
-                message: 'Colaborador eliminado exitosamente',
-                severity: 'success'
-            });
-            
-            handleCloseDialogs();
+            }),
+            errorMessage: 'Error al eliminar el colaborador',
+        });
+        if (ok) {
+            notify.success('Colaborador eliminado');
             fetchColaboradores();
-        } catch (err) {
-            console.error('Error deleting colaborador:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.message || 'Error al eliminar colaborador',
-                severity: 'error'
-            });
         }
     };
 
-    const handleToggleState = async () => {
-        if (!selectedColaborador) {
+    const handleToggleState = async (colaborador) => {
+        if (!hasPermission('usuarios-toggle-estado')) {
+            notify.warning('No tiene permiso para activar o desactivar colaboradores');
             return;
         }
-        
         // Determinar el nuevo estado (opuesto al actual)
-        const currentState = Number(selectedColaborador.state);
-        const newState = currentState === 1 ? 0 : 1;
-        
-        try {
-            await api.put(`/users/${selectedColaborador.id}/toggle-state`, 
+        const deactivating = Number(colaborador.state) === 1;
+        const newState = deactivating ? 0 : 1;
+        const ok = await confirm({
+            title: deactivating ? 'Desactivar colaborador' : 'Activar colaborador',
+            message: deactivating
+                ? `Se desactivará al colaborador "${colaborador.name}". No podrá acceder al sistema mientras esté desactivado.`
+                : `Se activará al colaborador "${colaborador.name}". Podrá acceder al sistema nuevamente.`,
+            confirmLabel: deactivating ? 'Desactivar' : 'Activar',
+            tone: deactivating ? 'danger' : 'default',
+            onConfirm: () => api.put(`/users/${colaborador.id}/toggle-state`,
                 { state: newState },
                 {
                     headers: {
                         Authorization: `Bearer ${auth.token}`,
                     }
                 }
-            );
-            
-            setSnackbar({
-                open: true,
-                message: `Colaborador ${newState === 1 ? 'activado' : 'desactivado'} exitosamente`,
-                severity: 'success'
-            });
-            
-            handleCloseDialogs();
+            ),
+            errorMessage: 'Error al cambiar el estado del colaborador',
+        });
+        if (ok) {
+            notify.success(`Colaborador ${newState === 1 ? 'activado' : 'desactivado'}`);
             fetchColaboradores();
-        } catch (err) {
-            console.error('Error toggling colaborador state:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.message || 'Error al cambiar estado del colaborador',
-                severity: 'error'
-            });
         }
     };
 
@@ -917,7 +813,7 @@ const ColaboradoresPage = () => {
             const resp = await api.get(`/corporations/${corporationId}/colaboradores/download`, { params: { mode: 'new' } });
             const newColaboradores = resp.data.colaboradores || [];
             if (newColaboradores.length === 0) {
-                setSnackbar({ open: true, message: 'No hay colaboradores nuevos para descargar', severity: 'warning' });
+                notify.warning('No hay colaboradores nuevos para descargar');
                 return;
             }
             
@@ -944,7 +840,7 @@ const ColaboradoresPage = () => {
                 
                 if (scheduleIndex >= 0 && corporationData?.schedules?.[scheduleIndex]) {
                     const sched = corporationData.schedules[scheduleIndex];
-                    scheduleName = `${sched.name} (${formatTime12Hour(sched.entryTime)} - ${formatTime12Hour(sched.exitTime)})`;
+                    scheduleName = `${sched.name} (${formatClock(sched.entryTime)} - ${formatClock(sched.exitTime)})`;
                 }
                 
                 worksheet.addRow({
@@ -957,7 +853,7 @@ const ColaboradoresPage = () => {
                     schedule: scheduleName,
                     status: Number(col.state) === 1 ? 'Activo' : 'Inactivo',
                     serviceStatus: translateServiceStatus(col.serviceStatus || col.ColaboradorDetail?.serviceStatus || ''),
-                    createdAt: col.createdAt ? moment(col.createdAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : ''
+                    createdAt: col.createdAt ? formatDateTime(col.createdAt) : ''
                 });
             });
             
@@ -973,27 +869,12 @@ const ColaboradoresPage = () => {
             // Añadir hoja 'Horarios' antes de generar el archivo
             addSchedulesSheet(workbook);
 
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Colaboradores_Nuevos_${currentCorporation?.name || 'Corporativo'}_${moment().format('YYYYMMDD')}.xlsx`;
-            a.click();
-            window.URL.revokeObjectURL(url);
+            await downloadWorkbook(workbook, buildFileName({ object: 'colaboradores nuevos', client: currentCorporation?.name, date: todayForFileName(), extension: 'xlsx' }));
             
-            setSnackbar({
-                open: true,
-                message: 'Archivo descargado exitosamente',
-                severity: 'success'
-            });
+            notify.success('Archivo descargado');
         } catch (err) {
             console.error('Error downloading new colaboradores:', err);
-            setSnackbar({
-                open: true,
-                message: 'Error al descargar colaboradores',
-                severity: 'error'
-            });
+            notify.error('Error al descargar colaboradores');
         }
     };
 
@@ -1003,17 +884,13 @@ const ColaboradoresPage = () => {
             const resp = await api.get(`/corporations/${corporationId}/colaboradores/download`, { params: { mode: 'all' } });
             const allCols = resp.data.colaboradores || [];
             if (allCols.length === 0) {
-                setSnackbar({ open: true, message: 'No hay colaboradores para descargar', severity: 'warning' });
+                notify.warning('No hay colaboradores para descargar');
                 return;
             }
-            await buildColaboradoresWorkbookAndDownload(allCols, `Colaboradores_Todos_${currentCorporation?.name || 'Corporativo'}`);
+            await buildColaboradoresWorkbookAndDownload(allCols, 'colaboradores todos');
         } catch (err) {
             console.error('Error downloading all colaboradores:', err);
-            setSnackbar({
-                open: true,
-                message: 'Error al descargar colaboradores',
-                severity: 'error'
-            });
+            notify.error('Error al descargar colaboradores');
         }
     };
 
@@ -1047,7 +924,7 @@ const ColaboradoresPage = () => {
 
                 if (scheduleIndex >= 0 && corporationData?.schedules?.[scheduleIndex]) {
                     const sched = corporationData.schedules[scheduleIndex];
-                    scheduleName = `${sched.name} (${formatTime12Hour(sched.entryTime)} - ${formatTime12Hour(sched.exitTime)})`;
+                    scheduleName = `${sched.name} (${formatClock(sched.entryTime)} - ${formatClock(sched.exitTime)})`;
                 }
 
                 worksheet.addRow({
@@ -1064,8 +941,8 @@ const ColaboradoresPage = () => {
                     stops: col.ScheduleSlots?.length || 0,
                     status: col.status || 'Activo',
                     serviceStatus: translateServiceStatus(col.serviceStatus || col.ColaboradorDetail?.serviceStatus || ''),
-                    createdAt: col.createdAt ? moment(col.createdAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : '',
-                    updatedAt: col.updatedAt ? moment(col.updatedAt).tz('America/Guatemala').format('DD/MM/YYYY HH:mm') : ''
+                    createdAt: col.createdAt ? formatDateTime(col.createdAt) : '',
+                    updatedAt: col.updatedAt ? formatDateTime(col.updatedAt) : ''
                 });
             });
 
@@ -1074,104 +951,82 @@ const ColaboradoresPage = () => {
             worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
             addSchedulesSheet(workbook);
 
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${filePrefix}_${moment().format('YYYYMMDD')}.xlsx`;
-            a.click();
-            window.URL.revokeObjectURL(url);
+            await downloadWorkbook(workbook, buildFileName({ object: filePrefix, client: currentCorporation?.name, date: todayForFileName(), extension: 'xlsx' }));
 
-            setSnackbar({ open: true, message: 'Archivo descargado exitosamente', severity: 'success' });
+            notify.success('Archivo descargado');
         } catch (err) {
             console.error('Error building colaboradores workbook:', err);
-            setSnackbar({ open: true, message: 'Error al descargar colaboradores', severity: 'error' });
+            notify.error('Error al descargar colaboradores');
         }
     };
 
     // Función para descargar plantilla de carga masiva (incluye campos extra de la corporación)
-    const handleDownloadTemplate = async () => {
-        try {
-            const workbook = new ExcelJS.Workbook();
-            const worksheet = workbook.addWorksheet('Plantilla Colaboradores');
+    // Plantilla de la carga masiva (exceljs: encabezado azul y hoja Horarios con los horarios de la corporación).
+    const buildColaboradoresTemplate = () => {
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Plantilla Colaboradores');
 
-            const standardColumns = [
-                { header: 'Nombres', key: 'firstName', width: 25 },
-                { header: 'Apellidos', key: 'lastName', width: 25 },
-                { header: 'Nombre de Usuario', key: 'username', width: 25 },
-                { header: 'Email', key: 'email', width: 30 },
-                { header: 'Contraseña', key: 'password', width: 20 },
-                { header: 'Teléfono', key: 'phoneNumber', width: 15 },
-                { header: 'Número Empleado', key: 'employeeNumber', width: 20 },
-                { header: 'Horario (nombre)', key: 'selectedSchedule', width: 17 },
-                { header: 'Dirección Servicio', key: 'serviceAddress', width: 40 },
-                { header: 'Zona/Sector', key: 'zoneOrSector', width: 20 },
-                { header: 'Tipo Ruta', key: 'routeType', width: 15 },
-                { header: 'Contacto Emergencia', key: 'emergencyContact', width: 25 },
-                { header: 'Parentesco Emergencia', key: 'emergencyRelationship', width: 30 },
-                { header: 'Teléfono Emergencia', key: 'emergencyPhone', width: 20 }
-            ];
+        const standardColumns = [
+            { header: 'Nombres', key: 'firstName', width: 25 },
+            { header: 'Apellidos', key: 'lastName', width: 25 },
+            { header: 'Nombre de Usuario', key: 'username', width: 25 },
+            { header: 'Email', key: 'email', width: 30 },
+            { header: 'Contraseña', key: 'password', width: 20 },
+            { header: 'Teléfono', key: 'phoneNumber', width: 15 },
+            { header: 'Número Empleado', key: 'employeeNumber', width: 20 },
+            { header: 'Horario (nombre)', key: 'selectedSchedule', width: 17 },
+            { header: 'Dirección Servicio', key: 'serviceAddress', width: 40 },
+            { header: 'Zona/Sector', key: 'zoneOrSector', width: 20 },
+            { header: 'Tipo Ruta', key: 'routeType', width: 15 },
+            { header: 'Contacto Emergencia', key: 'emergencyContact', width: 25 },
+            { header: 'Parentesco Emergencia', key: 'emergencyRelationship', width: 30 },
+            { header: 'Teléfono Emergencia', key: 'emergencyPhone', width: 20 }
+        ];
 
-            const extraFields = Array.isArray(currentCorporation?.extraEnrollmentFields) ? currentCorporation.extraEnrollmentFields : [];
-            const extraColumns = extraFields.map((f, idx) => {
-                const fieldName = f.fieldName || f.label || f.name || f.key || `extra_${idx}`;
-                return { header: fieldName, key: fieldName, width: 25 };
-            });
+        const extraFields = Array.isArray(currentCorporation?.extraEnrollmentFields) ? currentCorporation.extraEnrollmentFields : [];
+        const extraColumns = extraFields.map((f, idx) => {
+            const fieldName = f.fieldName || f.label || f.name || f.key || `extra_${idx}`;
+            return { header: fieldName, key: fieldName, width: 25 };
+        });
 
-            worksheet.columns = [...standardColumns, ...extraColumns];
+        worksheet.columns = [...standardColumns, ...extraColumns];
 
-            // Fila de ejemplo (mapear a los campos del formulario)
-            const example = {};
-            worksheet.columns.forEach(col => {
-                switch (col.key) {
-                    case 'firstName': example[col.key] = 'Juan'; break;
-                    case 'lastName': example[col.key] = 'Pérez'; break;
-                    case 'username': example[col.key] = 'juan.perez'; break;
-                    case 'email': example[col.key] = 'colaboradorprueba@ejemplo.com'; break;
-                    case 'password': example[col.key] = 'Password123'; break;
-                    case 'phoneNumber': example[col.key] = '50241234567'; break;
-                    case 'employeeNumber': example[col.key] = 'EMP001'; break;
-                    case 'serviceAddress': example[col.key] = 'Calle Falsa 123, Zona 1'; break;
-                    case 'zoneOrSector': example[col.key] = 'Zona 1'; break;
-                    case 'routeType': example[col.key] = 'Completa'; break;
-                    case 'selectedSchedule': example[col.key] = ''; break;
-                    case 'emergencyContact': example[col.key] = 'María López'; break;
-                    case 'emergencyRelationship': example[col.key] = 'Madre'; break;
-                    case 'emergencyPhone': example[col.key] = '50241239876'; break;
-                    default: example[col.key] = '';
-                }
-            });
-            // Añadir valores de ejemplo para campos extras si existen
-            extraFields.forEach((f, idx) => {
-                const fname = f.fieldName || f.label || f.name || f.key || `extra_${idx}`;
-                example[fname] = f.default !== undefined ? f.default : '';
-            });
-            worksheet.addRow(example);
+        // Fila de ejemplo (mapear a los campos del formulario)
+        const example = {};
+        worksheet.columns.forEach(col => {
+            switch (col.key) {
+                case 'firstName': example[col.key] = 'Juan'; break;
+                case 'lastName': example[col.key] = 'Pérez'; break;
+                case 'username': example[col.key] = 'juan.perez'; break;
+                case 'email': example[col.key] = 'colaboradorprueba@ejemplo.com'; break;
+                case 'password': example[col.key] = 'Password123'; break;
+                case 'phoneNumber': example[col.key] = '50241234567'; break;
+                case 'employeeNumber': example[col.key] = 'EMP001'; break;
+                case 'serviceAddress': example[col.key] = 'Calle Falsa 123, Zona 1'; break;
+                case 'zoneOrSector': example[col.key] = 'Zona 1'; break;
+                case 'routeType': example[col.key] = 'Completa'; break;
+                case 'selectedSchedule': example[col.key] = ''; break;
+                case 'emergencyContact': example[col.key] = 'María López'; break;
+                case 'emergencyRelationship': example[col.key] = 'Madre'; break;
+                case 'emergencyPhone': example[col.key] = '50241239876'; break;
+                default: example[col.key] = '';
+            }
+        });
+        // Añadir valores de ejemplo para campos extras si existen
+        extraFields.forEach((f, idx) => {
+            const fname = f.fieldName || f.label || f.name || f.key || `extra_${idx}`;
+            example[fname] = f.default !== undefined ? f.default : '';
+        });
+        worksheet.addRow(example);
 
-            // Estilos header
-            worksheet.getRow(1).font = { bold: true };
-            worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1976D2' } };
-            worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        // Estilos header
+        worksheet.getRow(1).font = { bold: true };
+        worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1976D2' } };
+        worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
 
-            // Añadir hoja 'Horarios' con schedules de la corporación
-            addSchedulesSheet(workbook);
-
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            const corpName = currentCorporation?.name || 'Corporativo';
-            a.download = `Plantilla_Colaboradores_${corpName}_${moment().format('YYYYMMDD')}.xlsx`;
-            a.click();
-            window.URL.revokeObjectURL(url);
-
-            setSnackbar({ open: true, message: 'Plantilla descargada', severity: 'success' });
-        } catch (err) {
-            console.error('Error descargando plantilla:', err);
-            setSnackbar({ open: true, message: 'Error al descargar plantilla', severity: 'error' });
-        }
+        // Añadir hoja 'Horarios' con schedules de la corporación
+        addSchedulesSheet(workbook);
+        return workbook;
     };
 
     // Agregar hoja con lista de horarios de la corporación
@@ -1191,8 +1046,8 @@ const ColaboradoresPage = () => {
             schedules.forEach((s) => {
                 const entryRaw = s.entryTime || s.entry || s.startTime || s.entry_time || '';
                 const exitRaw = s.exitTime || s.exit || s.endTime || s.exit_time || '';
-                const entryFmt = entryRaw ? formatTime12Hour(entryRaw) : '';
-                const exitFmt = exitRaw ? formatTime12Hour(exitRaw) : '';
+                const entryFmt = entryRaw ? formatClock(entryRaw) : '';
+                const exitFmt = exitRaw ? formatClock(exitRaw) : '';
                 sheet.addRow({
                     name: s.name || '',
                     entryTime: entryFmt,
@@ -1203,59 +1058,32 @@ const ColaboradoresPage = () => {
         sheet.getRow(1).font = { bold: true };
     };
 
-    // Función para manejar carga masiva
-    const handleBulkUpload = async () => {
-        if (!bulkFile) {
-            setSnackbar({
-                open: true,
-                message: 'Por favor seleccione un archivo',
-                severity: 'warning'
-            });
-            return;
-        }
-        
-        setBulkLoading(true);
-        
+    const toBulkResult = (data, created = 0) => ({
+        successCount: data?.created ?? created,
+        errorsCount: data?.details?.length ?? 0,
+        errorsList: (data?.details || []).map((detail) => ({ row: detail.row, errorMessage: detail.error })),
+    });
+
+    const uploadColaboradores = async (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
         try {
-            const formData = new FormData();
-            formData.append('file', bulkFile);
-            
-            await api.post(`/corporations/${corporationId}/colaboradores/bulk`, formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                    Authorization: `Bearer ${auth.token}`,
-                }
+            const response = await api.post(`/corporations/${corporationId}/colaboradores/bulk`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
             });
-            
-            setSnackbar({
-                open: true,
-                message: 'Carga masiva completada exitosamente',
-                severity: 'success'
-            });
-            
-            setOpenBulkDialog(false);
-            setBulkFile(null);
-            fetchColaboradores();
+            return toBulkResult(response.data);
         } catch (err) {
-            console.error('Error in bulk upload:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.error || 'Error en la carga masiva',
-                severity: 'error'
-            });
-        } finally {
-            setBulkLoading(false);
+            if (err?.response?.status === 400 && Array.isArray(err.response.data?.details)) {
+                return toBulkResult(err.response.data);
+            }
+            throw err;
         }
     };
 
     // Función para enviar circular
     const handleSendCircular = async () => {
         if (!circularSubject || !circularMessage) {
-            setSnackbar({
-                open: true,
-                message: 'Por favor complete todos los campos',
-                severity: 'warning'
-            });
+            notify.warning('Por favor complete todos los campos');
             return;
         }
         
@@ -1271,22 +1099,14 @@ const ColaboradoresPage = () => {
                 }
             });
             
-            setSnackbar({
-                open: true,
-                message: 'Circular enviada exitosamente',
-                severity: 'success'
-            });
+            notify.success('Circular enviada');
             
             setOpenCircularDialog(false);
             setCircularSubject('');
             setCircularMessage('');
         } catch (err) {
             console.error('Error sending circular:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.error || 'Error al enviar circular',
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error al enviar circular');
         } finally {
             setCircularLoading(false);
         }
@@ -1295,7 +1115,7 @@ const ColaboradoresPage = () => {
     // Función para descargar reporte de paradas de colaboradores
     const handleDownloadRouteReport = async () => {
         if (!corporationId) {
-            setSnackbar({ open: true, message: 'No hay corporación seleccionada.', severity: 'warning' });
+            notify.warning('No hay corporación seleccionada');
             return;
         }
 
@@ -1310,7 +1130,7 @@ const ColaboradoresPage = () => {
             );
 
             if (colaboradoresWithRoutes.length === 0) {
-                setSnackbar({ open: true, message: 'No hay colaboradores con paradas asignadas para generar el reporte.', severity: 'warning' });
+                notify.warning('No hay colaboradores con paradas asignadas para generar el reporte');
                 return;
             }
 
@@ -1409,7 +1229,7 @@ const ColaboradoresPage = () => {
                     let scheduleName = 'Sin horario';
                     if (scheduleIndex >= 0 && corporationData?.schedules?.[scheduleIndex]) {
                         const sched = corporationData.schedules[scheduleIndex];
-                        scheduleName = `${sched.name} (${formatTime12Hour(sched.entryTime)} - ${formatTime12Hour(sched.exitTime)})`;
+                        scheduleName = `${sched.name} (${formatClock(sched.entryTime)} - ${formatClock(sched.exitTime)})`;
                     }
 
                     // Filtrar slots por día
@@ -1455,10 +1275,10 @@ const ColaboradoresPage = () => {
                         detail.serviceAddress || '',
                         detail.zoneOrSector || '',
                         scheduleName,
-                        entradaSlot ? formatTime12Hour(entradaSlot.time || '') : '',
+                        entradaSlot ? formatClock(entradaSlot.time || '') : '',
                         entradaSlot ? parseRouteNumber(entradaSlot.routeNumber) : null,
                         entradaSlot ? (entradaSlot.note || '') : '',
-                        salidaSlot ? formatTime12Hour(salidaSlot.time || '') : '',
+                        salidaSlot ? formatClock(salidaSlot.time || '') : '',
                         salidaSlot ? parseRouteNumber(salidaSlot.routeNumber) : null,
                         salidaSlot ? (salidaSlot.note || '') : '',
                         detail.emergencyContact || '',
@@ -1512,22 +1332,12 @@ const ColaboradoresPage = () => {
             });
 
             const corpName = currentCorporation?.name || 'Corporativo';
-            const fileName = `reporte_paradas_${corpName.replace(/[^a-zA-Z0-9]/g, '_')}_${getFormattedDateTime()}.xlsx`;
-            const buffer = await workbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            await downloadWorkbook(workbook, buildFileName({ object: 'reporte paradas', client: currentCorporation?.name, date: todayForFileName(), extension: 'xlsx' }));
 
-            setSnackbar({ open: true, message: `Reporte de paradas para ${corpName} descargado exitosamente`, severity: 'success' });
+            notify.success(`Reporte de paradas para ${corpName} descargado exitosamente`);
         } catch (error) {
             console.error('[handleDownloadRouteReport] Error:', error);
-            setSnackbar({ open: true, message: 'Error al descargar el reporte de paradas', severity: 'error' });
+            notify.error('Error al descargar el reporte de paradas');
         }
     };
 
@@ -1585,280 +1395,279 @@ const ColaboradoresPage = () => {
 
     const paginatedColaboradores = sortedColaboradores.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
+    // Valores con que se abrió el formulario de colaborador: cerrar con cambios pide confirmación.
+    const colaboradorFormSnapshot = JSON.stringify(colaboradorForm);
+    const colaboradorInitialRef = useRef('');
+    const colaboradorDialogOpen = openCreateDialog || openEditDialog;
+    useEffect(() => {
+        if (colaboradorDialogOpen) {
+            colaboradorInitialRef.current = colaboradorFormSnapshot;
+        }
+    
+    }, [colaboradorDialogOpen]);
+
     const renderColaboradorDialog = (isEdit = false) => (
-        <Dialog 
-            open={isEdit ? openEditDialog : openCreateDialog} 
+        <AppDialog
+            open={isEdit ? openEditDialog : openCreateDialog}
             onClose={handleCloseDialogs}
-            maxWidth="md"
-            fullWidth
+            title={isEdit ? 'Editar colaborador' : 'Nuevo colaborador'}
+            size="md"
+            onSubmit={isEdit ? handleUpdateColaborador : handleCreateColaborador}
+            submitLabel={isEdit ? 'Actualizar' : 'Crear'}
+            submitDisabled={!colaboradorForm.username || !colaboradorForm.email || (!isEdit && !colaboradorForm.password)}
+            readOnly={!(hasPermission(isEdit ? 'corporaciones-editar-colaborador' : 'corporaciones-crear-colaborador'))}
+            dirty={colaboradorFormSnapshot !== colaboradorInitialRef.current}
         >
-            <DialogTitle>
-                {isEdit ? 'Editar Colaborador' : 'Crear Nuevo Colaborador'}
-            </DialogTitle>
-            <DialogContent>
-                <Box sx={{ mt: 2 }}>
-                    {/* Información Básica */}
-                    <StyledAccordion 
-                        expanded={expandedPanels.basicInfo}
-                        onChange={handleAccordionChange('basicInfo')}
-                    >
-                        <AccordionSummary expandIcon={<ExpandMore />}>
-                            <Typography variant="subtitle1" fontWeight="bold">
-                                Información Básica
-                            </Typography>
-                        </AccordionSummary>
-                        <AccordionDetails>
-                            <Grid container spacing={2}>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField
-                                        fullWidth
-                                        label="Nombres"
-                                        value={colaboradorForm.firstName}
-                                        onChange={(e) => handleFormChange('firstName', e.target.value)}
-                                        required
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField
-                                        fullWidth
-                                        label="Apellidos"
-                                        value={colaboradorForm.lastName}
-                                        onChange={(e) => handleFormChange('lastName', e.target.value)}
-                                        required
-                                    />
-                                </Grid>
-                                <Grid item xs={12}>
-                                    <TextField
-                                        fullWidth
-                                        label="Nombre Usuario"
-                                        value={colaboradorForm.username}
-                                        onChange={(e) => handleFormChange('username', e.target.value)}
-                                        required
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField
-                                        fullWidth
-                                        label="Email"
-                                        type="email"
-                                        value={colaboradorForm.email}
-                                        onChange={(e) => handleFormChange('email', e.target.value)}
-                                        required
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField
-                                        fullWidth
-                                        label={isEdit ? 'Nueva Contraseña (opcional)' : 'Contraseña'}
-                                        type="password"
-                                        autoComplete="new-password"
-                                        value={colaboradorForm.password}
-                                        onChange={(e) => handleFormChange('password', e.target.value)}
-                                        required={!isEdit}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField
-                                        fullWidth
-                                        label="Teléfono"
-                                        value={colaboradorForm.phoneNumber}
-                                        onChange={(e) => handleFormChange('phoneNumber', e.target.value)}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField
-                                        fullWidth
-                                        label="Número de empleado"
-                                        value={colaboradorForm.employeeNumber}
-                                        onChange={(e) => handleFormChange('employeeNumber', e.target.value)}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <FormControl fullWidth>
-                                        <InputLabel>Horario</InputLabel>
-                                        <Select
-                                            value={colaboradorForm.selectedSchedule}
-                                            label="Horario"
-                                            onChange={(e) => handleFormChange('selectedSchedule', e.target.value)}
-                                        >
-                                            <MenuItem value={-1}>
-                                                <em>Seleccionar horario</em>
-                                            </MenuItem>
-                                            {Array.isArray(corporationData?.schedules) && corporationData.schedules.length > 0 ? (
-                                                corporationData.schedules.map((schedule, idx) => (
-                                                    <MenuItem key={idx} value={idx}>
-                                                        {schedule.name} ({formatTime12Hour(schedule.entryTime)} - {formatTime12Hour(schedule.exitTime)})
-                                                    </MenuItem>
-                                                ))
-                                            ) : (
-                                                <MenuItem disabled value={-1}>
-                                                    No hay horarios configurados
+            <Box sx={{ mt: 2 }}>
+                {/* Información Básica */}
+                <StyledAccordion 
+                    expanded={expandedPanels.basicInfo}
+                    onChange={handleAccordionChange('basicInfo')}
+                >
+                    <AccordionSummary expandIcon={<ExpandMore />}>
+                        <Typography variant="subtitle1" fontWeight="bold">
+                            Información Básica
+                        </Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                        <Grid container spacing={2}>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Nombres"
+                                    value={colaboradorForm.firstName}
+                                    onChange={(e) => handleFormChange('firstName', e.target.value)}
+                                    required
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Apellidos"
+                                    value={colaboradorForm.lastName}
+                                    onChange={(e) => handleFormChange('lastName', e.target.value)}
+                                    required
+                                />
+                            </Grid>
+                            <Grid item xs={12}>
+                                <TextField
+                                    fullWidth
+                                    label="Nombre Usuario"
+                                    value={colaboradorForm.username}
+                                    onChange={(e) => handleFormChange('username', e.target.value)}
+                                    required
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Email"
+                                    type="email"
+                                    value={colaboradorForm.email}
+                                    onChange={(e) => handleFormChange('email', e.target.value)}
+                                    required
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label={isEdit ? 'Nueva Contraseña (opcional)' : 'Contraseña'}
+                                    type="password"
+                                    autoComplete="new-password"
+                                    value={colaboradorForm.password}
+                                    onChange={(e) => handleFormChange('password', e.target.value)}
+                                    required={!isEdit}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Teléfono"
+                                    value={colaboradorForm.phoneNumber}
+                                    onChange={(e) => handleFormChange('phoneNumber', e.target.value)}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Número de empleado"
+                                    value={colaboradorForm.employeeNumber}
+                                    onChange={(e) => handleFormChange('employeeNumber', e.target.value)}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Horario</InputLabel>
+                                    <Select
+                                        value={colaboradorForm.selectedSchedule}
+                                        label="Horario"
+                                        onChange={(e) => handleFormChange('selectedSchedule', e.target.value)}
+                                    >
+                                        <MenuItem value={-1}>
+                                            <em>Seleccionar horario</em>
+                                        </MenuItem>
+                                        {Array.isArray(corporationData?.schedules) && corporationData.schedules.length > 0 ? (
+                                            corporationData.schedules.map((schedule, idx) => (
+                                                <MenuItem key={idx} value={idx}>
+                                                    {schedule.name} ({formatClock(schedule.entryTime)} - {formatClock(schedule.exitTime)})
                                                 </MenuItem>
-                                            )}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
+                                            ))
+                                        ) : (
+                                            <MenuItem disabled value={-1}>
+                                                No hay horarios configurados
+                                            </MenuItem>
+                                        )}
+                                    </Select>
+                                </FormControl>
                             </Grid>
-                        </AccordionDetails>
-                    </StyledAccordion>
+                        </Grid>
+                    </AccordionDetails>
+                </StyledAccordion>
 
-                    {/* Campos adicionales (dinámicos definidos por la corporación) */}
-                    {Array.isArray(corporationData?.extraEnrollmentFields) && corporationData.extraEnrollmentFields.length > 0 && (
-                        <StyledAccordion 
-                            expanded={expandedPanels.extraFields}
-                            onChange={handleAccordionChange('extraFields')}
-                        >
-                            <AccordionSummary expandIcon={<ExpandMore />}>
-                                <Typography variant="subtitle1" fontWeight="bold">Campos Adicionales</Typography>
-                            </AccordionSummary>
-                            <AccordionDetails>
-                                <Grid container spacing={2}>
-                                    {corporationData.extraEnrollmentFields.map((field, idx) => {
-                                        const fieldName = field.fieldName || field.label || field.name || field.key || `extra_${idx}`;
-                                        const label = fieldName;
-                                        const type = (field.type || 'text').toLowerCase();
-
-                                        const handleChangeExtra = (value) => {
-                                            setExtraFieldsValues(prev => ({ ...prev, [fieldName]: value }));
-                                        };
-
-                                        return (
-                                            <Grid item xs={12} sm={6} key={fieldName}>
-                                                {type === 'select' ? (
-                                                    <FormControl fullWidth>
-                                                        <InputLabel>{label}</InputLabel>
-                                                        <Select
-                                                            value={extraFieldsValues[fieldName] ?? ''}
-                                                            label={label}
-                                                            onChange={(e) => handleChangeExtra(e.target.value)}
-                                                        >
-                                                            {(Array.isArray(field.options) ? field.options : []).map((opt, i) => (
-                                                                <MenuItem key={i} value={opt.value ?? opt}>{opt.label ?? opt}</MenuItem>
-                                                            ))}
-                                                        </Select>
-                                                    </FormControl>
-                                                ) : type === 'textarea' ? (
-                                                    <TextField
-                                                        fullWidth
-                                                        label={label}
-                                                        multiline
-                                                        rows={4}
-                                                        value={extraFieldsValues[fieldName] ?? ''}
-                                                        onChange={(e) => handleChangeExtra(e.target.value)}
-                                                    />
-                                                ) : type === 'checkbox' ? (
-                                                    <FormControl fullWidth>
-                                                        <InputLabel shrink>{label}</InputLabel>
-                                                        <Select
-                                                            value={extraFieldsValues[fieldName] ? 'true' : 'false'}
-                                                            onChange={(e) => handleChangeExtra(e.target.value === 'true')}
-                                                        >
-                                                            <MenuItem value={'true'}>Sí</MenuItem>
-                                                            <MenuItem value={'false'}>No</MenuItem>
-                                                        </Select>
-                                                    </FormControl>
-                                                ) : (
-                                                    <TextField
-                                                        fullWidth
-                                                        label={label}
-                                                        value={extraFieldsValues[fieldName] ?? ''}
-                                                        onChange={(e) => handleChangeExtra(e.target.value)}
-                                                    />
-                                                )}
-                                            </Grid>
-                                        );
-                                    })}
-                                </Grid>
-                            </AccordionDetails>
-                        </StyledAccordion>
-                    )}
-
-                    {/* Información de Contacto */}
+                {/* Campos adicionales (dinámicos definidos por la corporación) */}
+                {Array.isArray(corporationData?.extraEnrollmentFields) && corporationData.extraEnrollmentFields.length > 0 && (
                     <StyledAccordion 
-                        expanded={expandedPanels.contactInfo}
-                        onChange={handleAccordionChange('contactInfo')}
+                        expanded={expandedPanels.extraFields}
+                        onChange={handleAccordionChange('extraFields')}
                     >
                         <AccordionSummary expandIcon={<ExpandMore />}>
-                            <Typography variant="subtitle1" fontWeight="bold">
-                                Información de Contacto
-                            </Typography>
+                            <Typography variant="subtitle1" fontWeight="bold">Campos Adicionales</Typography>
                         </AccordionSummary>
                         <AccordionDetails>
                             <Grid container spacing={2}>
-                                <Grid item xs={12}>
-                                    <TextField
-                                        fullWidth
-                                        label="Dirección de Servicio"
-                                        value={colaboradorForm.serviceAddress}
-                                        onChange={(e) => handleFormChange('serviceAddress', e.target.value)}
-                                        multiline
-                                        rows={2}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField
-                                        fullWidth
-                                        label="Zona o Sector"
-                                        value={colaboradorForm.zoneOrSector}
-                                        onChange={(e) => handleFormChange('zoneOrSector', e.target.value)}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <FormControl fullWidth>
-                                        <InputLabel>Tipo de Ruta</InputLabel>
-                                        <Select
-                                            value={colaboradorForm.routeType}
-                                            label="Tipo de Ruta"
-                                            onChange={(e) => handleFormChange('routeType', e.target.value)}
-                                        >
-                                            <MenuItem value="Completa">Completa</MenuItem>
-                                            <MenuItem value="Media PM">Media PM</MenuItem>
-                                            <MenuItem value="Media AM">Media AM</MenuItem>
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField
-                                        fullWidth
-                                        label="Contacto de Emergencia"
-                                        value={colaboradorForm.emergencyContact}
-                                        onChange={(e) => handleFormChange('emergencyContact', e.target.value)}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField
-                                        fullWidth
-                                        label="Relación (Emergencia)"
-                                        value={colaboradorForm.emergencyRelationship}
-                                        onChange={(e) => handleFormChange('emergencyRelationship', e.target.value)}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField
-                                        fullWidth
-                                        label="Teléfono de Emergencia"
-                                        value={colaboradorForm.emergencyPhone}
-                                        onChange={(e) => handleFormChange('emergencyPhone', e.target.value)}
-                                    />
-                                </Grid>
+                                {corporationData.extraEnrollmentFields.map((field, idx) => {
+                                    const fieldName = field.fieldName || field.label || field.name || field.key || `extra_${idx}`;
+                                    const label = fieldName;
+                                    const type = (field.type || 'text').toLowerCase();
+
+                                    const handleChangeExtra = (value) => {
+                                        setExtraFieldsValues(prev => ({ ...prev, [fieldName]: value }));
+                                    };
+
+                                    return (
+                                        <Grid item xs={12} sm={6} key={fieldName}>
+                                            {type === 'select' ? (
+                                                <FormControl fullWidth>
+                                                    <InputLabel>{label}</InputLabel>
+                                                    <Select
+                                                        value={extraFieldsValues[fieldName] ?? ''}
+                                                        label={label}
+                                                        onChange={(e) => handleChangeExtra(e.target.value)}
+                                                    >
+                                                        {(Array.isArray(field.options) ? field.options : []).map((opt, i) => (
+                                                            <MenuItem key={i} value={opt.value ?? opt}>{opt.label ?? opt}</MenuItem>
+                                                        ))}
+                                                    </Select>
+                                                </FormControl>
+                                            ) : type === 'textarea' ? (
+                                                <TextField
+                                                    fullWidth
+                                                    label={label}
+                                                    multiline
+                                                    rows={4}
+                                                    value={extraFieldsValues[fieldName] ?? ''}
+                                                    onChange={(e) => handleChangeExtra(e.target.value)}
+                                                />
+                                            ) : type === 'checkbox' ? (
+                                                <FormControl fullWidth>
+                                                    <InputLabel shrink>{label}</InputLabel>
+                                                    <Select
+                                                        value={extraFieldsValues[fieldName] ? 'true' : 'false'}
+                                                        onChange={(e) => handleChangeExtra(e.target.value === 'true')}
+                                                    >
+                                                        <MenuItem value={'true'}>Sí</MenuItem>
+                                                        <MenuItem value={'false'}>No</MenuItem>
+                                                    </Select>
+                                                </FormControl>
+                                            ) : (
+                                                <TextField
+                                                    fullWidth
+                                                    label={label}
+                                                    value={extraFieldsValues[fieldName] ?? ''}
+                                                    onChange={(e) => handleChangeExtra(e.target.value)}
+                                                />
+                                            )}
+                                        </Grid>
+                                    );
+                                })}
                             </Grid>
                         </AccordionDetails>
                     </StyledAccordion>
-                </Box>
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={handleCloseDialogs}>Cancelar</Button>
-                {hasPermission(isEdit ? 'corporaciones-editar-colaborador' : 'corporaciones-crear-colaborador') && (
-                    <Button
-                        onClick={isEdit ? handleUpdateColaborador : handleCreateColaborador}
-                        variant="contained"
-                        disabled={!colaboradorForm.username || !colaboradorForm.email || (!isEdit && !colaboradorForm.password)}
-                    >
-                        {isEdit ? 'Actualizar' : 'Crear'}
-                    </Button>
                 )}
-            </DialogActions>
-        </Dialog>
+
+                {/* Información de Contacto */}
+                <StyledAccordion 
+                    expanded={expandedPanels.contactInfo}
+                    onChange={handleAccordionChange('contactInfo')}
+                >
+                    <AccordionSummary expandIcon={<ExpandMore />}>
+                        <Typography variant="subtitle1" fontWeight="bold">
+                            Información de Contacto
+                        </Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                        <Grid container spacing={2}>
+                            <Grid item xs={12}>
+                                <TextField
+                                    fullWidth
+                                    label="Dirección de Servicio"
+                                    value={colaboradorForm.serviceAddress}
+                                    onChange={(e) => handleFormChange('serviceAddress', e.target.value)}
+                                    multiline
+                                    rows={2}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Zona o Sector"
+                                    value={colaboradorForm.zoneOrSector}
+                                    onChange={(e) => handleFormChange('zoneOrSector', e.target.value)}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Tipo de ruta</InputLabel>
+                                    <Select
+                                        value={colaboradorForm.routeType}
+                                        label="Tipo de ruta"
+                                        onChange={(e) => handleFormChange('routeType', e.target.value)}
+                                    >
+                                        {ROUTE_TYPE_OPTIONS.map((option) => (
+                                            <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Contacto de Emergencia"
+                                    value={colaboradorForm.emergencyContact}
+                                    onChange={(e) => handleFormChange('emergencyContact', e.target.value)}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Relación (Emergencia)"
+                                    value={colaboradorForm.emergencyRelationship}
+                                    onChange={(e) => handleFormChange('emergencyRelationship', e.target.value)}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField
+                                    fullWidth
+                                    label="Teléfono de Emergencia"
+                                    value={colaboradorForm.emergencyPhone}
+                                    onChange={(e) => handleFormChange('emergencyPhone', e.target.value)}
+                                />
+                            </Grid>
+                        </Grid>
+                    </AccordionDetails>
+                </StyledAccordion>
+            </Box>
+        </AppDialog>
     );
 
     const headerActions = [
@@ -1882,57 +1691,50 @@ const ColaboradoresPage = () => {
                 actions={headerActions}
             />
 
-            <Dialog open={openDownloadDialog} onClose={() => setOpenDownloadDialog(false)}>
-                <DialogTitle>Descargar Colaboradores</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>Selecciona qué deseas descargar:</DialogContentText>
-                    <FormControl fullWidth sx={{ mt: 2 }}>
-                        <InputLabel id="colab-download-select-label">Opción</InputLabel>
-                        <Select
-                            labelId="colab-download-select-label"
-                            value={downloadChoice}
-                            label="Opción"
-                            onChange={(e) => setDownloadChoice(e.target.value)}
-                        >
-                            <MenuItem value="all">Todos</MenuItem>
-                            <MenuItem value="new">Nuevos</MenuItem>
-                            
-                            <MenuItem value="ACTIVE">Activos</MenuItem>
-                            <MenuItem value="PAUSED">Pausados</MenuItem>
-                            <MenuItem value="SUSPENDED">Suspendidos</MenuItem>
-                            <MenuItem value="INACTIVE">Inactivos</MenuItem>
-                            <MenuItem value="report">Reporte de Paradas</MenuItem>
-                        </Select>
-                    </FormControl>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setOpenDownloadDialog(false)}>Cancelar</Button>
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        startIcon={<GetApp />}
-                        onClick={async () => {
-                            const upper = (downloadChoice || '').toString().toUpperCase();
-                            const serviceStates = ['ACTIVE', 'PAUSED', 'SUSPENDED', 'INACTIVE'];
-                            if (downloadChoice === 'new') {
-                                await handleDownloadNewColaboradores();
-                            }
-                            else if (downloadChoice === 'all') {
-                                await handleDownloadAllColaboradores();
-                            }
-                            else if (downloadChoice === 'report') {
-                                await handleDownloadRouteReport();
-                            }
-                            else if (serviceStates.includes(upper)) {
-                                await handleDownloadByServiceStatusColaboradores(upper);
-                            }
-                            setOpenDownloadDialog(false);
-                        }}
+            <AppDialog
+                open={openDownloadDialog}
+                onClose={() => setOpenDownloadDialog(false)}
+                title="Descargar colaboradores"
+                size="sm"
+                onSubmit={async () => {
+                    const upper = (downloadChoice || '').toString().toUpperCase();
+                    const serviceStates = ['ACTIVE', 'PAUSED', 'SUSPENDED', 'INACTIVE'];
+                    if (downloadChoice === 'new') {
+                        await handleDownloadNewColaboradores();
+                    }
+                    else if (downloadChoice === 'all') {
+                        await handleDownloadAllColaboradores();
+                    }
+                    else if (downloadChoice === 'report') {
+                        await handleDownloadRouteReport();
+                    }
+                    else if (serviceStates.includes(upper)) {
+                        await handleDownloadByServiceStatusColaboradores(upper);
+                    }
+                    setOpenDownloadDialog(false);
+                }}
+                submitLabel="Descargar"
+            >
+                <DialogContentText>Selecciona qué deseas descargar:</DialogContentText>
+                <FormControl fullWidth sx={{ mt: 2 }}>
+                    <InputLabel id="colab-download-select-label">Opción</InputLabel>
+                    <Select
+                        labelId="colab-download-select-label"
+                        value={downloadChoice}
+                        label="Opción"
+                        onChange={(e) => setDownloadChoice(e.target.value)}
                     >
-                        Descargar
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                        <MenuItem value="all">Todos</MenuItem>
+                        <MenuItem value="new">Nuevos</MenuItem>
+                            
+                        <MenuItem value="ACTIVE">Activos</MenuItem>
+                        <MenuItem value="PAUSED">Pausados</MenuItem>
+                        <MenuItem value="SUSPENDED">Suspendidos</MenuItem>
+                        <MenuItem value="INACTIVE">Inactivos</MenuItem>
+                        <MenuItem value="report">Reporte de Paradas</MenuItem>
+                    </Select>
+                </FormControl>
+            </AppDialog>
 
             {/* Filtros y búsqueda */}
             <FilterBar {...pageFilters.barProps} loading={loading} />
@@ -1946,59 +1748,9 @@ const ColaboradoresPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer component={Paper} sx={{ maxHeight: 600, overflowX: 'auto' }}>
+                            <AppTableContainer component={Paper} maxHeight={600}>
                                 <Table stickyHeader sx={{ minWidth: 980 }}>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'serviceStatus'}
-                                                    direction={sortBy === 'serviceStatus' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('serviceStatus')}
-                                                >
-                                                    Estado del Servicio
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'name'}
-                                                    direction={sortBy === 'name' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('name')}
-                                                >
-                                                    Nombre
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'email'}
-                                                    direction={sortBy === 'email' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('email')}
-                                                >
-                                                    Email
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>Horario</TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'updatedAt'}
-                                                    direction={sortBy === 'updatedAt' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('updatedAt')}
-                                                >
-                                                    Fecha de actualización
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={sortBy === 'status'}
-                                                    direction={sortBy === 'status' ? sortOrder : 'asc'}
-                                                    onClick={() => handleSortChange('status')}
-                                                >
-                                                    Estado
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="center">Acciones</TableCell>
-                                        </TableRow>
-                                    </TableHead>
+                                    <SortableTableHead columns={COLUMNS} {...table.sortProps} />
                                     <TableBody>
                                         {paginatedColaboradores.map((colaborador) => (
                                             <TableRow key={colaborador.id} hover>
@@ -2038,7 +1790,7 @@ const ColaboradoresPage = () => {
                                                             const schedule = corporationData.schedules[scheduleIndex];
                                                             return (
                                                                 <Chip 
-                                                                    label={`${schedule.name} (${formatTime12Hour(schedule.entryTime)} - ${formatTime12Hour(schedule.exitTime)})`}
+                                                                    label={`${schedule.name} (${formatClock(schedule.entryTime)} - ${formatClock(schedule.exitTime)})`}
                                                                     size="small"
                                                                     color="info"
                                                                     variant="outlined"
@@ -2072,7 +1824,7 @@ const ColaboradoresPage = () => {
                                                             color="success"
                                                             size="small"
                                                             clickable={puedeCambiarEstado}
-                                                            onClick={puedeCambiarEstado ? () => handleOpenToggleStateDialog(colaborador) : undefined}
+                                                            onClick={puedeCambiarEstado ? () => handleToggleState(colaborador) : undefined}
                                                         />
                                                     ) : getColaboradorStatus(colaborador) === 'Inactivo' ? (
                                                         <Chip
@@ -2080,7 +1832,7 @@ const ColaboradoresPage = () => {
                                                             color={getStatusColor(getColaboradorStatus(colaborador))}
                                                             size="small"
                                                             clickable={puedeCambiarEstado}
-                                                            onClick={puedeCambiarEstado ? () => handleOpenToggleStateDialog(colaborador) : undefined}
+                                                            onClick={puedeCambiarEstado ? () => handleToggleState(colaborador) : undefined}
                                                         />
                                                     ) : (
                                                         <Chip
@@ -2135,7 +1887,7 @@ const ColaboradoresPage = () => {
                                                             </IconButton>
                                                         )}
                                                         <PermissionGuard permission="usuarios-eliminar">
-                                                            <IconButton size="small" onClick={() => handleOpenDeleteDialog(colaborador)} title="Eliminar" color="error">
+                                                            <IconButton size="small" onClick={() => handleDeleteColaborador(colaborador)} title="Eliminar" color="error">
                                                                 <Delete fontSize="small" />
                                                             </IconButton>
                                                         </PermissionGuard>
@@ -2155,20 +1907,9 @@ const ColaboradoresPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
+                            </AppTableContainer>
 
-                            <TablePagination
-                                component="div"
-                                count={sortedColaboradores.length}
-                                page={page}
-                                onPageChange={(e, newPage) => setPage(newPage)}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={(e) => {
-                                    setRowsPerPage(Number.parseInt(e.target.value, 10));
-                                    setPage(0);
-                                }}
-                                rowsPerPageOptions={[5, 10, 25, 50]}
-                            />
+                            <AppTablePagination count={sortedColaboradores.length} {...table.paginationProps} />
                         </>
                     )}
                 </CardContent>
@@ -2179,50 +1920,6 @@ const ColaboradoresPage = () => {
             {renderColaboradorDialog(true)}
 
             {/* Diálogo de eliminar */}
-            <Dialog open={openDeleteDialog} onClose={handleCloseDialogs}>
-                <DialogTitle>Confirmar Eliminación</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        ¿Está seguro que desea eliminar al colaborador "{selectedColaborador?.name}"?
-                        Esta acción no es reversible..
-                    </DialogContentText>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseDialogs}>Cancelar</Button>
-                    <PermissionGuard permission="usuarios-eliminar">
-                        <Button onClick={handleDeleteColaborador} color="error" variant="contained">
-                            Eliminar
-                        </Button>
-                    </PermissionGuard>
-                </DialogActions>
-            </Dialog>
-
-            {/* Diálogo de toggle state (activar/desactivar) */}
-            <Dialog open={openToggleStateDialog} onClose={handleCloseDialogs}>
-                <DialogTitle>
-                    {selectedColaborador && Number(selectedColaborador.state) === 1 ? 'Desactivar' : 'Activar'} Colaborador
-                </DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        ¿Está seguro que desea {selectedColaborador && Number(selectedColaborador.state) === 1 ? 'desactivar' : 'activar'} al colaborador "{selectedColaborador?.name}"?
-                        {selectedColaborador && Number(selectedColaborador.state) === 1 
-                            ? ' El colaborador no podrá acceder al sistema mientras esté desactivado.' 
-                            : ' El colaborador podrá acceder al sistema nuevamente.'}
-                    </DialogContentText>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseDialogs}>Cancelar</Button>
-                    <PermissionGuard permission="usuarios-toggle-estado">
-                        <Button
-                            onClick={handleToggleState}
-                            color={selectedColaborador && Number(selectedColaborador.state) === 1 ? 'warning' : 'success'}
-                            variant="contained"
-                        >
-                            {selectedColaborador && Number(selectedColaborador.state) === 1 ? 'Desactivar' : 'Activar'}
-                        </Button>
-                    </PermissionGuard>
-                </DialogActions>
-            </Dialog>
 
             {/* Modal de horario completo igual al de estudiantes */}
             <ColaboradorScheduleModal 
@@ -2232,132 +1929,70 @@ const ColaboradoresPage = () => {
                 onClose={handleCloseDialogs}
                 onScheduleUpdated={async () => {
                     await fetchColaboradores();
-                    setSnackbar({
-                        open: true,
-                        message: 'Horario actualizado correctamente',
-                        severity: 'success'
-                    });
+                    notify.success('Horario actualizado');
                 }}
             />
 
             {/* Diálogo de Carga Masiva */}
-            <Dialog open={openBulkDialog} onClose={() => setOpenBulkDialog(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Carga Masiva de Colaboradores</DialogTitle>
-                <DialogContent>
-                    <Box sx={{ mt: 2 }}>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                            Sube un archivo Excel con las columnas necesarias. Usa la plantilla oficial.<br/>
-                            <br/>
-                            La lista de Horarios se encuentra en la hoja "Horarios" de la plantilla.<br/>
-                            <br/>
-                            El límite de archivo es 5 MB.
-                        </Typography>
-
-                        <Button
-                            variant="outlined"
-                            sx={{ mr: 2 }}
-                            color="success"
-                            onClick={handleDownloadTemplate}
-                        >
-                            Descargar Plantilla
-                        </Button>
-                        <Button variant="outlined" component="label" startIcon={<FileUpload />}>
-                            Seleccionar Archivo
-                            <input
-                                type="file"
-                                hidden
-                                onChange={(e) => setBulkFile(e.target.files[0])}
-                                accept=".xlsx,.xls"
-                            />
-                        </Button>
-
-                        {bulkFile && (
-                            <Typography variant="body2" sx={{ mt: 1 }}>
-                                Archivo seleccionado: {bulkFile.name}
-                            </Typography>
-                        )}
-                        
-                        {bulkLoading && (
-                            <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
-                                <CircularProgress size={24} />
-                                <Typography variant="body2" sx={{ ml: 2 }}>
-                                    Procesando archivo...
-                                </Typography>
-                            </Box>
-                        )}
-                    </Box>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => {
-                        setOpenBulkDialog(false);
-                        setBulkFile(null);
-                    }}>
-                        Cancelar
-                    </Button>
-                    <PermissionGuard permission="corporaciones-carga-masiva-colaboradores">
-                        <Button
-                            onClick={handleBulkUpload}
-                            variant="contained"
-                            disabled={!bulkFile || bulkLoading}
-                        >
-                            {bulkLoading ? <CircularProgress size={24} /> : 'Cargar'}
-                        </Button>
-                    </PermissionGuard>
-                </DialogActions>
-            </Dialog>
+            <BulkUploadDialog
+                open={openBulkDialog}
+                onClose={() => setOpenBulkDialog(false)}
+                title="Carga masiva de colaboradores"
+                description={[
+                    'Sube un archivo Excel con las columnas necesarias, usando la plantilla.',
+                    'La lista de horarios está en la hoja "Horarios" de la plantilla.',
+                ]}
+                templateObject="colaboradores"
+                templateClient={currentCorporation?.name}
+                accept="excelSinCsv"
+                maxSizeMb={10}
+                successLabel="Colaboradores creados"
+                buildTemplate={buildColaboradoresTemplate}
+                upload={uploadColaboradores}
+                onUploaded={() => fetchColaboradores()}
+            />
 
             <BulkScheduleColaboradoresModal
                 open={openBulkScheduleDialog}
                 onClose={() => setOpenBulkScheduleDialog(false)}
                 corporationId={corporationId}
+                corporationName={currentCorporation?.name}
             />
 
             {/* Diálogo de Enviar Circular */}
-            <Dialog open={openCircularDialog} onClose={() => setOpenCircularDialog(false)} maxWidth="md" fullWidth>
-                <DialogTitle>Enviar Circular a Colaboradores</DialogTitle>
-                <DialogContent>
-                    <Box sx={{ mt: 2 }}>
-                        <TextField
-                            fullWidth
-                            label="Asunto"
-                            value={circularSubject}
-                            onChange={(e) => setCircularSubject(e.target.value)}
-                            sx={{ mb: 2 }}
-                        />
-                        <TextField
-                            fullWidth
-                            label="Mensaje"
-                            value={circularMessage}
-                            onChange={(e) => setCircularMessage(e.target.value)}
-                            multiline
-                            rows={6}
-                            placeholder="Escriba el mensaje que desea enviar a todos los colaboradores del corporativo..."
-                        />
-                        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                            Esta circular se enviará a todos los colaboradores activos del corporativo: {currentCorporation?.name}
-                        </Typography>
-                    </Box>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => {
-                        setOpenCircularDialog(false);
-                        setCircularSubject('');
-                        setCircularMessage('');
-                    }}>
-                        Cancelar
-                    </Button>
-                    <PermissionGuard permission="mail-enviar-circular-colaboradores">
-                        <Button
-                            onClick={handleSendCircular}
-                            variant="contained"
-                            color="secondary"
-                            disabled={!circularSubject || !circularMessage || circularLoading}
-                        >
-                            {circularLoading ? <CircularProgress size={24} /> : 'Enviar'}
-                        </Button>
-                    </PermissionGuard>
-                </DialogActions>
-            </Dialog>
+            <AppDialog
+                open={openCircularDialog}
+                onClose={() => setOpenCircularDialog(false)}
+                title="Enviar circular a colaboradores"
+                size="md"
+                onSubmit={handleSendCircular}
+                submitLabel="Enviar"
+                submitDisabled={!circularSubject || !circularMessage}
+                submitting={circularLoading}
+                readOnly={!(hasPermission('mail-enviar-circular-colaboradores'))}
+            >
+                <Box sx={{ mt: 2 }}>
+                    <TextField
+                        fullWidth
+                        label="Asunto"
+                        value={circularSubject}
+                        onChange={(e) => setCircularSubject(e.target.value)}
+                        sx={{ mb: 2 }}
+                    />
+                    <TextField
+                        fullWidth
+                        label="Mensaje"
+                        value={circularMessage}
+                        onChange={(e) => setCircularMessage(e.target.value)}
+                        multiline
+                        rows={6}
+                        placeholder="Escriba el mensaje que desea enviar a todos los colaboradores del corporativo..."
+                    />
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                        Esta circular se enviará a todos los colaboradores activos del corporativo: {currentCorporation?.name}
+                    </Typography>
+                </Box>
+            </AppDialog>
 
             {/* Modal de estado del servicio */}
             <UserServiceStatusModal
@@ -2374,20 +2009,6 @@ const ColaboradoresPage = () => {
             />
 
             {/* Snackbar */}
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert
-                    onClose={() => setSnackbar({ ...snackbar, open: false })}
-                    severity={snackbar.severity}
-                    sx={{ width: '100%' }}
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </PageContainer>
     );
 };

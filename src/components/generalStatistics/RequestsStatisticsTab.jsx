@@ -6,9 +6,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box,
     Typography,
-    Grid,
-    Card,
-    CardContent,
     CircularProgress,
     Alert
 } from '@mui/material';
@@ -18,17 +15,10 @@ import FilterBar from '../filters/FilterBar';
 import useFilters from '../../hooks/useFilters';
 import { F } from '../filters/filterFields';
 import { getRequestStatistics, REQUEST_TYPE_META } from '../../services/requestService';
+import { Assignment as AssignmentIcon, HourglassEmpty as HourglassEmptyIcon, Autorenew as AutorenewIcon, CheckCircle as CheckCircleIcon, Cancel as CancelIcon, Flag as FlagIcon, Category as CategoryIcon } from '@mui/icons-material';
+import { StatCard, StatCardGrid } from '../StatCard';
 
 const PRIORITY_LABELS_ES = { urgent: 'Urgente', high: 'Alta', medium: 'Media', low: 'Baja' };
-
-const CountCard = ({ label, value }) => (
-    <Card sx={{ height: '100%' }}>
-        <CardContent>
-            <Typography color="textSecondary" gutterBottom>{label}</Typography>
-            <Typography variant="h4">{value ?? 0}</Typography>
-        </CardContent>
-    </Card>
-);
 
 const RequestsStatisticsTab = () => {
     const [statistics, setStatistics] = useState(null);
@@ -81,34 +71,30 @@ const RequestsStatisticsTab = () => {
             ) : statistics && (
                 <>
                     <Typography variant="h6" sx={{ mb: 1 }}>Por estado</Typography>
-                    <Grid container spacing={2} sx={{ mb: 3 }}>
-                        <Grid item xs={12} sm={6} md={2.4}><CountCard label="Total" value={statistics.totalRequests} /></Grid>
-                        <Grid item xs={12} sm={6} md={2.4}><CountCard label="Pendientes" value={statistics.pendingRequests} /></Grid>
-                        <Grid item xs={12} sm={6} md={2.4}><CountCard label="En revisión" value={statistics.inReviewRequests} /></Grid>
-                        <Grid item xs={12} sm={6} md={2.4}><CountCard label="Completadas" value={statistics.approvedRequests} /></Grid>
-                        <Grid item xs={12} sm={6} md={2.4}><CountCard label="Rechazadas" value={statistics.rejectedRequests} /></Grid>
-                    </Grid>
+                    <StatCardGrid columns={{ md: 3, lg: 5 }} sx={{ mb: 1 }}>
+                        <StatCard label="Total" value={statistics.totalRequests ?? 0} icon={<AssignmentIcon />} format="number" />
+                        <StatCard label="Pendientes" value={statistics.pendingRequests ?? 0} icon={<HourglassEmptyIcon />} format="number" />
+                        <StatCard label="En revisión" value={statistics.inReviewRequests ?? 0} icon={<AutorenewIcon />} format="number" />
+                        <StatCard label="Completadas" value={statistics.approvedRequests ?? 0} icon={<CheckCircleIcon />} format="number" />
+                        <StatCard label="Rechazadas" value={statistics.rejectedRequests ?? 0} icon={<CancelIcon />} format="number" />
+                    </StatCardGrid>
                     <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 3 }}>
                         El total incluye las solicitudes canceladas. Las de corporaciones se cuentan siempre, sin importar el ciclo escolar elegido.
                     </Typography>
 
                     <Typography variant="h6" sx={{ mb: 1 }}>Por prioridad</Typography>
-                    <Grid container spacing={2} sx={{ mb: 3 }}>
+                    <StatCardGrid columns={4}>
                         {['urgent', 'high', 'medium', 'low'].map((p) => (
-                            <Grid item xs={6} md={3} key={p}>
-                                <CountCard label={PRIORITY_LABELS_ES[p]} value={statistics.priorityCounts?.[p]} />
-                            </Grid>
+                            <StatCard key={p} label={PRIORITY_LABELS_ES[p]} value={statistics.priorityCounts?.[p] ?? 0} icon={<FlagIcon />} format="number" />
                         ))}
-                    </Grid>
+                    </StatCardGrid>
 
                     <Typography variant="h6" sx={{ mb: 1 }}>Por tipo</Typography>
-                    <Grid container spacing={2}>
+                    <StatCardGrid columns={4} sx={{ mb: 0 }}>
                         {typeEntries.map(({ key, label, count }) => (
-                            <Grid item xs={6} md={3} key={key}>
-                                <CountCard label={label} value={count} />
-                            </Grid>
+                            <StatCard key={key} label={label} value={count ?? 0} icon={<CategoryIcon />} format="number" />
                         ))}
-                    </Grid>
+                    </StatCardGrid>
                 </>
             )}
         </>

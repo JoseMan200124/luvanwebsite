@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import {
+    Paper,
     Box,
     Card,
     CardContent,
@@ -7,18 +8,13 @@ import {
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    TablePagination,
-    Paper,
     Chip,
     CircularProgress,
     Alert
 } from '@mui/material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
-import moment from 'moment-timezone';
 import { getClientSchoolId, getClientCorporationId } from '../utils/clientValue';
 import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
 import FilterBar from '../components/filters/FilterBar';
@@ -27,8 +23,12 @@ import { F } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
-
-moment.tz.setDefault('America/Guatemala');
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import { formatDateTime } from '../utils/dateFormat';
+import { loadCatalog } from '../services/catalogStore';
 
 const ASSIGNMENT_TYPE_LABELS = {
     'bus_pilot': 'Bus - Piloto',
@@ -47,13 +47,6 @@ const ASSIGNMENT_TYPE_LABELS = {
     'corporation_monitora': 'Corporación - Monitora',
     'route_pilot': 'Ruta - Piloto',
     'route_monitora': 'Ruta - Monitora'
-};
-
-const formatGuatemalaDatetime = (dateString) => {
-    if (!dateString) {
-        return '—';
-    }
-    return moment.utc(dateString).tz('America/Guatemala').format('DD/MM/YYYY HH:mm');
 };
 
 // ─── Pure helpers ────────────────────────────────────────────────────────────
@@ -273,13 +266,23 @@ const renderChangeDetailCell = (ctype, fromText, toText) => {
     return <Typography variant="body2" color="text.secondary">—</Typography>;
 };
 
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'fecha', label: 'Fecha' },
+    { id: 'tipo', label: 'Tipo' },
+    { id: 'sujeto', label: 'Sujeto' },
+    { id: 'detalle_del_cambio', label: 'Detalle del Cambio' },
+    { id: 'modificado_por', label: 'Modificado Por' },
+];
+
 const AssignmentHistoryPage = () => {
     const { auth } = useContext(AuthContext);
     const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(25);
+    // Paginación (en el servidor)
+    const table = useTableState();
+    const { page, rowsPerPage } = table;
     const [totalRecords, setTotalRecords] = useState(0);
     const [clientBreakdown, setClientBreakdown] = useState({ colegios: 0, corporativos: 0 });
 
@@ -301,7 +304,7 @@ const AssignmentHistoryPage = () => {
             }),
             F.dateRange('dates'),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const { cycle: selectedCicloEscolar, client: selectedClient, assignmentType, busId, dates } = pageFilters.applied;
     const schoolId = getClientSchoolId(selectedClient);
@@ -382,37 +385,17 @@ const AssignmentHistoryPage = () => {
     const fetchCatalogs = async () => {
         try {
             // Cargar buses
-            const busesRes = await api.get('/buses/simple', {
-                headers: { Authorization: `Bearer ${auth.token}` }
-            });
-            setBuses(busesRes.data.buses || []);
+            setBuses(await loadCatalog('buses'));
 
             // Cargar colegios
-            const schoolsRes = await api.get('/schools', {
-                params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true },
-                headers: { Authorization: `Bearer ${auth.token}` }
-            });
-            setSchools(schoolsRes.data.schools || []);
+            setSchools(await loadCatalog('schools', { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true }));
 
             // Cargar corporaciones
-            const corpsRes = await api.get('/corporations', {
-                params: getCicloEscolarFilterParams(draftCycle),
-                headers: { Authorization: `Bearer ${auth.token}` }
-            });
-            setCorporations(corpsRes.data.corporations || []);
+            setCorporations(await loadCatalog('corporations', getCicloEscolarFilterParams(draftCycle)));
 
         } catch (err) {
             console.error('Error al cargar catálogos:', err);
         }
-    };
-
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
     };
 
     return (
@@ -453,17 +436,9 @@ const AssignmentHistoryPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
+                            <AppTableContainer component={Paper} variant="outlined">
                                 <Table sx={{ minWidth: 900 }}>
-                                    <TableHead>
-                                        <TableRow sx={{ bgcolor: 'grey.50' }}>
-                                            <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Fecha</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold' }}>Tipo</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold' }}>Sujeto</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold' }}>Detalle del Cambio</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>Modificado Por</TableCell>
-                                        </TableRow>
-                                    </TableHead>
+                                    <SortableTableHead columns={COLUMNS} cellSx={{ fontWeight: 'bold' }} rowSx={{ bgcolor: 'grey.50' }} />
                                     <TableBody>
                                         {history.length === 0 ? (
                                             <TableRow>
@@ -481,7 +456,7 @@ const AssignmentHistoryPage = () => {
                                                     <TableRow key={record.id} hover>
                                                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                                                             <Typography variant="body2">
-                                                                {formatGuatemalaDatetime(record.createdAt)}
+                                                                {formatDateTime(record.createdAt, { utc: true })}
                                                             </Typography>
                                                         </TableCell>
                                                         <TableCell>
@@ -516,18 +491,8 @@ const AssignmentHistoryPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={totalRecords}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                rowsPerPageOptions={[10, 25, 50, 100]}
-                                labelRowsPerPage="Filas por página:"
-                                labelDisplayedRows={({ from, to, count }) => `${from}-${to} de ${count}`}
-                            />
+                            </AppTableContainer>
+                            <AppTablePagination count={totalRecords} {...table.paginationProps} />
                         </>
                     )}
                 </CardContent>

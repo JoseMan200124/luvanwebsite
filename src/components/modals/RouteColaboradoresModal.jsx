@@ -2,29 +2,33 @@
 
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import {
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
+    Paper,
     Button,
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    Paper,
     Typography,
     CircularProgress,
     Box,
-    IconButton,
-    TableSortLabel,
     Grid,
     TextField
 } from '@mui/material';
-import { Close as CloseIcon, DirectionsBus } from '@mui/icons-material';
+import { DirectionsBus } from '@mui/icons-material';
 import { AuthContext } from '../../context/AuthProvider';
 import api from '../../utils/axiosConfig';
+import useTableState from '../../hooks/useTableState';
+import SortableTableHead from '../table/SortableTableHead';
+import AppTableContainer from '../table/AppTableContainer';
+import AppDialog from '../dialogs/AppDialog';
+
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'name', label: 'Nombre', sortable: true },
+    { id: 'email', label: 'Email', sortable: true },
+    { id: 'stopTime', label: 'Hora de Parada', sortable: true },
+    { id: 'note', label: 'Notas', sortable: true },
+];
 
 const RouteColaboradoresModal = ({ 
     open, 
@@ -51,26 +55,8 @@ const RouteColaboradoresModal = ({
     });
     
     // Sorting
-    const [sortBy, setSortBy] = useState(null);
-    const [sortOrder, setSortOrder] = useState('asc');
-
-    const handleSortChange = (field) => {
-        if (sortBy !== field) {
-            setSortBy(field);
-            setSortOrder('asc');
-            return;
-        }
-
-        if (sortOrder === 'asc') {
-            setSortOrder('desc');
-            return;
-        }
-
-        if (sortOrder === 'desc') {
-            setSortBy(null);
-            setSortOrder('asc');
-        }
-    };
+    const table = useTableState({ clearable: true });
+    const { orderBy: sortBy, order: sortOrder } = table;
 
     const parseTimeToMinutes = (timeStr) => {
         if (!timeStr) {
@@ -192,185 +178,126 @@ const RouteColaboradoresModal = ({
     const stopTypeLabel = stopType === 'entrada' ? 'Entrada' : 'Salida';
 
     return (
-        <Dialog 
-            open={open} 
+        <AppDialog
+            open={open}
             onClose={onClose}
-            maxWidth="lg"
-            fullWidth
+            title={`Colaboradores - ruta ${routeNumber} - ${scheduleName} (${stopTypeLabel})`}
+            icon={<DirectionsBus />}
+            size="lg"
+            readOnly
         >
-            <DialogTitle>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <DirectionsBus color="primary" />
-                        <Typography variant="h6">
-                            Colaboradores - Ruta {routeNumber} - {scheduleName} ({stopTypeLabel})
+            {loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                    <CircularProgress />
+                </Box>
+            ) : error ? (
+                <Box sx={{ textAlign: 'center', py: 4 }}>
+                    <Typography color="error">{error}</Typography>
+                </Box>
+            ) : (
+                <>
+                    {/* Filter Controls */}
+                    <Grid container spacing={2} sx={{ mb: 2 }}>
+                        <Grid item xs={12} sm={3}>
+                            <TextField
+                                fullWidth
+                                size="small"
+                                label="Filtrar por nombre"
+                                value={filters.name}
+                                onChange={(e) => handleFilterChange('name', e.target.value)}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={3}>
+                            <TextField
+                                fullWidth
+                                size="small"
+                                label="Filtrar por email"
+                                value={filters.email}
+                                onChange={(e) => handleFilterChange('email', e.target.value)}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={2}>
+                            <TextField
+                                fullWidth
+                                size="small"
+                                label="Filtrar por hora"
+                                value={filters.stopTime}
+                                onChange={(e) => handleFilterChange('stopTime', e.target.value)}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={2}>
+                            <TextField
+                                fullWidth
+                                size="small"
+                                label="Filtrar por nota"
+                                value={filters.note}
+                                onChange={(e) => handleFilterChange('note', e.target.value)}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={2}>
+                            <Button
+                                fullWidth
+                                variant="outlined"
+                                onClick={handleClearFilters}
+                                sx={{ height: '40px' }}
+                            >
+                                Limpiar
+                            </Button>
+                        </Grid>
+                    </Grid>
+
+                    {/* Results Summary */}
+                    <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="body2" color="textSecondary">
+                            Mostrando {sortedColaboradores.length} de {colaboradores.length} colaboradores
                         </Typography>
                     </Box>
-                    <IconButton onClick={onClose} size="small">
-                        <CloseIcon />
-                    </IconButton>
-                </Box>
-            </DialogTitle>
-            
-            <DialogContent dividers>
-                {loading ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                        <CircularProgress />
-                    </Box>
-                ) : error ? (
-                    <Box sx={{ textAlign: 'center', py: 4 }}>
-                        <Typography color="error">{error}</Typography>
-                    </Box>
-                ) : (
-                    <>
-                        {/* Filter Controls */}
-                        <Grid container spacing={2} sx={{ mb: 2 }}>
-                            <Grid item xs={12} sm={3}>
-                                <TextField
-                                    fullWidth
-                                    size="small"
-                                    label="Filtrar por nombre"
-                                    value={filters.name}
-                                    onChange={(e) => handleFilterChange('name', e.target.value)}
-                                />
-                            </Grid>
-                            <Grid item xs={12} sm={3}>
-                                <TextField
-                                    fullWidth
-                                    size="small"
-                                    label="Filtrar por email"
-                                    value={filters.email}
-                                    onChange={(e) => handleFilterChange('email', e.target.value)}
-                                />
-                            </Grid>
-                            <Grid item xs={12} sm={2}>
-                                <TextField
-                                    fullWidth
-                                    size="small"
-                                    label="Filtrar por hora"
-                                    value={filters.stopTime}
-                                    onChange={(e) => handleFilterChange('stopTime', e.target.value)}
-                                />
-                            </Grid>
-                            <Grid item xs={12} sm={2}>
-                                <TextField
-                                    fullWidth
-                                    size="small"
-                                    label="Filtrar por nota"
-                                    value={filters.note}
-                                    onChange={(e) => handleFilterChange('note', e.target.value)}
-                                />
-                            </Grid>
-                            <Grid item xs={12} sm={2}>
-                                <Button
-                                    fullWidth
-                                    variant="outlined"
-                                    onClick={handleClearFilters}
-                                    sx={{ height: '40px' }}
-                                >
-                                    Limpiar
-                                </Button>
-                            </Grid>
-                        </Grid>
 
-                        {/* Results Summary */}
-                        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Typography variant="body2" color="textSecondary">
-                                Mostrando {sortedColaboradores.length} de {colaboradores.length} colaboradores
-                            </Typography>
-                        </Box>
-
-                        {/* Table */}
-                        <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
-                            <Table stickyHeader size="small">
-                                <TableHead>
+                    {/* Table */}
+                    <AppTableContainer component={Paper} maxHeight={500}>
+                        <Table stickyHeader size="small">
+                            <SortableTableHead columns={COLUMNS} {...table.sortProps} />
+                            <TableBody>
+                                {sortedColaboradores.length === 0 ? (
                                     <TableRow>
-                                        <TableCell>
-                                            <TableSortLabel
-                                                active={sortBy === 'name'}
-                                                direction={sortBy === 'name' ? sortOrder : 'asc'}
-                                                onClick={() => handleSortChange('name')}
-                                            >
-                                                Nombre
-                                            </TableSortLabel>
-                                        </TableCell>
-                                        <TableCell>
-                                            <TableSortLabel
-                                                active={sortBy === 'email'}
-                                                direction={sortBy === 'email' ? sortOrder : 'asc'}
-                                                onClick={() => handleSortChange('email')}
-                                            >
-                                                Email
-                                            </TableSortLabel>
-                                        </TableCell>
-                                        <TableCell>
-                                            <TableSortLabel
-                                                active={sortBy === 'stopTime'}
-                                                direction={sortBy === 'stopTime' ? sortOrder : 'asc'}
-                                                onClick={() => handleSortChange('stopTime')}
-                                            >
-                                                Hora de Parada
-                                            </TableSortLabel>
-                                        </TableCell>
-                                        <TableCell>
-                                            <TableSortLabel
-                                                active={sortBy === 'note'}
-                                                direction={sortBy === 'note' ? sortOrder : 'asc'}
-                                                onClick={() => handleSortChange('note')}
-                                            >
-                                                Notas
-                                            </TableSortLabel>
+                                        <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
+                                            <Typography variant="body2" color="textSecondary">
+                                                No hay colaboradores asignados a esta ruta y horario
+                                            </Typography>
                                         </TableCell>
                                     </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {sortedColaboradores.length === 0 ? (
-                                        <TableRow>
-                                            <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
+                                ) : (
+                                    sortedColaboradores.map((emp, index) => (
+                                        <TableRow key={index} hover>
+                                            <TableCell>
+                                                <Typography variant="body2" fontWeight="bold">
+                                                    {emp.name || '-'}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2">
+                                                    {emp.email || '-'}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2">
+                                                    {emp.stopTime || '-'}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
                                                 <Typography variant="body2" color="textSecondary">
-                                                    No hay colaboradores asignados a esta ruta y horario
+                                                    {emp.note || '-'}
                                                 </Typography>
                                             </TableCell>
                                         </TableRow>
-                                    ) : (
-                                        sortedColaboradores.map((emp, index) => (
-                                            <TableRow key={index} hover>
-                                                <TableCell>
-                                                    <Typography variant="body2" fontWeight="bold">
-                                                        {emp.name || '-'}
-                                                    </Typography>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Typography variant="body2">
-                                                        {emp.email || '-'}
-                                                    </Typography>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Typography variant="body2">
-                                                        {emp.stopTime || '-'}
-                                                    </Typography>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Typography variant="body2" color="textSecondary">
-                                                        {emp.note || '-'}
-                                                    </Typography>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-                    </>
-                )}
-            </DialogContent>
-            
-            <DialogActions>
-                <Button onClick={onClose} color="primary">
-                    Cerrar
-                </Button>
-            </DialogActions>
-        </Dialog>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </AppTableContainer>
+                </>
+            )}
+        </AppDialog>
     );
 };
 

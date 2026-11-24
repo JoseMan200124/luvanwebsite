@@ -7,23 +7,13 @@ import {
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    TablePagination,
-    TableSortLabel,
     CircularProgress,
     Box,
     Grid,
-    Card,
-    CardContent,
     Chip,
     IconButton,
     Tooltip,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     Button,
 } from '@mui/material';
 import { 
@@ -33,27 +23,50 @@ import {
     LocationOff as LocationOffIcon,
     Warning as WarningIcon,
 } from '@mui/icons-material';
-import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { getAllBusEmergencies, getBusEmergencyById, deleteBusEmergency } from '../services/busEmergencyService';
 import api from '../utils/axiosConfig';
 import { getClientSchoolId, getClientCorporationId } from '../utils/clientValue';
 import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
-import PermissionGuard from '../components/PermissionGuard';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import RowActions from '../components/table/RowActions';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F, toPlateOptions, toRouteOptions } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
+import { formatDateTime } from '../utils/dateFormat';
+import AppDialog from '../components/dialogs/AppDialog';
+import { GpsFixed as GpsIcon, School as SchoolIcon } from '@mui/icons-material';
+import { StatCard, StatCardGrid } from '../components/StatCard';
+import { loadCatalog } from '../services/catalogStore';
 
-moment.tz.setDefault('America/Guatemala');
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'fecha', label: 'Fecha', sortable: true },
+    { id: 'mensaje', label: 'Mensaje', sortable: true },
+    { id: 'placaBus', label: 'Placa', sortable: true },
+    { id: 'numeroRuta', label: 'Ruta', sortable: true },
+    { id: 'colegio', label: 'Colegio/Corp.', sortable: true },
+    { id: 'creado_por', label: 'Creado por' },
+    { id: 'ubicacion', label: 'Ubicación', align: 'center' },
+    { id: 'acciones', label: 'Acciones', align: 'center' },
+];
 
 const BusEmergenciesPage = () => {
+    const notify = useNotify();
+    const confirm = useConfirm();
     const [emergencies, setEmergencies] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(25);
+    // Paginación y orden (en el servidor)
+    const table = useTableState({ defaultOrderBy: 'fecha', defaultOrder: 'desc' });
+    const { page, rowsPerPage, orderBy, order } = table;
     const [totalCount, setTotalCount] = useState(0);
 
     // Filtros
@@ -70,7 +83,7 @@ const BusEmergenciesPage = () => {
             F.route({ options: toRouteOptions(schoolRoutes) }),
             F.dateRange('dates'),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const { cycle: selectedCicloEscolar, client: selectedClient, plate: selectedPlate, route: selectedRoute, dates } = pageFilters.applied;
     const selectedSchool = getClientSchoolId(selectedClient);
@@ -80,8 +93,6 @@ const BusEmergenciesPage = () => {
     const draftCorporationId = getClientCorporationId(pageFilters.draft.client);
 
     // Ordenamiento
-    const [orderBy, setOrderBy] = useState('fecha');
-    const [order, setOrder] = useState('desc');
 
     // Modal de detalles
     const [detailsOpen, setDetailsOpen] = useState(false);
@@ -89,8 +100,6 @@ const BusEmergenciesPage = () => {
     const [loadingDetails, setLoadingDetails] = useState(false);
 
     // Modal de eliminación
-    const [deleteOpen, setDeleteOpen] = useState(false);
-    const [deleteId, setDeleteId] = useState(null);
 
     // Estadísticas
     const [statistics, setStatistics] = useState({
@@ -128,8 +137,8 @@ const BusEmergenciesPage = () => {
 
     const fetchSchools = async () => {
         try {
-            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true } });
-            const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
+            const schoolsList = await loadCatalog('schools', { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true });
+            const schoolsData = schoolsList;
             setSchools(schoolsData);
         } catch (error) {
             console.error('Error al cargar colegios:', error);
@@ -139,8 +148,8 @@ const BusEmergenciesPage = () => {
 
     const fetchCorporations = async () => {
         try {
-            const response = await api.get('/corporations', { params: getCicloEscolarFilterParams(draftCycle) });
-            const corporationsData = Array.isArray(response.data) ? response.data : (response.data?.corporations || []);
+            const corporationsList = await loadCatalog('corporations', getCicloEscolarFilterParams(draftCycle));
+            const corporationsData = corporationsList;
             setCorporations(corporationsData);
         } catch (error) {
             console.error('Error al cargar corporaciones:', error);
@@ -266,6 +275,7 @@ const BusEmergenciesPage = () => {
             }
         } catch (error) {
             console.error('Error al cargar emergencias:', error);
+            notify.fromError(error, 'Error al cargar las emergencias');
         } finally {
             setLoading(false);
         }
@@ -276,14 +286,6 @@ const BusEmergenciesPage = () => {
         await fetchEmergencies();
     }, [fetchEmergencies]);
 
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
 
     const handleViewDetails = async (emergencyId) => {
         setLoadingDetails(true);
@@ -293,7 +295,7 @@ const BusEmergenciesPage = () => {
             setSelectedEmergency(data);
         } catch (error) {
             console.error('Error al cargar detalles de la emergencia:', error);
-            alert('Error al cargar los detalles de la emergencia');
+            notify.fromError(error, 'Error al cargar los detalles de la emergencia');
         } finally {
             setLoadingDetails(false);
         }
@@ -304,31 +306,19 @@ const BusEmergenciesPage = () => {
         setSelectedEmergency(null);
     };
 
-    const handleSort = (column) => {
-        const isAsc = orderBy === column && order === 'asc';
-        setOrder(isAsc ? 'desc' : 'asc');
-        setOrderBy(column);
-    };
 
-    const handleOpenDelete = (id) => {
-        setDeleteId(id);
-        setDeleteOpen(true);
-    };
-
-    const handleCancelDelete = () => {
-        setDeleteOpen(false);
-        setDeleteId(null);
-    };
-
-    const handleConfirmDelete = async () => {
-        try {
-            await deleteBusEmergency(deleteId);
-            setDeleteOpen(false);
-            setDeleteId(null);
+    const handleDelete = async (id) => {
+        const ok = await confirm({
+            title: 'Eliminar emergencia',
+            message: 'Se eliminará la emergencia. Esta acción no se puede deshacer.',
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: () => deleteBusEmergency(id),
+            errorMessage: 'Error al eliminar la emergencia',
+        });
+        if (ok) {
+            notify.success('Emergencia eliminada');
             fetchEmergencies();
-        } catch (error) {
-            console.error('Error al eliminar emergencia:', error);
-            alert('Error al eliminar la emergencia');
         }
     };
 
@@ -345,51 +335,26 @@ const BusEmergenciesPage = () => {
                 />
 
                 {/* Estadísticas */}
-                <Grid container spacing={3} mb={3}>
-                    <Grid item xs={12} sm={6} md={4}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Total Emergencias
-                                </Typography>
-                                <Typography variant="h4" color="error">
-                                    {statistics.total}
-                                </Typography>
-                                <Typography variant="caption" color="textSecondary" display="block">
-                                    {statistics.colegios || 0} de colegios · {statistics.corporativos || 0} corporativos
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={4}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Con Ubicación GPS
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.withLocation}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={4}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Colegio con Más Emergencias
-                                </Typography>
-                                <Typography variant="h6">
-                                    {Object.keys(statistics.bySchool).length > 0
-                                        ? Object.keys(statistics.bySchool).reduce((a, b) => 
-                                            statistics.bySchool[a] > statistics.bySchool[b] ? a : b
-                                        )
-                                        : 'N/A'}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                </Grid>
+                <StatCardGrid columns={3}>
+                    <StatCard
+                        label="Total emergencias"
+                        value={statistics.total}
+                        icon={<WarningIcon />}
+                        valueColor="error"
+                        format="number"
+                        hint={`${statistics.colegios || 0} de colegios · ${statistics.corporativos || 0} corporativos`}
+                    />
+                    <StatCard label="Con ubicación GPS" value={statistics.withLocation} icon={<GpsIcon />} format="number" />
+                    <StatCard label="Colegio con más emergencias" icon={<SchoolIcon />}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>
+                            {Object.keys(statistics.bySchool).length > 0
+                                ? Object.keys(statistics.bySchool).reduce((a, b) => (
+                                    statistics.bySchool[a] > statistics.bySchool[b] ? a : b
+                                ))
+                                : 'N/A'}
+                        </Typography>
+                    </StatCard>
+                </StatCardGrid>
 
                 {/* Filtros */}
                 <FilterBar
@@ -408,65 +373,14 @@ const BusEmergenciesPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer sx={{ overflowX: 'auto' }}>
+                            <AppTableContainer>
                                 <Table sx={{ minWidth: 980 }}>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'fecha'}
-                                                    direction={orderBy === 'fecha' ? order : 'asc'}
-                                                    onClick={() => handleSort('fecha')}
-                                                >
-                                                    Fecha
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'mensaje'}
-                                                    direction={orderBy === 'mensaje' ? order : 'asc'}
-                                                    onClick={() => handleSort('mensaje')}
-                                                >
-                                                    Mensaje
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'placaBus'}
-                                                    direction={orderBy === 'placaBus' ? order : 'asc'}
-                                                    onClick={() => handleSort('placaBus')}
-                                                >
-                                                    Placa
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'numeroRuta'}
-                                                    direction={orderBy === 'numeroRuta' ? order : 'asc'}
-                                                    onClick={() => handleSort('numeroRuta')}
-                                                >
-                                                    Ruta
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'colegio'}
-                                                    direction={orderBy === 'colegio' ? order : 'asc'}
-                                                    onClick={() => handleSort('colegio')}
-                                                >
-                                                    Colegio/Corp.
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>Creado por</TableCell>
-                                            <TableCell align="center">Ubicación</TableCell>
-                                            <TableCell align="center">Acciones</TableCell>
-                                        </TableRow>
-                                    </TableHead>
+                                    <SortableTableHead columns={COLUMNS} {...table.sortProps} />
                                     <TableBody>
                                         {emergencies.map((emergency) => (
                                             <TableRow key={emergency.id}>
                                                 <TableCell>
-                                                    {moment(emergency.fecha).format('DD/MM/YYYY HH:mm')}
+                                                    {formatDateTime(emergency.fecha)}
                                                 </TableCell>
                                                 <TableCell>
                                                     <Tooltip title={emergency.mensaje || 'Sin mensaje'}>
@@ -512,26 +426,12 @@ const BusEmergenciesPage = () => {
                                                     )}
                                                 </TableCell>
                                                 <TableCell align="center">
-                                                    <Tooltip title="Ver detalles">
-                                                        <IconButton
-                                                            size="small"
-                                                            onClick={() => handleViewDetails(emergency.id)}
-                                                            color="primary"
-                                                        >
-                                                            <VisibilityIcon />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                    <PermissionGuard permission="emergencias-buses-eliminar">
-                                                        <Tooltip title="Eliminar">
-                                                            <IconButton
-                                                                size="small"
-                                                                onClick={() => handleOpenDelete(emergency.id)}
-                                                                color="error"
-                                                            >
-                                                                <DeleteIcon />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    </PermissionGuard>
+                                                    <RowActions
+                                                        actions={[
+                                                            { key: 'view', kind: 'view', color: 'primary', label: 'Ver detalles', icon: <VisibilityIcon fontSize="small" />, onClick: () => handleViewDetails(emergency.id) },
+                                                            { key: 'delete', kind: 'delete', label: 'Eliminar', icon: <DeleteIcon fontSize="small" />, permission: 'emergencias-buses-eliminar', onClick: () => handleDelete(emergency.id) },
+                                                        ]}
+                                                    />
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -544,164 +444,122 @@ const BusEmergenciesPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={totalCount}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                labelRowsPerPage="Registros por página:"
-                                labelDisplayedRows={({ from, to, count }) =>
-                                    `${from}-${to} de ${count !== -1 ? count : `más de ${to}`}`
-                                }
-                            />
+                            </AppTableContainer>
+                            <AppTablePagination count={totalCount} {...table.paginationProps} />
                         </>
                     )}
                 </Paper>
 
                 {/* Modal de Detalles */}
-                <Dialog
+                <AppDialog
                     open={detailsOpen}
                     onClose={handleCloseDetails}
-                    maxWidth="md"
-                    fullWidth
+                    title="Detalle de la emergencia"
+                    icon={<WarningIcon />}
+                    tone="danger"
+                    size="md"
+                    readOnly
                 >
-                    <DialogTitle>
-                        <WarningIcon color="error" sx={{ mr: 1, verticalAlign: 'middle' }} />
-                        Detalles de la Emergencia
-                    </DialogTitle>
-                    <DialogContent dividers>
-                        {loadingDetails ? (
-                            <Box display="flex" justifyContent="center" p={3}>
-                                <CircularProgress />
-                            </Box>
-                        ) : selectedEmergency ? (
-                            <Grid container spacing={2}>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Fecha y Hora
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {moment(selectedEmergency.fecha).format('DD/MM/YYYY HH:mm:ss')}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Creado por
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedEmergency.piloto?.name || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Placa del Bus
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedEmergency.placaBus || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Número de Ruta
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedEmergency.numeroRuta || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Colegio
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedEmergency.colegio || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                {selectedEmergency.corporacion && (
-                                    <Grid item xs={12} sm={6}>
-                                        <Typography variant="subtitle2" color="textSecondary">
-                                            Corporación
-                                        </Typography>
-                                        <Typography variant="body1" gutterBottom>
-                                            {selectedEmergency.corporacion}
-                                        </Typography>
-                                    </Grid>
-                                )}
-                                <Grid item xs={12}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Ubicación GPS
-                                    </Typography>
-                                    {selectedEmergency.latitud && selectedEmergency.longitud ? (
-                                        <Box sx={{ mt: 1 }}>
-                                            <Typography variant="body2" gutterBottom>
-                                                Latitud: {selectedEmergency.latitud}, Longitud: {selectedEmergency.longitud}
-                                            </Typography>
-                                            <Button
-                                                variant="contained"
-                                                color="success"
-                                                startIcon={<LocationOnIcon />}
-                                                onClick={() => openGoogleMaps(selectedEmergency.latitud, selectedEmergency.longitud)}
-                                            >
-                                                Ver en Google Maps
-                                            </Button>
-                                        </Box>
-                                    ) : (
-                                        <Chip 
-                                            icon={<LocationOffIcon />}
-                                            label="Sin ubicación GPS disponible" 
-                                            color="default"
-                                            sx={{ mt: 1 }}
-                                        />
-                                    )}
-                                </Grid>
-                                <Grid item xs={12}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Mensaje de Emergencia
-                                    </Typography>
-                                    <Paper sx={{ p: 2, mt: 1, backgroundColor: '#ffebee' }}>
-                                        <Typography variant="body1">
-                                            {selectedEmergency.mensaje || 'Emergencia generada'}
-                                        </Typography>
-                                    </Paper>
-                                </Grid>
+                    {loadingDetails ? (
+                        <Box display="flex" justifyContent="center" p={3}>
+                            <CircularProgress />
+                        </Box>
+                    ) : selectedEmergency ? (
+                        <Grid container spacing={2}>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Fecha y Hora
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {formatDateTime(selectedEmergency.fecha)}
+                                </Typography>
                             </Grid>
-                        ) : (
-                            <Typography align="center" color="textSecondary">
-                                No se pudieron cargar los detalles
-                            </Typography>
-                        )}
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCloseDetails} color="primary">
-                            Cerrar
-                        </Button>
-                    </DialogActions>
-                </Dialog>
-
-                {/* Modal de Confirmación de Eliminación */}
-                <Dialog
-                    open={deleteOpen}
-                    onClose={handleCancelDelete}
-                    maxWidth="xs"
-                    fullWidth
-                >
-                    <DialogTitle>Confirmar Eliminación</DialogTitle>
-                    <DialogContent>
-                        <Typography>
-                            ¿Estás seguro de que deseas eliminar esta emergencia? Esta acción no se puede deshacer.
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Creado por
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedEmergency.piloto?.name || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Placa del Bus
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedEmergency.placaBus || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Número de Ruta
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedEmergency.numeroRuta || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Colegio
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedEmergency.colegio || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            {selectedEmergency.corporacion && (
+                                <Grid item xs={12} sm={6}>
+                                    <Typography variant="subtitle2" color="textSecondary">
+                                        Corporación
+                                    </Typography>
+                                    <Typography variant="body1" gutterBottom>
+                                        {selectedEmergency.corporacion}
+                                    </Typography>
+                                </Grid>
+                            )}
+                            <Grid item xs={12}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Ubicación GPS
+                                </Typography>
+                                {selectedEmergency.latitud && selectedEmergency.longitud ? (
+                                    <Box sx={{ mt: 1 }}>
+                                        <Typography variant="body2" gutterBottom>
+                                            Latitud: {selectedEmergency.latitud}, Longitud: {selectedEmergency.longitud}
+                                        </Typography>
+                                        <Button
+                                            variant="contained"
+                                            color="success"
+                                            startIcon={<LocationOnIcon />}
+                                            onClick={() => openGoogleMaps(selectedEmergency.latitud, selectedEmergency.longitud)}
+                                        >
+                                            Ver en Google Maps
+                                        </Button>
+                                    </Box>
+                                ) : (
+                                    <Chip 
+                                        icon={<LocationOffIcon />}
+                                        label="Sin ubicación GPS disponible" 
+                                        color="default"
+                                        sx={{ mt: 1 }}
+                                    />
+                                )}
+                            </Grid>
+                            <Grid item xs={12}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Mensaje de Emergencia
+                                </Typography>
+                                <Paper sx={{ p: 2, mt: 1, backgroundColor: '#ffebee' }}>
+                                    <Typography variant="body1">
+                                        {selectedEmergency.mensaje || 'Emergencia generada'}
+                                    </Typography>
+                                </Paper>
+                            </Grid>
+                        </Grid>
+                    ) : (
+                        <Typography align="center" color="textSecondary">
+                            No se pudieron cargar los detalles
                         </Typography>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCancelDelete} color="inherit">
-                            Cancelar
-                        </Button>
-                        <Button onClick={handleConfirmDelete} color="error" variant="contained">
-                            Eliminar
-                        </Button>
-                    </DialogActions>
-                </Dialog>
+                    )}
+                </AppDialog>
             </PageContainer>
     );
 };

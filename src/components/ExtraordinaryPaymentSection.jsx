@@ -9,27 +9,40 @@ import {
     InputLabel,
     Select,
     Button,
-    TableContainer,
     Table,
-    TableHead,
     TableRow,
     TableCell,
     TableBody,
-    Snackbar,
-    Alert,
     Box,
-    TablePagination,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions
 } from '@mui/material';
 import Autocomplete from '@mui/material/Autocomplete';
 import api from '../utils/axiosConfig';
 import usePermissions from '../hooks/usePermissions';
 import moment from 'moment';
+import useNotify from '../hooks/useNotify';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from './table/AppTablePagination';
+import SortableTableHead from './table/SortableTableHead';
+import AppTableContainer from './table/AppTableContainer';
+import { formatDate } from '../utils/dateFormat';
+import { formatQ } from '../utils/currency';
+import { useCurrentDate } from '../hooks/useCurrentDate';
+import AppDialog from './dialogs/AppDialog';
+import MoneyField from './form/MoneyField';
+import EntitySelect from './form/EntitySelect';
+import { loadCatalog } from '../services/catalogStore';
+
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'colegio', label: 'Colegio' },
+    { id: 'familia', label: 'Familia' },
+    { id: 'tipo_de_evento', label: 'Tipo de Evento' },
+    { id: 'fecha', label: 'Fecha' },
+    { id: 'monto', label: 'Monto' },
+];
 
 const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', hideSchoolSelect = false, noWrapper = false }) => {
+    const { currentDate } = useCurrentDate();
     const { hasPermission } = usePermissions();
     // Estado del formulario de registro
     const [formData, setFormData] = useState({
@@ -57,17 +70,18 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
     // Estados para el listado de pagos extraordinarios
     const [extraPayments, setExtraPayments] = useState([]);
     const [filterStartDate, setFilterStartDate] = useState(
-        moment().startOf('month').format('YYYY-MM-DD')
+        moment(currentDate).startOf('month').format('YYYY-MM-DD')
     );
     const [filterEndDate, setFilterEndDate] = useState(
-        moment().endOf('month').format('YYYY-MM-DD')
+        moment(currentDate).endOf('month').format('YYYY-MM-DD')
     );
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
+    // Paginación (en el servidor)
+    const table = useTableState();
+    const { page, rowsPerPage, setPage } = table;
     const [totalExtraPayments, setTotalExtraPayments] = useState(0);
 
     // Snackbar para mensajes
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
 
     // Estados para la gestión de usuarios en el formulario
     const [userListArray, setUserListArray] = useState([]);
@@ -78,8 +92,8 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
     useEffect(() => {
         const fetchSchools = async () => {
             try {
-                const res = await api.get('/schools', { params: { includeArchived: true } });
-                setSchools(res.data.schools || []);
+                const schoolsList = await loadCatalog('schools', { includeArchived: true });
+                setSchools(schoolsList);
                 // If initialSchoolId provided, ensure it's set in formData
                 if (initialSchoolId) {
                     setFormData(prev => ({ ...prev, schoolId: initialSchoolId }));
@@ -152,12 +166,12 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
     // Envío del formulario para crear un pago extraordinario
     const handleSubmit = async () => {
         if (!formData.schoolId || !formData.amount) {
-            alert('Por favor complete los campos obligatorios: Colegio y Monto.');
+            notify.warning('Complete los campos obligatorios: Colegio y Monto');
             return;
         }
         try {
             const response = await api.post('/payments/extraordinary', formData);
-            setSnackbar({ open: true, message: response.data.message, severity: 'success' });
+            notify.success(response.data.message);
             onPaymentCreated?.(response.data.extraordinaryPayment);
             // Reiniciar formulario
             setFormData({
@@ -182,7 +196,7 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
             fetchExtraordinaryPayments(filterStartDate, filterEndDate, 0, rowsPerPage);
         } catch (error) {
             console.error('Error al crear pago extraordinario:', error);
-            setSnackbar({ open: true, message: 'Error al crear pago extraordinario', severity: 'error' });
+            notify.error('Error al crear pago extraordinario');
         }
     };
 
@@ -201,7 +215,7 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
             setTotalExtraPayments(res.data.total || 0);
         } catch (error) {
             console.error('Error al obtener pagos extraordinarios:', error);
-            setSnackbar({ open: true, message: 'Error al obtener pagos extraordinarios', severity: 'error' });
+            notify.error('Error al obtener pagos extraordinarios');
         }
     };
 
@@ -216,14 +230,6 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
         fetchExtraordinaryPayments(filterStartDate, filterEndDate, 0, rowsPerPage);
     };
 
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
 
     const content = (
         <>
@@ -232,21 +238,14 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
                 {/* Formulario de registro */}
                 <Grid item xs={12}>
                     {!hideSchoolSelect ? (
-                        <FormControl variant="outlined" fullWidth>
-                            <InputLabel>Colegio</InputLabel>
-                            <Select
-                                name="schoolId"
-                                label="Colegio"
-                                value={formData.schoolId}
-                                onChange={handleChange}
-                            >
-                                {schools.map((school) => (
-                                    <MenuItem key={school.id} value={school.id}>
-                                        {school.name}
-                                    </MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
+                        <EntitySelect
+                            entity="school"
+                            name="schoolId"
+                            size="medium"
+                            options={schools}
+                            value={formData.schoolId}
+                            onChange={(schoolId) => handleChange({ target: { name: 'schoolId', value: schoolId } })}
+                        />
                     ) : (
                         // Hidden input to keep backend compatibility
                         <input type="hidden" name="schoolId" value={formData.schoolId} />
@@ -457,10 +456,9 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
                     </>
                 )}
                 <Grid item xs={12}>
-                    <TextField
+                    <MoneyField
                         name="amount"
                         label="Monto"
-                        type="number"
                         variant="outlined"
                         fullWidth
                         value={formData.amount}
@@ -510,17 +508,9 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
                 {/* Tabla de pagos extraordinarios */}
                 <Box mt={2}>
                     {extraPayments.length > 0 ? (
-                        <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
+                        <AppTableContainer component={Paper}>
                             <Table size="small" sx={{ minWidth: 640 }}>
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell>Colegio</TableCell>
-                                        <TableCell>Familia</TableCell>
-                                        <TableCell>Tipo de Evento</TableCell>
-                                        <TableCell>Fecha</TableCell>
-                                        <TableCell>Monto</TableCell>
-                                    </TableRow>
-                                </TableHead>
+                                <SortableTableHead columns={COLUMNS} />
                                 <TableBody>
                                     {extraPayments.map((payment) => (
                                         <TableRow key={payment.id}>
@@ -532,70 +522,49 @@ const ExtraordinaryPaymentSection = ({ onPaymentCreated, initialSchoolId = '', h
                                             <TableCell>{payment.familyLastName}</TableCell>
                                             <TableCell>{payment.eventType || payment.customPaymentType || '-'}</TableCell>
                                             <TableCell>
-                                                {payment.eventDate ? moment(payment.eventDate).format('DD/MM/YYYY') : '-'}
+                                                {formatDate(payment.eventDate)}
                                             </TableCell>
-                                            <TableCell>Q {Number.parseFloat(payment.amount).toFixed(2)}</TableCell>
+                                            <TableCell>{formatQ(payment.amount)}</TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
                             </Table>
-                        </TableContainer>
+                        </AppTableContainer>
                     ) : (
                         <Typography variant="body2" color="textSecondary">
                             No se encontraron pagos extraordinarios para el período seleccionado.
                         </Typography>
                     )}
                 </Box>
-                <TablePagination
-                    component="div"
-                    count={totalExtraPayments}
-                    page={page}
-                    onPageChange={handleChangePage}
-                    rowsPerPage={rowsPerPage}
-                    onRowsPerPageChange={handleChangeRowsPerPage}
-                    rowsPerPageOptions={[5, 10, 25]}
-                    labelRowsPerPage="Filas por página"
-                />
+                <AppTablePagination count={totalExtraPayments} {...table.paginationProps} />
             </Box>
 
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} severity={snackbar.severity} sx={{ width: '100%' }}>
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
 
             {/* Diálogo para agregar usuario */}
-            <Dialog open={userDialogOpen} onClose={handleCloseUserDialog}>
-                <DialogTitle>Agregar Usuario</DialogTitle>
-                <DialogContent>
-                    <TextField
-                        autoFocus
-                        margin="dense"
-                        label="Nombre del Usuario"
-                        type="text"
-                        fullWidth
-                        value={newUserName}
-                        onChange={e => setNewUserName(e.target.value)}
-                        onKeyDown={e => {
-                            if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleAddUserToList();
-                            }
-                        }}
-                    />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseUserDialog}>Cancelar</Button>
-                    <Button onClick={handleAddUserToList} variant="contained">
-                        Agregar
-                    </Button>
-                </DialogActions>
-            </Dialog>
+            <AppDialog
+                open={userDialogOpen}
+                onClose={handleCloseUserDialog}
+                title="Agregar usuario"
+                size="sm"
+                onSubmit={handleAddUserToList}
+                submitLabel="Agregar"
+            >
+                <TextField
+                    autoFocus
+                    margin="dense"
+                    label="Nombre del Usuario"
+                    type="text"
+                    fullWidth
+                    value={newUserName}
+                    onChange={e => setNewUserName(e.target.value)}
+                    onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddUserToList();
+                        }
+                    }}
+                />
+            </AppDialog>
         </>
     );
 

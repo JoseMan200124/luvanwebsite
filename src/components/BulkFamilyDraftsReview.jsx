@@ -1,5 +1,4 @@
 import React from 'react';
-import moment from 'moment';
 import {
     Alert,
     AlertTitle,
@@ -34,8 +33,9 @@ import {
     hasPendingInactiveDecision,
     resolvePairing
 } from '../utils/bulkStudentPairing';
+import { formatDate } from '../utils/dateFormat';
+import { isEmail } from '../utils/validators';
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Solo ASCII imprimible, igual que el servidor (la base de datos ignora tildes al comparar correos).
 const ASCII_EMAIL_REGEX = /^[!-~]+$/;
 const MAX_BULK_STUDENTS = 4;
@@ -77,7 +77,7 @@ export const getDraftIssues = (draft, allowedGrades, allowedRouteTypes, password
     if (!draft.correo?.trim()) {
         issues.push({ field: 'correo', message: 'Falta el correo.' });
     }
-    else if (!EMAIL_REGEX.test(draft.correo.trim())) {
+    else if (!isEmail(draft.correo)) {
         issues.push({ field: 'correo', message: 'El correo no es válido.' });
     }
     else if (!ASCII_EMAIL_REGEX.test(draft.correo.trim())) {
@@ -696,7 +696,7 @@ const DraftCard = React.memo(({ draft, duplicateRows, allowedGrades, allowedRout
                                                     disabled={pairing.matchedIds.some((id, other) => other !== index && id === inactive.id)}
                                                 >
                                                     {inactive.fullName} ({inactive.grade}) — inactivo
-                                                    {inactive.inactivoDesde ? ` desde ${moment(inactive.inactivoDesde).format('DD/MM/YYYY')}` : ''}
+                                                    {inactive.inactivoDesde ? ` desde ${formatDate(inactive.inactivoDesde)}` : ''}
                                                 </MenuItem>
                                             ))}
                                         </Select>

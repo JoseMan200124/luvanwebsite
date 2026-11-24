@@ -1,5 +1,6 @@
 // utils/failureMappingForm.js
 import moment from 'moment-timezone';
+import { validate } from './validators';
 
 const TZ = 'America/Guatemala';
 const DIA = 'YYYY-MM-DD';
@@ -51,26 +52,23 @@ export const recordToForm = (r) => {
     };
 };
 
-export const validateForm = (f) => {
-    if (!f.clientId) {
-        return 'Selecciona el colegio o la corporación.';
+const checkDia = (value) => {
+    if (!moment(value).isValid()) {
+        return 'La fecha no es válida';
     }
-    if (!f.dia || !moment(f.dia).isValid()) {
-        return 'La fecha no es válida.';
+    if (moment(value).isAfter(moment.tz(TZ), 'day')) {
+        return 'No se puede registrar una fecha futura';
     }
-    if (moment(f.dia).isAfter(moment.tz(TZ), 'day')) {
-        return 'No se puede registrar una fecha futura.';
-    }
-    if (f.modo === 'falla') {
-        if (!String(f.placa || '').trim()) {
-            return 'Indica la placa del bus.';
-        }
-        if (f.tipoFalla === 'otro' && !f.otroFallaDetalle.trim()) {
-            return 'Detalla el tipo de falla "otro".';
-        }
-    }
-    return '';
+    return null;
 };
+
+// Errores por campo ({ campo: mensaje }, vacío si el formulario es válido).
+export const validateForm = (f) => validate(f, {
+    clientId: ['required'],
+    dia: ['required', checkDia],
+    ...(f.modo === 'falla' ? { placa: ['required'] } : {}),
+    ...(f.modo === 'falla' && f.tipoFalla === 'otro' ? { otroFallaDetalle: ['required'] } : {}),
+});
 
 const camposFalla = (f) => ({
     tipo: f.tipo,

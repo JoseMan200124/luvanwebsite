@@ -1,37 +1,24 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import {
     Typography,
     Table,
     TableBody,
     TableCell,
-    TableHead,
     TableRow,
-    Button,
     Paper,
-    TableContainer,
-    TablePagination,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     DialogContentText,
     CircularProgress,
     Grid,
     Box,
     // Link,
-    useMediaQuery,
-    useTheme,
     Chip,
-    TableSortLabel,
     Checkbox,
     FormControl,
     FormHelperText,
     InputLabel,
     Select,
     MenuItem,
-    TextField,
-    Tooltip,
-    IconButton
+    TextField
 } from '@mui/material';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
@@ -42,17 +29,31 @@ import { MODULE_GROUPS } from '../components/layout/moduleGroups';
 import { matchSearchTokens } from '../utils/clientFilter';
 import { Autocomplete } from '@mui/material';
 import { ListItemText } from '@mui/material';
-import { Snackbar, Alert } from '@mui/material';
-import { Edit, Delete, Add, FileUpload, Lock } from '@mui/icons-material';
-import styled from 'styled-components';
+import { Edit, Delete, Add, Lock, PersonAdd as PersonAddIcon, FileDownload as FileDownloadIcon } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
-import * as XLSX from 'xlsx';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
-import { showDuplicateEmailFromError } from '../utils/duplicateEmailHandler';
-import PermissionGuard from '../components/PermissionGuard';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
+import { validate, hasErrors, focusFirstError, clearError } from '../utils/validators';
+import useTableState from '../hooks/useTableState';
+import useIsMobile from '../hooks/useIsMobile';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import { MobileCard, MobileField } from '../components/table/MobileCard';
+import RowActions from '../components/table/RowActions';
+import { sortRows } from '../utils/tableSort';
 import usePermissions from '../hooks/usePermissions';
 import useManageableRoles from '../hooks/useManageableRoles';
+import { formatDateTime } from '../utils/dateFormat';
+import AppDialog from '../components/dialogs/AppDialog';
+import EntitySelect from '../components/form/EntitySelect';
+import BulkUploadDialog from '../components/dialogs/BulkUploadDialog';
+import { buildWorkbook, downloadWorkbook } from '../utils/excel';
+import { buildFileName } from '../utils/fileName';
+import { todayForFileName } from '../utils/download';
+import { loadCatalog, invalidateCatalog } from '../services/catalogStore';
 
 // Fallback static role list (used as initial value, backend will provide authoritative list)
 const roleOptionsStatic = [
@@ -66,7 +67,7 @@ const roleOptionsStatic = [
 ];
 
 // Roles con hoja en la plantilla de carga masiva (nombre de hoja → roleId). Cada hoja de
-// handleDownloadUserTemplate se busca aquí por su nombre: solo se generan las de roles que el
+// buildUserTemplate se busca aquí por su nombre: solo se generan las de roles que el
 // actor puede gestionar, y una hoja cuyo nombre no esté en esta lista no se genera.
 const BULK_SHEET_ROLE_IDS = Object.freeze({
     Gestor: 1,
@@ -81,49 +82,16 @@ const BULK_SHEET_ROLE_IDS = Object.freeze({
 // escolar. Must mirror `normalizeSchoolIdentityForStaffScope` in the backend.
 const normalizeSchoolName = (value) => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
 
-/* ================== Responsive Table & Mobile Cards =================== */
-// Contenedor principal de la página
-const ResponsiveTableHead = styled(TableHead)`
-    @media (max-width: 600px) {
-        display: none;
-    }
-`;
-const ResponsiveTableCell = styled(TableCell)`
-    @media (max-width: 600px) {
-        display: block;
-        text-align: right;
-        position: relative;
-        padding-left: 50%;
-        white-space: nowrap;
-        &:before {
-            content: attr(data-label);
-            position: absolute;
-            left: 0;
-            width: 45%;
-            padding-left: 15px;
-            font-weight: bold;
-            text-align: left;
-            white-space: nowrap;
-        }
-    }
-`;
-const MobileCard = styled(Paper)`
-    padding: 16px;
-    margin-bottom: 16px;
-`;
-const MobileField = styled(Box)`
-    margin-bottom: 8px;
-    display: flex;
-    flex-direction: column;
-`;
-const MobileLabel = styled(Typography)`
-    font-weight: bold;
-    font-size: 0.875rem;
-    color: #555;
-`;
-const MobileValue = styled(Typography)`
-    font-size: 1rem;
-`;
+// Columnas de la tabla de usuarios
+const COLUMNS = [
+    { id: 'familyLastName', label: 'Apellido Familia', sortable: true },
+    { id: 'name', label: 'Nombre', sortable: true },
+    { id: 'email', label: 'Correo', sortable: true },
+    { id: 'role', label: 'Rol', sortable: true },
+    { id: 'client', label: 'Cliente', sortable: true },
+    { id: 'updatedAt', label: 'Actualizado el', sortable: true },
+    { id: 'actions', label: 'Acciones', align: 'center' },
+];
 
 // Helper para saber si un usuario es "nuevo" (basado en fecha de creación)
 function isUserNew(user) {
@@ -136,48 +104,10 @@ function isUserNew(user) {
     return diffDays <= 21;
 }
 
-function descendingComparator(a, b, orderBy) {
-    const aValue = getFieldValue(a, orderBy);
-    const bValue = getFieldValue(b, orderBy);
-    if (aValue == null && bValue == null) {
-        return 0;
-    }
-    if (aValue == null) {
-        return 1;
-    }
-    if (bValue == null) {
-        return -1;
-    }
-    if (typeof aValue === 'string' && typeof bValue === 'string') {
-        return bValue.localeCompare(aValue);
-    }
-    if (bValue < aValue) {
-        return -1;
-    }
-    if (bValue > aValue) {
-        return 1;
-    }
-    return 0;
-}
-function getComparator(order, orderBy) {
-    return order === 'desc'
-        ? (a, b) => descendingComparator(a, b, orderBy)
-        : (a, b) => -descendingComparator(a, b, orderBy);
-}
-
-function stableSort(array, comparator) {
-    const stabilizedThis = array.map((el, index) => [el, index]);
-    stabilizedThis.sort((a, b) => {
-        const order = comparator(a[0], b[0]);
-        if (order !== 0) {
-            return order;
-        }
-        return a[1] - b[1];
-    });
-    return stabilizedThis.map((el) => el[0]);
-}
 function getFieldValue(user, field) {
     switch (field) {
+        case 'familyLastName':
+            return user.lastName;
         case 'name':
             return user.name;
         case 'email':
@@ -199,8 +129,7 @@ function getFieldValue(user, field) {
 const NO_AFFILIATION_OPTION = { type: 'none', id: 'none', label: 'Sin afiliación', groupLabel: 'Opciones' };
 
 const RolesManagementPage = () => {
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
     useContext(AuthContext);
     const { hasPermission } = usePermissions();
     const { loaded: manageableRolesLoaded, canManageRoleId, isSelf, canManageUser, canEditUser } = useManageableRoles();
@@ -225,13 +154,11 @@ const RolesManagementPage = () => {
     // Se elimina la gestión de contrato en el diálogo de edición
     // const [selectedContractUuid, setSelectedContractUuid] = useState('');
 
-    const [snackbar, setSnackbar] = useState({
-        open: false,
-        message: '',
-        severity: 'success'
-    });
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
+    const notify = useNotify();
+    const confirm = useConfirm();
+    // Paginación en el servidor; el orden se aplica sobre la página actual
+    const table = useTableState();
+    const { page, rowsPerPage } = table;
     const [totalUsers, setTotalUsers] = useState(0);
     const [loading, setLoading] = useState(false);
 
@@ -242,11 +169,24 @@ const RolesManagementPage = () => {
     const [allMonitoras, setAllMonitoras] = useState([]);
     const [selectedAuxiliarSchools, setSelectedAuxiliarSchools] = useState([]);
     const [selectedAuxiliarCorporations, setSelectedAuxiliarCorporations] = useState([]);
+    const [userErrors, setUserErrors] = useState({});
+    const [savingUser, setSavingUser] = useState(false);
+    const userInitialRef = useRef('');
+    const userFormSnapshot = JSON.stringify([
+        selectedUser,
+        selectedSupervisorSchools,
+        selectedSupervisorCorporations,
+        selectedAuxiliarSchools,
+        selectedAuxiliarCorporations,
+    ]);
+    useEffect(() => {
+        if (openDialog) {
+            userInitialRef.current = userFormSnapshot;
+            setUserErrors({});
+        }
+    }, [openDialog]);
 
-    const [openBulkDialog, setOpenBulkDialog] = useState(false);
-    const [bulkFile, setBulkFile] = useState(null);
-    const [bulkResults, setBulkResults] = useState(null);
-    const [bulkLoading, setBulkLoading] = useState(false);
+    const [bulkOpen, setBulkOpen] = useState(false);
 
     // bulk editors removed
 
@@ -274,7 +214,7 @@ const RolesManagementPage = () => {
             }),
             F.client({ schools, corporations, extraOptions: [NO_AFFILIATION_OPTION], schoolsGroupLabel: 'Colegios' }),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const { search: searchQuery, roleId: roleFilter, client: clientFilter } = pageFilters.applied;
 
@@ -298,16 +238,6 @@ const RolesManagementPage = () => {
         return rolesWithoutSchoolOrCorp.has(String(r.name).toLowerCase());
     };
 
-    // Orden
-    const [order, setOrder] = useState('asc');
-    const [orderBy, setOrderBy] = useState('');
-
-    const handleRequestSort = (property) => {
-        const isAsc = orderBy === property && order === 'asc';
-        setOrder(isAsc ? 'desc' : 'asc');
-        setOrderBy(property);
-    };
-
     useEffect(() => {
         // Inicializar datos
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -329,8 +259,7 @@ const RolesManagementPage = () => {
             return;
         }
         try {
-            const resp = await api.get('/users/pilots', { skipSchoolCycleContext: true });
-            setAllPilots(resp.data.users || []);
+            setAllPilots(await loadCatalog('pilots', {}, { skipSchoolCycleContext: true }));
         } catch (error) {
             console.error('[fetchAllPilots] Error:', error);
             setAllPilots([]);
@@ -343,8 +272,7 @@ const RolesManagementPage = () => {
             return;
         }
         try {
-            const resp = await api.get('/users/monitors', { skipSchoolCycleContext: true });
-            setAllMonitoras(resp.data.users || []);
+            setAllMonitoras(await loadCatalog('monitors', {}, { skipSchoolCycleContext: true }));
         } catch (error) {
             console.error('[fetchAllMonitoras] Error:', error);
             setAllMonitoras([]);
@@ -395,7 +323,7 @@ const RolesManagementPage = () => {
             setTotalUsers(Number(data.count || 0));
         } catch (err) {
             console.error('[fetchUsers] Error:', err);
-            setSnackbar({ open: true, message: 'Error al obtener usuarios', severity: 'error' });
+            notify.error('Error al obtener usuarios');
         }
         setLoading(false);
     };
@@ -413,11 +341,10 @@ const RolesManagementPage = () => {
 
     const fetchSchools = async () => {
         try {
-            const resp = await api.get('/schools', { params: { allCycles: true, latestPerSchool: true }, skipSchoolCycleContext: true });
-            setSchools(resp.data.schools || []);
+            setSchools(await loadCatalog('schools', { allCycles: true, latestPerSchool: true }, { skipSchoolCycleContext: true }));
         } catch (err) {
             console.error('[fetchSchools] Error:', err);
-            setSnackbar({ open: true, message: 'Error al obtener colegios', severity: 'error' });
+            notify.error('Error al obtener colegios');
         }
     };
 
@@ -435,13 +362,13 @@ const RolesManagementPage = () => {
 
     const fetchAssignableSchools = async () => {
         try {
-            const [latestResp, allResp] = await Promise.all([
-                api.get('/schools', { params: { latestPerSchool: true }, skipSchoolCycleContext: true }),
-                api.get('/schools', { params: { allCycles: true }, skipSchoolCycleContext: true })
+            const [latestSchools, allSchools] = await Promise.all([
+                loadCatalog('schools', { latestPerSchool: true }, { skipSchoolCycleContext: true }),
+                loadCatalog('schools', { allCycles: true }, { skipSchoolCycleContext: true })
             ]);
 
             const canonicalByName = new Map();
-            for (const school of latestResp.data.schools || []) {
+            for (const school of latestSchools) {
                 const key = normalizeSchoolName(school.name);
                 const current = canonicalByName.get(key);
                 if (!current || Number(school.id) > Number(current.id)) {
@@ -455,7 +382,7 @@ const RolesManagementPage = () => {
             // Maps every per-cycle school row to the canonical id shown in the selector,
             // so data keyed by a sibling record (e.g. a monitora's school) still resolves.
             const canonicalBySchoolId = new Map();
-            for (const school of allResp.data.schools || []) {
+            for (const school of allSchools) {
                 const canonical = canonicalByName.get(normalizeSchoolName(school.name));
                 if (canonical) {
                     canonicalBySchoolId.set(Number(school.id), Number(canonical.id));
@@ -464,17 +391,16 @@ const RolesManagementPage = () => {
             setCanonicalSchoolIdById(canonicalBySchoolId);
         } catch (err) {
             console.error('[fetchAssignableSchools] Error:', err);
-            setSnackbar({ open: true, message: 'Error al obtener colegios asignables', severity: 'error' });
+            notify.error('Error al obtener colegios asignables');
         }
     };
 
     const fetchCorporations = async () => {
         try {
-            const resp = await api.get('/corporations', { params: { allCycles: true }, skipSchoolCycleContext: true });
-            setCorporations(resp.data.corporations || []);
+            setCorporations(await loadCatalog('corporations', { allCycles: true }, { skipSchoolCycleContext: true }));
         } catch (err) {
             console.error('[fetchCorporations] Error:', err);
-            setSnackbar({ open: true, message: 'Error al obtener corporaciones', severity: 'error' });
+            notify.error('Error al obtener corporaciones');
         }
     };
 
@@ -572,17 +498,21 @@ const RolesManagementPage = () => {
         setSelectedAuxiliarCorporations([]);
     };
 
-    const handleDeleteClick = async (userId) => {
-        if (window.confirm('¿Estás seguro de que deseas eliminar este usuario de forma PERMANENTE? Esta acción no se puede deshacer.')) {
-            try {
-                // Soft-delete endpoint (logical delete)
-                await api.delete(`/users/${userId}`);
-                setSnackbar({ open: true, message: 'Usuario eliminado', severity: 'success' });
-                fetchUsers();
-            } catch (err) {
-                console.error('[handleDeleteClick] Error:', err);
-                setSnackbar({ open: true, message: err?.response?.data?.message || 'Error al eliminar usuario', severity: 'error' });
-            }
+    const handleDeleteClick = async (user) => {
+        const ok = await confirm({
+            title: 'Eliminar usuario',
+            message: `Se eliminará de forma permanente a ${user.name || user.email || 'este usuario'}. Esta acción no se puede deshacer.`,
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            // Soft-delete endpoint (logical delete)
+            onConfirm: () => api.delete(`/users/${user.id}`),
+            errorMessage: 'Error al eliminar el usuario',
+        });
+        if (ok) {
+            notify.success('Usuario eliminado');
+            invalidateCatalog('pilots');
+            invalidateCatalog('monitors');
+            fetchUsers();
         }
     };
 
@@ -595,50 +525,39 @@ const RolesManagementPage = () => {
         const puedeEliminar = canManageUser(user);
         if (!puedeEditar && !puedeEliminar) {
             return (
-                <Tooltip
-                    title={user.Role?.name
-                        ? `No tienes permitido gestionar usuarios con rol ${user.Role.name}`
-                        : 'No tienes permitido gestionar a este usuario'}
-                >
-                    <span>
-                        <IconButton disabled>
-                            <Lock fontSize="small" />
-                        </IconButton>
-                    </span>
-                </Tooltip>
+                <RowActions
+                    actions={[{
+                        key: 'locked',
+                        kind: 'other',
+                        label: 'Sin permiso',
+                        icon: <Lock fontSize="small" />,
+                        disabled: true,
+                        tooltip: user.Role?.name
+                            ? `No tienes permitido gestionar usuarios con rol ${user.Role.name}`
+                            : 'No tienes permitido gestionar a este usuario',
+                    }]}
+                />
             );
         }
         return (
-            <>
-                {puedeEditar && (
-                    <PermissionGuard permission="usuarios-editar">
-                        <Tooltip title="Editar">
-                            <IconButton onClick={() => handleEditClick(user)}>
-                                <Edit />
-                            </IconButton>
-                        </Tooltip>
-                    </PermissionGuard>
-                )}
-                {puedeEliminar && (
-                    <PermissionGuard permission="usuarios-eliminar">
-                        <Tooltip title="Eliminar">
-                            <IconButton onClick={() => handleDeleteClick(user.id)}>
-                                <Delete />
-                            </IconButton>
-                        </Tooltip>
-                    </PermissionGuard>
-                )}
-            </>
+            <RowActions
+                actions={[
+                    puedeEditar && { key: 'edit', kind: 'edit', label: 'Editar', icon: <Edit fontSize="small" />, permission: 'usuarios-editar', onClick: () => handleEditClick(user) },
+                    puedeEliminar && { key: 'delete', kind: 'delete', label: 'Eliminar', icon: <Delete fontSize="small" />, permission: 'usuarios-eliminar', onClick: () => handleDeleteClick(user) },
+                ]}
+            />
         );
     };
 
-
     const handleUserChange = (e) => {
-        setSelectedUser(prev => ({ ...prev, [e.target.name]: e.target.value }));
+        const { name, value } = e.target;
+        setUserErrors((prev) => clearError(prev, name));
+        setSelectedUser(prev => ({ ...prev, [name]: value }));
     };
 
     const handleRoleIdChange = (e) => {
         const newRoleId = Number(e.target.value);
+        setUserErrors((prev) => clearError(prev, 'roleId'));
         // If the selected role should not have school/corporation, clear them when changing
         if (roleDisablesSchoolOrCorp(newRoleId)) {
             setSelectedUser(prev => ({ ...prev, roleId: newRoleId, school: '', corporationId: '' }));
@@ -651,6 +570,18 @@ const RolesManagementPage = () => {
     // Horarios de parada gestionados por el modal por alumno; helpers removidos
 
     const handleSaveUser = async () => {
+        const found = validate(selectedUser, {
+            name: ['required'],
+            email: ['required', 'email'],
+            ...(selectedUser?.id ? {} : { password: ['required'] }),
+            ...(isSelfEdit ? {} : { roleId: ['required'] }),
+        });
+        setUserErrors(found);
+        if (hasErrors(found)) {
+            focusFirstError(found);
+            return;
+        }
+        setSavingUser(true);
         try {
             if (selectedUser.id && isSelf(selectedUser)) {
                 const selfPayload = { name: selectedUser.name, email: selectedUser.email };
@@ -661,7 +592,7 @@ const RolesManagementPage = () => {
                     selfPayload.phoneNumber = selectedUser.phoneNumber;
                 }
                 await api.put(`/users/${selectedUser.id}`, selfPayload);
-                setSnackbar({ open: true, message: 'Tus datos se actualizaron exitosamente', severity: 'success' });
+                notify.success('Tus datos se actualizaron');
                 fetchUsers();
                 handleDialogClose();
                 return;
@@ -722,27 +653,22 @@ const RolesManagementPage = () => {
                 const releasedMessage = releasedBuses.length > 0
                     ? `. Se desasignó ${releasedBuses.length === 1 ? 'del bus' : 'de los buses'} ${releasedPlates}`
                     : '';
-                setSnackbar({ open: true, message: `Usuario actualizado exitosamente${releasedMessage}`, severity: 'success' });
+                notify.success(`Usuario actualizado exitosamente${releasedMessage}`);
             } else {
                 const { id, ...payloadForPost } = payload;
                 await api.post('/users', payloadForPost);
-                setSnackbar({ open: true, message: 'Usuario creado exitosamente', severity: 'success' });
+                notify.success('Usuario creado');
             }
 
-            // Refresca y cierra
+            invalidateCatalog('pilots');
+            invalidateCatalog('monitors');
             fetchUsers();
             handleDialogClose();
         } catch (err) {
-            try {
-                if (showDuplicateEmailFromError(err, setSnackbar)) {
-                    return;
-                }
-            } catch (e) {
-                // ignore and fallback to generic handling
-            }
-
             console.error('[handleSaveUser] Error:', err);
-            setSnackbar({ open: true, message: err?.response?.data?.message || 'Error al guardar usuario', severity: 'error' });
+            notify.fromError(err, 'Error al guardar usuario');
+        } finally {
+            setSavingUser(false);
         }
     };
 
@@ -800,66 +726,10 @@ const RolesManagementPage = () => {
     });
     // --- FIN MODIFICACIÓN ---
 
-    const sortedUsers = stableSort(filteredUsers, getComparator(order, orderBy));
+    const sortedUsers = sortRows(filteredUsers, { orderBy: table.orderBy, order: table.order, getValue: getFieldValue });
     // Server provides pagination; `users` already contains the current page.
     // Keep sorting client-side for the current page only.
     const displayedUsers = sortedUsers;
-
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
-
-    const handleOpenBulkDialog = () => {
-        setBulkFile(null);
-        setBulkResults(null);
-        setOpenBulkDialog(true);
-    };
-
-    const handleCloseBulkDialog = () => {
-        setOpenBulkDialog(false);
-    };
-
-    const handleFileChange = (e) => {
-        const file = e.target.files[0];
-        setBulkFile(file);
-    };
-
-    const handleUploadBulk = async () => {
-        if (!bulkFile) {
-            return;
-        }
-        setBulkLoading(true);
-        setBulkResults(null);
-        const formData = new FormData();
-        formData.append('file', bulkFile);
-        try {
-            const resp = await api.post('/users/bulk-upload', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
-            setBulkResults(resp.data);
-            fetchUsers();
-        } catch (error) {
-            console.error('[handleUploadBulk] Error:', error);
-            setSnackbar({ open: true, message: 'Ocurrió un error al procesar la carga masiva', severity: 'error' });
-        }
-        setBulkLoading(false);
-    };
-
-    const getFormattedDateTime = () => {
-        const currentDate = new Date();
-        const year = currentDate.getFullYear();
-        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-        const day = String(currentDate.getDate()).padStart(2, '0');
-        const hours = String(currentDate.getHours()).padStart(2, '0');
-        const minutes = String(currentDate.getMinutes()).padStart(2, '0');
-        const seconds = String(currentDate.getSeconds()).padStart(2, '0');
-        return `${year}${month}${day}_${hours}${minutes}${seconds}`;
-    };
-        
 
         
 
@@ -876,14 +746,14 @@ const RolesManagementPage = () => {
             if (category === 'Colegios') {
                 const schoolId = clientObj ? clientObj.id : null;
                 if (!schoolId) {
-                    setSnackbar({ open: true, message: 'Por favor selecciona un colegio para descargar.', severity: 'warning' });
+                    notify.warning('Por favor selecciona un colegio para descargar');
                     return;
                 }
                 baseParams.schoolId = schoolId;
             } else if (category === 'Corporaciones') {
                 const corpId = clientObj ? clientObj.id : null;
                 if (!corpId) {
-                    setSnackbar({ open: true, message: 'Por favor selecciona una corporación para descargar.', severity: 'warning' });
+                    notify.warning('Por favor selecciona una corporación para descargar');
                     return;
                 }
                 baseParams.corporationId = corpId;
@@ -910,21 +780,21 @@ const RolesManagementPage = () => {
 
             // Filtrar según categoría seleccionada
             if (!category) {
-                setSnackbar({ open: true, message: 'Por favor selecciona una opción para descargar.', severity: 'warning' });
+                notify.warning('Por favor selecciona una opción para descargar');
                 return;
             }
 
             if (category === 'Colegios') {
                 const schoolId = clientObj ? clientObj.id : null;
                 if (!schoolId) {
-                    setSnackbar({ open: true, message: 'Por favor selecciona un colegio para descargar.', severity: 'warning' });
+                    notify.warning('Por favor selecciona un colegio para descargar');
                     return;
                 }
                 allUsers = allUsers.filter(u => String(u.school) === String(schoolId));
             } else if (category === 'Corporaciones') {
                 const corpId = clientObj ? clientObj.id : null;
                 if (!corpId) {
-                    setSnackbar({ open: true, message: 'Por favor selecciona una corporación para descargar.', severity: 'warning' });
+                    notify.warning('Por favor selecciona una corporación para descargar');
                     return;
                 }
                 allUsers = allUsers.filter(u => String(u.corporationId || u.corporation?.id || '') === String(corpId));
@@ -995,45 +865,24 @@ const RolesManagementPage = () => {
                 ];
                 data.push(row);
             });
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.aoa_to_sheet(data);
-
-            // Auto-ajustar ancho de columnas
-            const colWidths = headers.map((header, headerIndex) => {
-                let maxWidth = header.length;
-                data.slice(1).forEach(row => {
-                    if (row[headerIndex] !== undefined) {
-                        const cellLength = String(row[headerIndex] || "").length;
-                        if (cellLength > maxWidth) {
-                            maxWidth = cellLength;
-                        }
-                    }
-                });
-                return { wch: Math.min(Math.max(maxWidth, 10), 50) };
-            });
-            ws['!cols'] = colWidths;
-            XLSX.utils.book_append_sheet(wb, ws, "Usuarios");
-            const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-            const blob = new Blob([wbout], { type: "application/octet-stream" });
-            const fileName = `usuarios_${getFormattedDateTime()}.xlsx`;
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            const clientName = clientObj?.name || (category === 'Sin afiliación' ? 'sin afiliacion' : '');
+            await downloadWorkbook(
+                buildWorkbook({
+                    sheets: [{
+                        name: 'Usuarios',
+                        columns: headers.map((header, index) => ({ header, key: `c${index}` })),
+                        rows: data.slice(1),
+                    }],
+                }),
+                buildFileName({ object: 'usuarios', client: clientName, date: todayForFileName(), extension: 'xlsx' })
+            );
         } catch (error) {
-            setSnackbar({
-                open: true,
-                message: 'Error al descargar todos los usuarios',
-                severity: 'error'
-            });
+            notify.fromError(error, 'Error al descargar todos los usuarios');
         }
     };
 
-    const handleDownloadUserTemplate = () => {
+    // Plantilla de la carga masiva: hoja Listas y una hoja por rol que el actor puede gestionar.
+    const buildUserTemplate = () => {
         // 1. Prepara listas de referencia. `assignableSchools` (no `schools`) porque no debe
         // verse afectada por el filtro de Ciclo Escolar de la página: es una lista fija,
         // un id canónico por colegio, cargada una sola vez al montar.
@@ -1165,38 +1014,28 @@ const RolesManagementPage = () => {
                 corporaciones[i]?.[0] ?? "", corporaciones[i]?.[1] ?? ""
             ]);
         }
-
-        const wsListas = XLSX.utils.aoa_to_sheet(wsListasData);
-
-        // Ajusta el ancho de cada columna de la hoja Listas
-        wsListas['!cols'] = [
-            { wch: Math.max("Colegios (ID)".length + 2, 15) },
-            { wch: Math.max("Colegios (Nombre)".length + 2, 20) },
-            { wch: 2 },
-            { wch: Math.max("Corporaciones (ID)".length + 2, 15) },
-            { wch: Math.max("Corporaciones (Nombre)".length + 2, 20) }
+        const [listasHeaders, ...listasRows] = wsListasData;
+        const listasWidths = [
+            Math.max("Colegios (ID)".length + 2, 15),
+            Math.max("Colegios (Nombre)".length + 2, 20),
+            2,
+            Math.max("Corporaciones (ID)".length + 2, 15),
+            Math.max("Corporaciones (Nombre)".length + 2, 20)
         ];
-
-        // 4. Generar el archivo (Listas primero, para que el usuario vea los IDs de referencia al abrir)
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, wsListas, "Listas");
-        sheets.filter(sheet => canManageRoleId(BULK_SHEET_ROLE_IDS[sheet.name])).forEach(sheet => {
-            const ws = XLSX.utils.aoa_to_sheet([sheet.headers, sheet.example]);
-            ws['!cols'] = sheet.headers.map(h => ({ wch: Math.max(h.length + 2, 15) }));
-            XLSX.utils.book_append_sheet(wb, ws, sheet.name);
+        return buildWorkbook({
+            sheets: [
+                {
+                    name: 'Listas',
+                    columns: listasHeaders.map((header, index) => ({ header, key: `c${index}`, width: listasWidths[index] })),
+                    rows: listasRows,
+                },
+                ...sheets.filter(sheet => canManageRoleId(BULK_SHEET_ROLE_IDS[sheet.name])).map(sheet => ({
+                    name: sheet.name,
+                    columns: sheet.headers.map((header, index) => ({ header, key: `c${index}`, width: Math.max(header.length + 2, 15) })),
+                    rows: [sheet.example],
+                })),
+            ],
         });
-
-        const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-        const blob = new Blob([wbout], { type: "application/octet-stream" });
-        const fileName = `plantilla_usuarios_${getFormattedDateTime()}.xlsx`;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
     };
 
     return (
@@ -1206,7 +1045,7 @@ const RolesManagementPage = () => {
                 title="Gestión de Usuarios y Roles"
                 actions={[
                     { key: 'download', label: 'Descargar todos', group: 'download', onClick: () => setDownloadAllDialogOpen(true) },
-                    puedeCargaMasiva && { key: 'bulk', label: 'Carga masiva', group: 'upload', permission: 'usuarios-carga-masiva', onClick: handleOpenBulkDialog },
+                    puedeCargaMasiva && { key: 'bulk', label: 'Carga masiva', group: 'upload', permission: 'usuarios-carga-masiva', onClick: () => setBulkOpen(true) },
                     puedeCrearAlgunRol && { key: 'add', label: 'Añadir usuario', icon: <Add />, primary: true, permission: 'usuarios-crear', onClick: handleAddUser },
                 ]}
             />
@@ -1221,194 +1060,58 @@ const RolesManagementPage = () => {
                     {isMobile ? (
                         <>
                             {displayedUsers.map((user) => (
-                                <MobileCard key={user.id} elevation={3}>
-                                    <Grid container spacing={1}>
-                                        <Grid item xs={12}>
-                                            <MobileField>
-                                                <MobileLabel>Apellido Familia</MobileLabel>
-                                                <MobileValue>{user.lastName || '—'}</MobileValue>
-                                            </MobileField>
-                                        </Grid>
-                                        <Grid item xs={12}>
-                                            <MobileField>
-                                                <MobileLabel>Nombre</MobileLabel>
-                                                <MobileValue>
-                                                    {user.name}{' '}
-                                                    {isUserNew(user) && (
-                                                        <Chip label="NUEVO" color="success" size="small" sx={{ ml: 1 }} />
-                                                    )}
-                                                </MobileValue>
-                                            </MobileField>
-                                        </Grid>
-                                        <Grid item xs={12}>
-                                            <MobileField>
-                                                <MobileLabel>Correo</MobileLabel>
-                                                <MobileValue>{user.email}</MobileValue>
-                                            </MobileField>
-                                        </Grid>
-                                        <Grid item xs={12}>
-                                            <MobileField>
-                                                <MobileLabel>Rol</MobileLabel>
-                                                <MobileValue>{user.Role ? user.Role.name : '—'}</MobileValue>
-                                            </MobileField>
-                                        </Grid>
-                                        <Grid item xs={12}>
-                                            <MobileField>
-                                                <MobileLabel>Cliente</MobileLabel>
-                                                <MobileValue>{user.School ? user.School.name : (user.corporation ? user.corporation.name : '—')}</MobileValue>
-                                            </MobileField>
-                                        </Grid>
-                                        <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center', gap: 1, mt: 1 }}>
-                                            {renderUserActions(user)}
-                                        </Grid>
-                                    </Grid>
+                                <MobileCard key={user.id} elevation={3} actions={renderUserActions(user)}>
+                                    <MobileField label="Apellido Familia">{user.lastName || '—'}</MobileField>
+                                    <MobileField label="Nombre">
+                                        {user.name}{' '}
+                                        {isUserNew(user) && (
+                                            <Chip label="NUEVO" color="success" size="small" sx={{ ml: 1 }} />
+                                        )}
+                                    </MobileField>
+                                    <MobileField label="Correo">{user.email}</MobileField>
+                                    <MobileField label="Rol">{user.Role ? user.Role.name : '—'}</MobileField>
+                                    <MobileField label="Cliente">{user.School ? user.School.name : (user.corporation ? user.corporation.name : '—')}</MobileField>
                                 </MobileCard>
                             ))}
-                            <TablePagination
-                                component="div"
-                                count={totalUsers}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                rowsPerPageOptions={[5, 10, 25]}
-                                labelRowsPerPage="Filas por página"
-                            />
+                            <AppTablePagination count={totalUsers} {...table.paginationProps} />
                         </>
                     ) : (
                         <Paper sx={{ width: '100%', overflowX: 'auto' }}>
-                            <TableContainer sx={{ maxHeight: { xs: 400, sm: 'none' }, overflowX: 'auto' }}>
+                            <AppTableContainer>
                                 <Table stickyHeader>
-                                    <ResponsiveTableHead>
-                                        <TableRow>
-                                            <TableCell sortDirection={orderBy === 'familyLastName' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'familyLastName'}
-                                                    direction={orderBy === 'familyLastName' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('familyLastName')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Apellido Familia
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'name' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'name'}
-                                                    direction={orderBy === 'name' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('name')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Nombre
-                                                </TableSortLabel>
-                                            </TableCell>
-
-                                            <TableCell sortDirection={orderBy === 'email' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'email'}
-                                                    direction={orderBy === 'email' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('email')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Correo
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'role' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'role'}
-                                                    direction={orderBy === 'role' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('role')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Rol
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'client' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'client'}
-                                                    direction={orderBy === 'client' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('client')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Cliente
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell sortDirection={orderBy === 'updatedAt' ? order : false}>
-                                                <TableSortLabel
-                                                    active={orderBy === 'updatedAt'}
-                                                    direction={orderBy === 'updatedAt' ? order : 'asc'}
-                                                    onClick={() => handleRequestSort('updatedAt')}
-                                                    hideSortIcon={false}
-                                                    sx={{ '& .MuiTableSortLabel-icon': { opacity: 1 } }}
-                                                >
-                                                    Actualizado el
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="center">Acciones</TableCell>
-                                        </TableRow>
-                                    </ResponsiveTableHead>
+                                    <SortableTableHead columns={COLUMNS} {...table.sortProps} showSortIcons />
                                     <TableBody>
                                         {displayedUsers.map((user) => (
                                             <TableRow key={user.id}>
-                                                <ResponsiveTableCell data-label="Apellido Familia">
-                                                    {user.lastName || '—'}
-                                                </ResponsiveTableCell>
-                                                <ResponsiveTableCell data-label="Nombre">
+                                                <TableCell>{user.lastName || '—'}</TableCell>
+                                                <TableCell>
                                                     {user.name}{' '}
                                                     {isUserNew(user) && (
                                                         <Chip label="NUEVO" color="success" size="small" sx={{ ml: 1 }} />
                                                     )}
-                                                    {/* FamilyDetail badges removed */}
-                                                </ResponsiveTableCell>
-                                                <ResponsiveTableCell data-label="Correo">
-                                                    {user.email}
-                                                </ResponsiveTableCell>
-                                                <ResponsiveTableCell data-label="Rol">
-                                                    {user.Role ? user.Role.name : '—'}
-                                                </ResponsiveTableCell>
-                                                <ResponsiveTableCell data-label="Cliente">
-                                                    {user.School ? user.School.name : (user.corporation ? user.corporation.name : '—')}
-                                                </ResponsiveTableCell>
-                                                <ResponsiveTableCell data-label="Actualizado el">
-                                                    {user.updatedAt
-                                                        ? new Date(user.updatedAt).toLocaleString('es-GT', {
-                                                              day: '2-digit',
-                                                              month: '2-digit',
-                                                              year: 'numeric',
-                                                              hour: '2-digit',
-                                                              minute: '2-digit'
-                                                          })
-                                                        : '—'}
-                                                </ResponsiveTableCell>
-                                                <ResponsiveTableCell data-label="Acciones" align="center">
+                                                </TableCell>
+                                                <TableCell>{user.email}</TableCell>
+                                                <TableCell>{user.Role ? user.Role.name : '—'}</TableCell>
+                                                <TableCell>{user.School ? user.School.name : (user.corporation ? user.corporation.name : '—')}</TableCell>
+                                                <TableCell>
+                                                    {formatDateTime(user.updatedAt)}
+                                                </TableCell>
+                                                <TableCell align="center">
                                                     {renderUserActions(user)}
-                                                </ResponsiveTableCell>
+                                                </TableCell>
                                             </TableRow>
                                         ))}
                                         {users.length === 0 && (
                                             <TableRow>
-                                                <ResponsiveTableCell colSpan={6} align="center">
+                                                <TableCell colSpan={7} align="center">
                                                     No se encontraron usuarios.
-                                                </ResponsiveTableCell>
+                                                </TableCell>
                                             </TableRow>
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={totalUsers}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                rowsPerPageOptions={[5, 10, 25]}
-                                labelRowsPerPage="Filas por página"
-                            />
+                            </AppTableContainer>
+                            <AppTablePagination count={totalUsers} {...table.paginationProps} />
                         </Paper>
                     )}
 
@@ -1417,513 +1120,438 @@ const RolesManagementPage = () => {
             )}
 
             {/* Diálogo para crear/editar usuario (En este diálogo NO se muestra el select de contrato) */}
-            <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="md" fullWidth>
-                <DialogTitle>{selectedUser?.id ? 'Editar Usuario' : 'Añadir Usuario'}</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        {selectedUser?.id
-                            ? 'Actualiza la información del usuario.'
-                            : 'Completa la información para crear un nuevo usuario.'}
-                    </DialogContentText>
-                    <Grid container spacing={2} sx={{ mt: 1 }}>
-                        <Grid item xs={12} md={6}>
-                            <TextField
-                                autoFocus
-                                name="name"
-                                label="Nombre Completo"
-                                type="text"
-                                fullWidth
-                                variant="outlined"
-                                value={selectedUser?.name || ''}
-                                onChange={handleUserChange}
-                                required
-                            />
-                        </Grid>
-                        <Grid item xs={12} md={6}>
-                            <TextField
-                                name="email"
-                                label="Correo Electrónico"
-                                type="email"
-                                fullWidth
-                                variant="outlined"
-                                value={selectedUser?.email || ''}
-                                onChange={handleUserChange}
-                                required
-                            />
-                        </Grid>
-                        {!selectedUser?.id && (
-                            <Grid item xs={12} md={6}>
-                                <TextField
-                                    name="password"
-                                    label="Contraseña"
-                                    type="password"
-                                    autoComplete="new-password"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={selectedUser?.password || ''}
-                                    onChange={handleUserChange}
-                                    required
-                                />
-                            </Grid>
-                        )}
-                        {selectedUser?.id && (
-                            <Grid item xs={12} md={6}>
-                                <TextField
-                                    name="password"
-                                    label="Nueva Contraseña (opcional)"
-                                    type="password"
-                                    autoComplete="new-password"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={selectedUser?.password || ''}
-                                    onChange={handleUserChange}
-                                />
-                            </Grid>
-                        )}
-                        <Grid item xs={12} md={6}>
-                            <FormControl variant="outlined" fullWidth required>
-                                <InputLabel>Rol</InputLabel>
-                                <Select
-                                    name="roleId"
-                                    value={selectedUser?.roleId || ''}
-                                    onChange={handleRoleIdChange}
-                                    label="Rol"
-                                    disabled={isSelfEdit}
-                                >
-                                    <MenuItem value="">
-                                        <em>Seleccione un rol</em>
-                                    </MenuItem>
-                                    {roleOptions
-                                        .filter(r => assignableRoles.has(String(r.name).toLowerCase()))
-                                        .filter(r => canManageRoleId(r.id) || (isSelfEdit && Number(r.id) === Number(selectedUser?.originalRoleId)))
-                                        .map((r) => (
-                                            <MenuItem key={r.id} value={r.id}>
-                                                {r.name}
-                                            </MenuItem>
-                                        ))}
-                                </Select>
-                                {isSelfEdit && (
-                                    <FormHelperText>No puedes cambiar tu propio rol.</FormHelperText>
-                                )}
-                                {selectedUser?.id && Number(selectedUser?.roleId) !== Number(selectedUser?.originalRoleId) && (
-                                    <FormHelperText>Al cambiar el rol, el usuario deberá iniciar sesión de nuevo.</FormHelperText>
-                                )}
-                            </FormControl>
-                        </Grid>
-                        {Number(selectedUser?.roleId) === 4 && (
-                            <>
-                                <Grid item xs={12} md={6}>
-                                    <TextField
-                                        name="monitoraFullName"
-                                        label="Nombre Completo (Monitora)"
-                                        type="text"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={selectedUser?.monitoraFullName || ''}
-                                        onChange={handleUserChange}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} md={6}>
-                                    <TextField
-                                        name="phoneNumber"
-                                        label="Número de Teléfono"
-                                        type="text"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={selectedUser?.phoneNumber || ''}
-                                        onChange={handleUserChange}
-                                    />
-                                </Grid>
-                            </>
-                        )}
-                        {!isSelfEdit && !roleDisablesSchoolOrCorp(selectedUser?.roleId) && (
-                            <>
-                                <Grid item xs={12} md={6}>
-                                    <FormControl variant="outlined" fullWidth>
-                                        <InputLabel>Colegio</InputLabel>
-                                        <Select
-                                            name="school"
-                                            value={selectedUser?.school || ''}
-                                            onChange={(e) => {
-                                                const newSchoolId = e.target.value;
-                                                setSelectedUser(prev => ({
-                                                    ...prev,
-                                                    school: newSchoolId,
-                                                    corporationId: newSchoolId ? '' : prev.corporationId
-                                                }));
-                                            }}
-                                            label="Colegio"
-                                        >
-                                            <MenuItem value="">
-                                                <em>Ninguno</em>
-                                            </MenuItem>
-                                            {schools.map((sch) => (
-                                                <MenuItem key={sch.id} value={sch.id}>
-                                                    {sch.name}
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-                                <Grid item xs={12} md={6}>
-                                    <FormControl variant="outlined" fullWidth>
-                                        <InputLabel>Corporación</InputLabel>
-                                        <Select
-                                            name="corporationId"
-                                            value={selectedUser?.corporationId || ''}
-                                            onChange={(e) => {
-                                                const newCorporationId = e.target.value;
-                                                setSelectedUser(prev => ({ 
-                                                    ...prev, 
-                                                    corporationId: newCorporationId,
-                                                    school: newCorporationId ? '' : prev.school
-                                                }));
-                                            }}
-                                            label="Corporación"
-                                        >
-                                            <MenuItem value="">
-                                                <em>Ninguna</em>
-                                            </MenuItem>
-                                            {corporations.map((corp) => (
-                                                <MenuItem key={corp.id} value={corp.id}>
-                                                    {corp.name}
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                    </FormControl>
-                                </Grid>
-                            </>
-                        )}
-                        {!isSelfEdit && Number(selectedUser?.roleId) === 6 && (
-                            <Box sx={{ mt: 3, clear: 'both', width: '100%' }}>
-                                <Typography variant="h6" sx={{ mb: 1 }}>
-                                    Clientes a cargo
-                                </Typography>
-                                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                    Selecciona uno o más clientes (colegios y corporaciones); todos los pilotos asignados serán enlazados automáticamente.
-                                </Typography>
-
-                                <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
-                                    Colegios
-                                </Typography>
-                                <FormControl fullWidth sx={{ mb: 2 }} size="small">
-                                    <InputLabel>Seleccionar Colegios</InputLabel>
-                                    <Select
-                                        multiple
-                                        value={selectedSupervisorSchools}
-                                        onChange={(e) => setSelectedSupervisorSchools(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
-                                        label="Seleccionar Colegios"
-                                        renderValue={(selected) => selected.map(id => (assignableSchools.find(s => s.id === id)?.name || id)).join(', ')}
-                                    >
-                                        {assignableSchools.map(s => (
-                                            <MenuItem key={s.id} value={s.id}>
-                                                <Checkbox checked={selectedSupervisorSchools.includes(s.id)} />
-                                                <ListItemText primary={s.name} />
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-
-                                <Typography variant="subtitle1" sx={{ mb: 1, mt: 2, fontWeight: 'bold' }}>
-                                    Corporaciones
-                                </Typography>
-                                <FormControl fullWidth sx={{ mb: 2 }} size="small">
-                                    <InputLabel>Seleccionar Corporaciones</InputLabel>
-                                    <Select
-                                        multiple
-                                        value={selectedSupervisorCorporations}
-                                        onChange={(e) => setSelectedSupervisorCorporations(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
-                                        label="Seleccionar Corporaciones"
-                                        renderValue={(selected) => selected.map(id => (corporations.find(c => c.id === id)?.name || id)).join(', ')}
-                                    >
-                                        {corporations.map(c => (
-                                            <MenuItem key={c.id} value={c.id}>
-                                                <Checkbox checked={selectedSupervisorCorporations.includes(c.id)} />
-                                                <ListItemText primary={c.name} />
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-
-                                <Typography variant="subtitle2" sx={{ mt: 2 }}>Pilotos enlazados automáticamente:</Typography>
-                                <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto', mb: 2 }}>
-                                    {(() => {
-                                        // Compute pilots that belong to selected schools or corporations
-                                        const schoolPilots = selectedSupervisorSchools.length > 0 
-                                            ? allPilots.filter(p => selectedSupervisorSchools.includes(Number(p.school)))
-                                            : [];
-                                        const corpPilots = selectedSupervisorCorporations.length > 0
-                                            ? allPilots.filter(p => selectedSupervisorCorporations.includes(Number(p.corporationId)))
-                                            : [];
-                                        const allLinkedPilots = [...schoolPilots, ...corpPilots];
-                                        
-                                        if (allLinkedPilots.length === 0) {return (
-                                            <Typography variant="body2" color="text.secondary">No se seleccionaron clientes o no hay pilotos asignados.</Typography>
-                                        );}
-                                        
-                                        // Remove duplicates by ID
-                                        const uniquePilots = allLinkedPilots.filter((p, idx, arr) => 
-                                            arr.findIndex(pilot => pilot.id === p.id) === idx
-                                        );
-                                        
-                                        return uniquePilots.map(p => (
-                                            <Typography key={p.id} variant="body2">{p.name} — {p.email} (ID: {p.id})</Typography>
-                                        ));
-                                    })()}
-                                </Paper>
-                            </Box>
-                        )}
-                        {!isSelfEdit && Number(selectedUser?.roleId) === 7 && (
-                            <Box sx={{ mt: 3, clear: 'both', width: '100%' }}>
-                                <Typography variant="h6" sx={{ mb: 1 }}>
-                                    Clientes a cargo
-                                </Typography>
-                                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                                    Selecciona uno o más colegios; todas las monitoras asignadas serán enlazadas automáticamente.
-                                </Typography>
-
-                                <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
-                                    Colegios
-                                </Typography>
-                                <FormControl fullWidth sx={{ mb: 2 }} size="small">
-                                    <InputLabel>Seleccionar Colegios</InputLabel>
-                                    <Select
-                                        multiple
-                                        value={selectedAuxiliarSchools}
-                                        onChange={(e) => setSelectedAuxiliarSchools(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
-                                        label="Seleccionar Colegios"
-                                        renderValue={(selected) => selected.map(id => (assignableSchools.find(s => s.id === id)?.name || id)).join(', ')}
-                                    >
-                                        {assignableSchools.map(s => (
-                                            <MenuItem key={s.id} value={s.id}>
-                                                <Checkbox checked={selectedAuxiliarSchools.includes(s.id)} />
-                                                <ListItemText primary={s.name} />
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-
-                                <Typography variant="subtitle1" sx={{ mb: 1, mt: 2, fontWeight: 'bold' }}>
-                                    Corporaciones
-                                </Typography>
-                                <FormControl fullWidth sx={{ mb: 2 }} size="small">
-                                    <InputLabel>Seleccionar Corporaciones</InputLabel>
-                                    <Select
-                                        multiple
-                                        value={selectedAuxiliarCorporations}
-                                        onChange={(e) => setSelectedAuxiliarCorporations(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
-                                        label="Seleccionar Corporaciones"
-                                        renderValue={(selected) => selected.map(id => (corporations.find(c => c.id === id)?.name || id)).join(', ')}
-                                    >
-                                        {corporations.map(c => (
-                                            <MenuItem key={c.id} value={c.id}>
-                                                <Checkbox checked={selectedAuxiliarCorporations.includes(c.id)} />
-                                                <ListItemText primary={c.name} />
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-
-                                <Typography variant="subtitle2" sx={{ mt: 2 }}>Monitoras enlazadas automáticamente:</Typography>
-                                <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto', mb: 2 }}>
-                                    {(() => {
-                                        // Compute monitoras that belong to selected schools or corporations.
-                                        // A monitora's school may be a sibling-cycle record of the selected
-                                        // one, so compare canonical ids.
-                                        const schoolMonitoras = selectedAuxiliarSchools.length > 0
-                                            ? allMonitoras.filter(m => {
-                                                const schoolId = Number(m.school);
-                                                if (!schoolId) {
-                                                    return false;
-                                                }
-                                                return selectedAuxiliarSchools.includes(canonicalSchoolIdById.get(schoolId) ?? schoolId);
-                                            })
-                                            : [];
-                                        const corpMonitoras = selectedAuxiliarCorporations.length > 0
-                                            ? allMonitoras.filter(m => selectedAuxiliarCorporations.includes(Number(m.corporationId)))
-                                            : [];
-                                        const allLinkedMonitoras = [...schoolMonitoras, ...corpMonitoras];
-                                        
-                                        if (allLinkedMonitoras.length === 0) {return (
-                                            <Typography variant="body2" color="text.secondary">No se seleccionaron clientes o no hay monitoras asignadas.</Typography>
-                                        );}
-                                        
-                                        // Remove duplicates by ID
-                                        const uniqueMonitoras = allLinkedMonitoras.filter((m, idx, arr) => 
-                                            arr.findIndex(monitora => monitora.id === m.id) === idx
-                                        );
-                                        
-                                        return uniqueMonitoras.map(m => (
-                                            <Typography key={m.id} variant="body2">{m.name} — {m.email} (ID: {m.id})</Typography>
-                                        ));
-                                    })()}
-                                </Paper>
-                            </Box>
-                        )}
+            <AppDialog
+                open={openDialog}
+                onClose={handleDialogClose}
+                title={selectedUser?.id ? 'Editar usuario' : 'Nuevo usuario'}
+                subtitle={selectedUser?.id
+                    ? 'Actualiza la información del usuario.'
+                    : 'Completa la información para crear un nuevo usuario.'}
+                icon={selectedUser?.id ? <Edit /> : <PersonAddIcon />}
+                size="md"
+                onSubmit={handleSaveUser}
+                submitLabel={selectedUser?.id ? 'Guardar cambios' : 'Crear usuario'}
+                submitting={savingUser}
+                readOnly={!hasPermission(selectedUser?.id ? 'usuarios-editar' : 'usuarios-crear')}
+                dirty={userFormSnapshot !== userInitialRef.current}
+            >
+                <Grid container spacing={2}>
+                    <Grid item xs={12} md={6}>
+                        <TextField
+                            autoFocus
+                            name="name"
+                            label="Nombre completo"
+                            type="text"
+                            fullWidth
+                            variant="outlined"
+                            value={selectedUser?.name || ''}
+                            onChange={handleUserChange}
+                            required
+                            error={Boolean(userErrors.name)}
+                            helperText={userErrors.name}
+                        />
                     </Grid>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleDialogClose} color="primary">
-                        Cancelar
-                    </Button>
-                    {hasPermission(selectedUser?.id ? 'usuarios-editar' : 'usuarios-crear') && (
-                        <Button onClick={handleSaveUser} color="primary" variant="contained">
-                            {selectedUser?.id ? 'Guardar Cambios' : 'Crear Usuario'}
-                        </Button>
+                    <Grid item xs={12} md={6}>
+                        <TextField
+                            name="email"
+                            label="Correo electrónico"
+                            type="email"
+                            fullWidth
+                            variant="outlined"
+                            value={selectedUser?.email || ''}
+                            onChange={handleUserChange}
+                            required
+                            error={Boolean(userErrors.email)}
+                            helperText={userErrors.email}
+                        />
+                    </Grid>
+                    {!selectedUser?.id && (
+                        <Grid item xs={12} md={6}>
+                            <TextField
+                                name="password"
+                                label="Contraseña"
+                                type="password"
+                                autoComplete="new-password"
+                                fullWidth
+                                variant="outlined"
+                                value={selectedUser?.password || ''}
+                                onChange={handleUserChange}
+                                required
+                                error={Boolean(userErrors.password)}
+                                helperText={userErrors.password}
+                            />
+                        </Grid>
                     )}
-                </DialogActions>
-            </Dialog>
+                    {selectedUser?.id && (
+                        <Grid item xs={12} md={6}>
+                            <TextField
+                                name="password"
+                                label="Nueva contraseña (opcional)"
+                                type="password"
+                                autoComplete="new-password"
+                                fullWidth
+                                variant="outlined"
+                                value={selectedUser?.password || ''}
+                                onChange={handleUserChange}
+                            />
+                        </Grid>
+                    )}
+                    <Grid item xs={12} md={6}>
+                        <FormControl variant="outlined" fullWidth required error={Boolean(userErrors.roleId)}>
+                            <InputLabel>Rol</InputLabel>
+                            <Select
+                                name="roleId"
+                                value={selectedUser?.roleId || ''}
+                                onChange={handleRoleIdChange}
+                                label="Rol"
+                                disabled={isSelfEdit}
+                            >
+                                <MenuItem value="">
+                                    <em>Seleccione un rol</em>
+                                </MenuItem>
+                                {roleOptions
+                                    .filter(r => assignableRoles.has(String(r.name).toLowerCase()))
+                                    .filter(r => canManageRoleId(r.id) || (isSelfEdit && Number(r.id) === Number(selectedUser?.originalRoleId)))
+                                    .map((r) => (
+                                        <MenuItem key={r.id} value={r.id}>
+                                            {r.name}
+                                        </MenuItem>
+                                    ))}
+                            </Select>
+                            {userErrors.roleId && (
+                                <FormHelperText>{userErrors.roleId}</FormHelperText>
+                            )}
+                            {isSelfEdit && (
+                                <FormHelperText>No puedes cambiar tu propio rol.</FormHelperText>
+                            )}
+                            {selectedUser?.id && Number(selectedUser?.roleId) !== Number(selectedUser?.originalRoleId) && (
+                                <FormHelperText>Al cambiar el rol, el usuario deberá iniciar sesión de nuevo.</FormHelperText>
+                            )}
+                        </FormControl>
+                    </Grid>
+                    {Number(selectedUser?.roleId) === 4 && (
+                        <>
+                            <Grid item xs={12} md={6}>
+                                <TextField
+                                    name="monitoraFullName"
+                                    label="Nombre completo (monitora)"
+                                    type="text"
+                                    fullWidth
+                                    variant="outlined"
+                                    value={selectedUser?.monitoraFullName || ''}
+                                    onChange={handleUserChange}
+                                />
+                            </Grid>
+                            <Grid item xs={12} md={6}>
+                                <TextField
+                                    name="phoneNumber"
+                                    label="Número de teléfono"
+                                    type="text"
+                                    fullWidth
+                                    variant="outlined"
+                                    value={selectedUser?.phoneNumber || ''}
+                                    onChange={handleUserChange}
+                                />
+                            </Grid>
+                        </>
+                    )}
+                    {!isSelfEdit && !roleDisablesSchoolOrCorp(selectedUser?.roleId) && (
+                        <>
+                            <Grid item xs={12} md={6}>
+                                <EntitySelect
+                                    entity="school"
+                                    name="school"
+                                    size="medium"
+                                    options={schools}
+                                    value={selectedUser?.school || ''}
+                                    onChange={(newSchoolId) => {
+                                        setSelectedUser(prev => ({
+                                            ...prev,
+                                            school: newSchoolId,
+                                            corporationId: newSchoolId ? '' : prev.corporationId
+                                        }));
+                                    }}
+                                />
+                            </Grid>
+                            <Grid item xs={12} md={6}>
+                                <EntitySelect
+                                    entity="corporation"
+                                    name="corporationId"
+                                    size="medium"
+                                    options={corporations}
+                                    value={selectedUser?.corporationId || ''}
+                                    onChange={(newCorporationId) => {
+                                        setSelectedUser(prev => ({
+                                            ...prev,
+                                            corporationId: newCorporationId,
+                                            school: newCorporationId ? '' : prev.school
+                                        }));
+                                    }}
+                                />
+                            </Grid>
+                        </>
+                    )}
+                    {!isSelfEdit && Number(selectedUser?.roleId) === 6 && (
+                        <Box sx={{ mt: 3, clear: 'both', width: '100%' }}>
+                            <Typography variant="h6" sx={{ mb: 1 }}>
+                                Clientes a cargo
+                            </Typography>
+                            <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                Selecciona uno o más clientes (colegios y corporaciones); todos los pilotos asignados serán enlazados automáticamente.
+                            </Typography>
+
+                            <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
+                                Colegios
+                            </Typography>
+                            <FormControl fullWidth sx={{ mb: 2 }} size="small">
+                                <InputLabel>Seleccionar Colegios</InputLabel>
+                                <Select
+                                    multiple
+                                    value={selectedSupervisorSchools}
+                                    onChange={(e) => setSelectedSupervisorSchools(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
+                                    label="Seleccionar Colegios"
+                                    renderValue={(selected) => selected.map(id => (assignableSchools.find(s => s.id === id)?.name || id)).join(', ')}
+                                >
+                                    {assignableSchools.map(s => (
+                                        <MenuItem key={s.id} value={s.id}>
+                                            <Checkbox checked={selectedSupervisorSchools.includes(s.id)} />
+                                            <ListItemText primary={s.name} />
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+
+                            <Typography variant="subtitle1" sx={{ mb: 1, mt: 2, fontWeight: 'bold' }}>
+                                Corporaciones
+                            </Typography>
+                            <FormControl fullWidth sx={{ mb: 2 }} size="small">
+                                <InputLabel>Seleccionar Corporaciones</InputLabel>
+                                <Select
+                                    multiple
+                                    value={selectedSupervisorCorporations}
+                                    onChange={(e) => setSelectedSupervisorCorporations(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
+                                    label="Seleccionar Corporaciones"
+                                    renderValue={(selected) => selected.map(id => (corporations.find(c => c.id === id)?.name || id)).join(', ')}
+                                >
+                                    {corporations.map(c => (
+                                        <MenuItem key={c.id} value={c.id}>
+                                            <Checkbox checked={selectedSupervisorCorporations.includes(c.id)} />
+                                            <ListItemText primary={c.name} />
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+
+                            <Typography variant="subtitle2" sx={{ mt: 2 }}>Pilotos enlazados automáticamente:</Typography>
+                            <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto', mb: 2 }}>
+                                {(() => {
+                                    // Compute pilots that belong to selected schools or corporations
+                                    const schoolPilots = selectedSupervisorSchools.length > 0 
+                                        ? allPilots.filter(p => selectedSupervisorSchools.includes(Number(p.school)))
+                                        : [];
+                                    const corpPilots = selectedSupervisorCorporations.length > 0
+                                        ? allPilots.filter(p => selectedSupervisorCorporations.includes(Number(p.corporationId)))
+                                        : [];
+                                    const allLinkedPilots = [...schoolPilots, ...corpPilots];
+                                    
+                                    if (allLinkedPilots.length === 0) {return (
+                                        <Typography variant="body2" color="text.secondary">No se seleccionaron clientes o no hay pilotos asignados.</Typography>
+                                    );}
+                                    
+                                    // Remove duplicates by ID
+                                    const uniquePilots = allLinkedPilots.filter((p, idx, arr) => 
+                                        arr.findIndex(pilot => pilot.id === p.id) === idx
+                                    );
+                                    
+                                    return uniquePilots.map(p => (
+                                        <Typography key={p.id} variant="body2">{p.name} — {p.email} (ID: {p.id})</Typography>
+                                    ));
+                                })()}
+                            </Paper>
+                        </Box>
+                    )}
+                    {!isSelfEdit && Number(selectedUser?.roleId) === 7 && (
+                        <Box sx={{ mt: 3, clear: 'both', width: '100%' }}>
+                            <Typography variant="h6" sx={{ mb: 1 }}>
+                                Clientes a cargo
+                            </Typography>
+                            <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                                Selecciona uno o más colegios; todas las monitoras asignadas serán enlazadas automáticamente.
+                            </Typography>
+
+                            <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
+                                Colegios
+                            </Typography>
+                            <FormControl fullWidth sx={{ mb: 2 }} size="small">
+                                <InputLabel>Seleccionar Colegios</InputLabel>
+                                <Select
+                                    multiple
+                                    value={selectedAuxiliarSchools}
+                                    onChange={(e) => setSelectedAuxiliarSchools(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
+                                    label="Seleccionar Colegios"
+                                    renderValue={(selected) => selected.map(id => (assignableSchools.find(s => s.id === id)?.name || id)).join(', ')}
+                                >
+                                    {assignableSchools.map(s => (
+                                        <MenuItem key={s.id} value={s.id}>
+                                            <Checkbox checked={selectedAuxiliarSchools.includes(s.id)} />
+                                            <ListItemText primary={s.name} />
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+
+                            <Typography variant="subtitle1" sx={{ mb: 1, mt: 2, fontWeight: 'bold' }}>
+                                Corporaciones
+                            </Typography>
+                            <FormControl fullWidth sx={{ mb: 2 }} size="small">
+                                <InputLabel>Seleccionar Corporaciones</InputLabel>
+                                <Select
+                                    multiple
+                                    value={selectedAuxiliarCorporations}
+                                    onChange={(e) => setSelectedAuxiliarCorporations(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
+                                    label="Seleccionar Corporaciones"
+                                    renderValue={(selected) => selected.map(id => (corporations.find(c => c.id === id)?.name || id)).join(', ')}
+                                >
+                                    {corporations.map(c => (
+                                        <MenuItem key={c.id} value={c.id}>
+                                            <Checkbox checked={selectedAuxiliarCorporations.includes(c.id)} />
+                                            <ListItemText primary={c.name} />
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+
+                            <Typography variant="subtitle2" sx={{ mt: 2 }}>Monitoras enlazadas automáticamente:</Typography>
+                            <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflowY: 'auto', mb: 2 }}>
+                                {(() => {
+                                    // Compute monitoras that belong to selected schools or corporations.
+                                    // A monitora's school may be a sibling-cycle record of the selected
+                                    // one, so compare canonical ids.
+                                    const schoolMonitoras = selectedAuxiliarSchools.length > 0
+                                        ? allMonitoras.filter(m => {
+                                            const schoolId = Number(m.school);
+                                            if (!schoolId) {
+                                                return false;
+                                            }
+                                            return selectedAuxiliarSchools.includes(canonicalSchoolIdById.get(schoolId) ?? schoolId);
+                                        })
+                                        : [];
+                                    const corpMonitoras = selectedAuxiliarCorporations.length > 0
+                                        ? allMonitoras.filter(m => selectedAuxiliarCorporations.includes(Number(m.corporationId)))
+                                        : [];
+                                    const allLinkedMonitoras = [...schoolMonitoras, ...corpMonitoras];
+                                    
+                                    if (allLinkedMonitoras.length === 0) {return (
+                                        <Typography variant="body2" color="text.secondary">No se seleccionaron clientes o no hay monitoras asignadas.</Typography>
+                                    );}
+                                    
+                                    // Remove duplicates by ID
+                                    const uniqueMonitoras = allLinkedMonitoras.filter((m, idx, arr) => 
+                                        arr.findIndex(monitora => monitora.id === m.id) === idx
+                                    );
+                                    
+                                    return uniqueMonitoras.map(m => (
+                                        <Typography key={m.id} variant="body2">{m.name} — {m.email} (ID: {m.id})</Typography>
+                                    ));
+                                })()}
+                            </Paper>
+                        </Box>
+                    )}
+                </Grid>
+            </AppDialog>
 
             {/* Diálogo Carga Masiva */}
-            <Dialog open={openBulkDialog} onClose={handleCloseBulkDialog} maxWidth="sm" fullWidth>
-                <DialogTitle>Carga Masiva de Usuarios</DialogTitle>
-                <DialogContent>
-                    <Typography variant="body1" sx={{ mb: 1 }}>
-                            Sube un archivo Excel/CSV con las columnas necesarias. Usa la plantilla oficial.<br />
-                            <br />
-                            Las listas de Colegios y Corporaciones están en la hoja "Listas" de la plantilla.<br />
-                            <br />
-                            El límite de archivo es 5 MB.
-                    </Typography>
-                    <Box sx={{ mt: 2 }}>
-                        <Button
-                            variant="outlined"
-                            sx={{ mr: 2 }}
-                            color="success"
-                            onClick={handleDownloadUserTemplate}
-                        >
-                            Descargar Plantilla
-                        </Button>
-                        <Button variant="outlined" component="label" startIcon={<FileUpload />}>
-                            Seleccionar Archivo
-                            <input type="file" hidden onChange={handleFileChange} accept=".xlsx, .xls, .csv" />
-                        </Button>
-                        {bulkFile && (
-                            <Typography variant="body2" sx={{ mt: 1 }}>
-                                {bulkFile.name}
-                            </Typography>
-                        )}
-                    </Box>
-                    {bulkLoading && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
-                            <CircularProgress size={24} />
-                            <Typography variant="body2" sx={{ ml: 2 }}>
-                                Procesando archivo...
-                            </Typography>
-                        </Box>
-                    )}
-                    {bulkResults && (
-                        <Box sx={{ mt: 2 }}>
-                            <Alert severity="info">
-                                <Typography>
-                                    <strong>Usuarios creados/actualizados:</strong> {bulkResults.successCount}
-                                </Typography>
-                                <Typography>
-                                    <strong>Errores:</strong> {bulkResults.errorsCount}
-                                </Typography>
-                                {bulkResults.errorsList && bulkResults.errorsList.length > 0 && (
-                                    <ul>
-                                        {bulkResults.errorsList.map((err, idx) => (
-                                            <li key={idx}>
-                                                Fila {err.row}: {err.errorMessage}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </Alert>
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseBulkDialog}>Cerrar</Button>
-                    <PermissionGuard permission="usuarios-carga-masiva">
-                        <Button onClick={handleUploadBulk} variant="contained" color="primary" disabled={!bulkFile || bulkLoading}>
-                            Subir
-                        </Button>
-                    </PermissionGuard>
-                </DialogActions>
-            </Dialog>
+            <BulkUploadDialog
+                open={bulkOpen}
+                onClose={() => setBulkOpen(false)}
+                title="Carga masiva de usuarios"
+                description={[
+                    'Sube un archivo Excel o CSV con las columnas necesarias, usando la plantilla.',
+                    'Las listas de colegios y corporaciones están en la hoja "Listas" de la plantilla.',
+                ]}
+                templateObject="usuarios"
+                successLabel="Usuarios creados o actualizados"
+                buildTemplate={buildUserTemplate}
+                upload={async (file) => {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    const response = await api.post('/users/bulk-upload', formData, {
+                        headers: { 'Content-Type': 'multipart/form-data' },
+                    });
+                    return response.data;
+                }}
+                onUploaded={() => {
+                    invalidateCatalog('pilots');
+                    invalidateCatalog('monitors');
+                    fetchUsers();
+                }}
+            />
 
             {/* Reporte de rutas eliminado */}
 
             
 
             {/* Diálogo para descargar todos los usuarios */}
-            <Dialog open={downloadAllDialogOpen} onClose={() => setDownloadAllDialogOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Descargar Todos los Usuarios</DialogTitle>
-                <DialogContent>
-                    <FormControl fullWidth sx={{ mt: 1 }}>
-                        <InputLabel>Filtrar por</InputLabel>
-                        <Select
-                            value={downloadCategory}
-                            label="Filtrar por"
-                            onChange={(e) => { setDownloadCategory(e.target.value); setSelectedClientForDownload(null); }}
-                        >
-                            <MenuItem value=""> 
-                                <em>Selecciona...</em>
-                            </MenuItem>
-                            <MenuItem value="Colegios">Colegios</MenuItem>
-                            <MenuItem value="Corporaciones">Corporaciones</MenuItem>
-                            <MenuItem value="Sin afiliación">Sin afiliación</MenuItem>
-                        </Select>
-                    </FormControl>
-
-                    {downloadCategory === 'Colegios' && (
-                        <Box sx={{ mt: 2 }}>
-                            <Autocomplete
-                                options={schools}
-                                getOptionLabel={(opt) => opt?.name || ''}
-                                value={selectedClientForDownload}
-                                onChange={(e, v) => setSelectedClientForDownload(v)}
-                                renderInput={(params) => <TextField {...params} label="Selecciona Colegio" />}
-                                fullWidth
-                            />
-                        </Box>
-                    )}
-
-                    {downloadCategory === 'Corporaciones' && (
-                        <Box sx={{ mt: 2 }}>
-                            <Autocomplete
-                                options={corporations}
-                                getOptionLabel={(opt) => opt?.name || ''}
-                                value={selectedClientForDownload}
-                                onChange={(e, v) => setSelectedClientForDownload(v)}
-                                renderInput={(params) => <TextField {...params} label="Selecciona Corporación" />}
-                                fullWidth
-                            />
-                        </Box>
-                    )}
-
-                    {downloadCategory === 'Sin afiliación' && (
-                        <Box sx={{ mt: 2 }}>
-                            <DialogContentText>Se descargarán usuarios que no pertenecen a ningún colegio ni corporación.</DialogContentText>
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setDownloadAllDialogOpen(false)}>Cancelar</Button>
-                    <Button
-                        onClick={() => {
-                            handleDownloadAllUsers(downloadCategory, selectedClientForDownload);
-                            setDownloadAllDialogOpen(false);
-                        }}
-                        variant="contained"
-                    >
-                        Descargar
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            <AppDialog
+                open={downloadAllDialogOpen}
+                onClose={() => setDownloadAllDialogOpen(false)}
+                title="Descargar todos los usuarios"
+                icon={<FileDownloadIcon />}
+                size="sm"
+                onSubmit={() => {
+                    handleDownloadAllUsers(downloadCategory, selectedClientForDownload);
+                    setDownloadAllDialogOpen(false);
+                }}
+                submitLabel="Descargar"
             >
-                <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
+                <FormControl fullWidth>
+                    <InputLabel>Filtrar por</InputLabel>
+                    <Select
+                        value={downloadCategory}
+                        label="Filtrar por"
+                        onChange={(e) => { setDownloadCategory(e.target.value); setSelectedClientForDownload(null); }}
+                    >
+                        <MenuItem value=""> 
+                            <em>Selecciona...</em>
+                        </MenuItem>
+                        <MenuItem value="Colegios">Colegios</MenuItem>
+                        <MenuItem value="Corporaciones">Corporaciones</MenuItem>
+                        <MenuItem value="Sin afiliación">Sin afiliación</MenuItem>
+                    </Select>
+                </FormControl>
+
+                {downloadCategory === 'Colegios' && (
+                    <Box sx={{ mt: 2 }}>
+                        <Autocomplete
+                            options={schools}
+                            getOptionLabel={(opt) => opt?.name || ''}
+                            value={selectedClientForDownload}
+                            onChange={(e, v) => setSelectedClientForDownload(v)}
+                            renderInput={(params) => <TextField {...params} label="Selecciona colegio" />}
+                            fullWidth
+                        />
+                    </Box>
+                )}
+
+                {downloadCategory === 'Corporaciones' && (
+                    <Box sx={{ mt: 2 }}>
+                        <Autocomplete
+                            options={corporations}
+                            getOptionLabel={(opt) => opt?.name || ''}
+                            value={selectedClientForDownload}
+                            onChange={(e, v) => setSelectedClientForDownload(v)}
+                            renderInput={(params) => <TextField {...params} label="Selecciona corporación" />}
+                            fullWidth
+                        />
+                    </Box>
+                )}
+
+                {downloadCategory === 'Sin afiliación' && (
+                    <Box sx={{ mt: 2 }}>
+                        <DialogContentText>Se descargarán usuarios que no pertenecen a ningún colegio ni corporación.</DialogContentText>
+                    </Box>
+                )}
+            </AppDialog>
         </PageContainer>
     );
 };

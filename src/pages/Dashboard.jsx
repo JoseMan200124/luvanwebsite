@@ -1,27 +1,28 @@
 // Dashboard.jsx
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import tw from 'twin.macro';
-import { CircularProgress, Snackbar, Alert } from '@mui/material';
+import { CircularProgress } from '@mui/material';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
-import StatsCard from '../components/dashboard/StatsCard';
+import { StatCard, StatCardGrid } from '../components/StatCard';
+import { School as SchoolIcon } from '@mui/icons-material';
 import IncidentsPerPilotChart from '../components/dashboard/IncidentsPerPilotChart';
 import TotalRoutesCompletedChart from '../components/dashboard/TotalRoutesCompletedChart';
 import api from '../utils/axiosConfig';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
+import useNotify from '../hooks/useNotify';
 import { F } from '../components/filters/filterFields';
 import { getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import { loadCatalog } from '../services/catalogStore';
 
 const MONTH_OPTIONS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
     .map((month) => ({ value: month, label: month }));
 
 // Grid para las tarjetas de indicadores
-const StatsGrid = tw.div`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8`;
-
 // Grid para las gráficas
 const ChartsGrid = tw.div`grid grid-cols-1 lg:grid-cols-2 gap-6`;
 
@@ -49,8 +50,8 @@ const Dashboard = () => {
     useEffect(() => {
         const fetchSchools = async () => {
             try {
-                const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true } });
-                setSchools(response.data.schools || []);
+                const schoolsList = await loadCatalog('schools', { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true });
+                setSchools(schoolsList);
             } catch (err) {
                 console.error('Error fetching schools:', err);
                 setSchools([]);
@@ -66,7 +67,7 @@ const Dashboard = () => {
 
     // Estados de carga y error
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const notify = useNotify();
 
     // Referencia para generar PDF
     const reportRef = useRef();
@@ -74,7 +75,6 @@ const Dashboard = () => {
     // Función para llamar a la API con los filtros aplicados
     const fetchData = useCallback(async () => {
         setLoading(true);
-        setError(null);
 
         try {
             const queryParams = new URLSearchParams(getCicloEscolarFilterParams(cycle));
@@ -107,20 +107,17 @@ const Dashboard = () => {
 
             // Si ninguno de los indicadores tiene datos, se notifica "No hay datos"
             if (trc === 0 && inc.length === 0) {
-                setError("No hay datos");
-            } else {
-                setError(null);
+                notify.info('No hay datos para los filtros aplicados');
             }
         } catch (err) {
             console.error('Error al obtener datos:', err);
-            // En caso de error, se limpian los datos y se notifica "No hay datos"
             setTotalRoutesCompleted(0);
             setIncidents([]);
-            setError("No hay datos");
+            notify.fromError(err, 'Error al obtener los datos del dashboard');
         } finally {
             setLoading(false);
         }
-    }, [cycle, colegio, mes, dates.from, dates.to]);
+    }, [cycle, colegio, mes, dates.from, dates.to, notify]);
 
     // Carga inicial y cada vez que se aplican o limpian los filtros
     useEffect(() => {
@@ -160,13 +157,14 @@ const Dashboard = () => {
                 </div>
             ) : (
                 <div ref={reportRef}>
-                    <StatsGrid>
-                        <StatsCard
-                            title="Rutas Completadas"
+                    <StatCardGrid sx={{ mb: 4 }}>
+                        <StatCard
+                            label="Rutas completadas"
                             value={totalRoutesCompleted}
-                            icon="School"
+                            icon={<SchoolIcon />}
+                            format="number"
                         />
-                    </StatsGrid>
+                    </StatCardGrid>
 
                     <ChartsGrid>
                         <TotalRoutesCompletedChart data={totalRoutesCompleted} />
@@ -175,18 +173,6 @@ const Dashboard = () => {
                 </div>
             )}
 
-            {/* Notificación: Si ocurre algún error o no se obtuvieron datos, se muestra "No hay datos" */}
-            {error && (
-                <Snackbar
-                    open={Boolean(error)}
-                    autoHideDuration={6000}
-                    onClose={() => setError(null)}
-                >
-                    <Alert onClose={() => setError(null)} severity="info" sx={{ width: '100%' }}>
-                        {error}
-                    </Alert>
-                </Snackbar>
-            )}
         </PageContainer>
     );
 };
