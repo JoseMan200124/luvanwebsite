@@ -33,6 +33,7 @@ import {
     Divider,
     Popover,
     Radio,
+    RadioGroup,
     Stack
 } from '@mui/material';
 import { 
@@ -220,6 +221,8 @@ const CicloEscolarSelectionPage = () => {
     
     // Estados para diálogos y acciones
     const [selectedSchool, setSelectedSchool] = useState(null);
+    const [editGroupCycles, setEditGroupCycles] = useState([]);
+    const [renameScope, setRenameScope] = useState('THIS_CYCLE');
     const [openEditDialog, setOpenEditDialog] = useState(false);
     const [savingSchool, setSavingSchool] = useState(false);
     const [prefillSchools, setPrefillSchools] = useState([]);
@@ -655,8 +658,14 @@ const CicloEscolarSelectionPage = () => {
             wasPaymentsEnabled: school.paymentsEnabled !== false,
             paymentsToggleLocked: !!school.paymentsToggleLocked,
             operationStatus: school.operationStatus || 'ACTIVE',
-            enrollmentStatus: school.enrollmentStatus || 'OPEN'
+            enrollmentStatus: school.enrollmentStatus || 'OPEN',
+            originalName: school.name
         });
+        setRenameScope('THIS_CYCLE');
+        setEditGroupCycles([]);
+        api.get(`/schools/${school.id}/group-cycles`)
+            .then(({ data }) => setEditGroupCycles(Array.isArray(data?.cycles) ? data.cycles : []))
+            .catch((err) => console.error('Error cargando los ciclos del colegio:', err));
 
         let parsedSchedules = [];
         if (Array.isArray(school.schedules)) {
@@ -1351,6 +1360,10 @@ const CicloEscolarSelectionPage = () => {
                 cicloEscolarId: selectedCicloEscolarId || null,
                 operationStatus: selectedSchool.operationStatus || 'ACTIVE',
                 enrollmentStatus: selectedSchool.enrollmentStatus || 'OPEN',
+                ...(selectedSchool.id
+                    && String(selectedSchool.name || '').trim() !== String(selectedSchool.originalName || '').trim()
+                    ? { renameScope }
+                    : {}),
                 ...extraPayload
             };
 
@@ -1404,6 +1417,10 @@ const CicloEscolarSelectionPage = () => {
                     confirmText: ''
                 });
                 notify.warning(responseData.message || 'Se requiere decidir desde qué fecha iniciará el cobro.');
+                return;
+            }
+            if (err.response?.status === 409 && responseData?.code === 'SCHOOL_DUPLICATE_IN_CYCLE') {
+                notify.warning(responseData.message || 'Ya existe un colegio con ese nombre en este ciclo.');
                 return;
             }
             notify.error('Error al guardar el colegio');
@@ -1853,6 +1870,27 @@ const CicloEscolarSelectionPage = () => {
                                 value={selectedSchool ? selectedSchool.name : ''}
                                 onChange={handleInputChange}
                             />
+                            {selectedSchool?.id
+                                && editGroupCycles.length > 1
+                                && String(selectedSchool.name || '').trim() !== String(selectedSchool.originalName || '').trim() && (
+                                <FormControl component="fieldset">
+                                    <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                                        Este colegio existe en {editGroupCycles.length} ciclos. ¿Dónde se cambia el nombre?
+                                    </Typography>
+                                    <RadioGroup value={renameScope} onChange={(event) => setRenameScope(event.target.value)}>
+                                        <FormControlLabel
+                                            value="THIS_CYCLE"
+                                            control={<Radio size="small" />}
+                                            label={`Solo este ciclo (${selectedSchool.cicloEscolar?.anio ?? 'actual'})`}
+                                        />
+                                        <FormControlLabel
+                                            value="ALL_CYCLES"
+                                            control={<Radio size="small" />}
+                                            label={`Todos los ciclos de este colegio (${editGroupCycles.map((ciclo) => ciclo.anio).filter(Boolean).join(', ')})`}
+                                        />
+                                    </RadioGroup>
+                                </FormControl>
+                            )}
                             <TextField
                                 name="city"
                                 label="Ciudad"
