@@ -254,6 +254,10 @@ const CicloEscolarSelectionPage = () => {
     const [schoolYearEnd, setSchoolYearEnd] = useState('');
     // Valores con que se abrió el formulario de colegio: cerrar con cambios pide confirmación.
     const schoolInitialRef = useRef('');
+    // Último nombre consultado en similar-names y último colegio elegido en el prellenado: descartan respuestas tardías.
+    const similarQueryRef = useRef(null);
+    const prefillLoadRef = useRef(null);
+    const prefillRequestRef = useRef(null);
     const schoolFormSnapshot = JSON.stringify([selectedSchool, schoolExtraFields, schoolYearStart, schoolYearEnd]);
     useEffect(() => {
         if (openEditDialog) {
@@ -565,7 +569,7 @@ const CicloEscolarSelectionPage = () => {
 
     const fetchPrefillSchools = useCallback(async () => {
         if (!auth.token) {
-            return;
+            return [];
         }
 
         setPrefillSchoolsLoading(true);
@@ -581,10 +585,13 @@ const CicloEscolarSelectionPage = () => {
             // en este ciclo no aparecen.
             const fuenteIds = new Set((fuentes.data?.schoolIds || []).map(String));
             const rawSchools = Array.isArray(listado.data.schools) ? listado.data.schools : [];
-            setPrefillSchools(rawSchools.filter((school) => fuenteIds.has(String(school.id))));
+            const fuentesDelCiclo = rawSchools.filter((school) => fuenteIds.has(String(school.id)));
+            setPrefillSchools(fuentesDelCiclo);
+            return fuentesDelCiclo;
         } catch (err) {
             console.error('Error fetching prefill schools:', err);
             notify.error('Error al obtener colegios para prellenar');
+            return [];
         } finally {
             setPrefillSchoolsLoading(false);
         }
@@ -938,7 +945,7 @@ const CicloEscolarSelectionPage = () => {
     const handleAddSchool = () => {
         setSelectedPrefillSchoolId('');
         resetCreateSchoolDraft();
-        fetchPrefillSchools();
+        prefillLoadRef.current = fetchPrefillSchools();
         setOpenEditDialog(true);
     };
 
@@ -952,11 +959,15 @@ const CicloEscolarSelectionPage = () => {
             console.error('Error cargando los tramos del colegio de origen:', err);
             notify.warning('No se pudieron copiar los tramos de inscripción del colegio de origen; agrégalos si aplican.');
         }
+        if (String(prefillRequestRef.current) !== String(sourceSchool.id)) {
+            return;
+        }
         resetCreateSchoolDraft(sourceSchool, sourceTiers);
     };
 
     const handlePrefillSchoolChange = async (event) => {
         const nextSchoolId = event.target.value;
+        prefillRequestRef.current = nextSchoolId;
         setSelectedPrefillSchoolId(nextSchoolId);
         if (!nextSchoolId) {
             resetCreateSchoolDraft();
@@ -969,6 +980,8 @@ const CicloEscolarSelectionPage = () => {
     };
 
     const handleCloseEditDialog = () => {
+        similarQueryRef.current = null;
+        prefillRequestRef.current = null;
         setOpenEditDialog(false);
         setOpenEditSchedulesModal(false);
         setOperationalConflict(null);
@@ -1101,10 +1114,12 @@ const CicloEscolarSelectionPage = () => {
         if (!nombre) {
             return;
         }
+        similarQueryRef.current = nombre;
         try {
             const { data } = await api.get('/schools/similar-names', { params: { name: nombre, cicloEscolarId: selectedCicloEscolarId } });
             const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
-            if (candidates.length > 0) {
+            // Respuesta tardía: el formulario se cerró o el nombre cambió mientras se consultaba.
+            if (similarQueryRef.current === nombre && candidates.length > 0) {
                 // Si el usuario pulsó Guardar sin salir antes del campo, el 409 del guardado ya abrió el diálogo con
                 // fromSave: true; esta respuesta (que puede llegar después) no lo pisa, o "No, es un colegio nuevo"
                 // dejaría de guardar.
@@ -1117,11 +1132,14 @@ const CicloEscolarSelectionPage = () => {
 
     const handleSimilarContinue = async (candidate) => {
         setSimilarPrompt(null);
-        const source = prefillSchools.find((school) => String(school.id) === String(candidate.schoolId));
+        // Si la lista del prellenado todavía se está cargando, se espera a que termine en vez de dar el colegio por inexistente.
+        const fuentes = prefillSchools.length > 0 ? prefillSchools : await prefillLoadRef.current;
+        const source = (fuentes || []).find((school) => String(school.id) === String(candidate.schoolId));
         if (!source) {
             notify.warning('No se encontró ese colegio en el prellenado. Elígelo en "Prellenar con colegio existente".');
             return;
         }
+        prefillRequestRef.current = String(source.id);
         setSelectedPrefillSchoolId(String(source.id));
         await applyContinuationSource(source);
     };
