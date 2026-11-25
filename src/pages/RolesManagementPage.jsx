@@ -50,9 +50,9 @@ import { formatDateTime } from '../utils/dateFormat';
 import AppDialog from '../components/dialogs/AppDialog';
 import EntitySelect from '../components/form/EntitySelect';
 import BulkUploadDialog from '../components/dialogs/BulkUploadDialog';
-import { buildWorkbook, downloadWorkbook } from '../utils/excel';
+import { buildWorkbook } from '../utils/excel';
 import { buildFileName } from '../utils/fileName';
-import { todayForFileName } from '../utils/download';
+import { todayForFileName, downloadFromApi } from '../utils/download';
 import { loadCatalog, invalidateCatalog } from '../services/catalogStore';
 import {
     buildStaffSchoolCatalog,
@@ -61,6 +61,8 @@ import {
     staffSchoolLabel,
     staffSchoolsSummary
 } from '../utils/staffSchoolCatalog';
+import { userClients, userClientNames } from '../utils/userClients';
+import UserClientsCell from '../components/UserClientsCell';
 
 // Fallback static role list (used as initial value, backend will provide authoritative list)
 const roleOptionsStatic = [
@@ -117,8 +119,6 @@ function getFieldValue(user, field) {
             return user.email;
         case 'role':
             return user.Role ? user.Role.name : '';
-        case 'client':
-            return user.School ? user.School.name : (user.corporation ? user.corporation.name : '');
         case 'school':
             return user.School ? user.School.name : '';
         case 'updatedAt':
@@ -207,6 +207,13 @@ const RolesManagementPage = () => {
     // Colegios del filtro de cliente y de la descarga: los mismos ids canónicos que manda el backend en
     // attachedSupervisorSchools/attachedAuxiliarSchools, archivados incluidos y marcados.
     const clientFilterSchools = assignableSchools.map(s => ({ id: s.id, name: staffSchoolLabel(assignableSchools, s.id) }));
+
+    // Clientes de un usuario para la columna "Cliente", su orden, la tarjeta móvil y el Excel.
+    const clientsOf = (user) => userClients(user, {
+        schools: assignableSchools,
+        corporations,
+        catalogReady: assignableSchoolsState !== 'cargando'
+    });
 
     // Filtros: el cliente es { type: 'school' | 'corp' | 'none', id } o null (todos)
     const pageFilters = useFilters({
@@ -675,140 +682,45 @@ const RolesManagementPage = () => {
     });
     // --- FIN MODIFICACIÓN ---
 
-    const sortedUsers = sortRows(filteredUsers, { orderBy: table.orderBy, order: table.order, getValue: getFieldValue });
+    // Cliente: con varios, se ordena por el primero (colegios y luego corporaciones, en orden alfabético).
+    const sortValue = (user, field) => (field === 'client' ? (userClientNames(clientsOf(user))[0] || '') : getFieldValue(user, field));
+    const sortedUsers = sortRows(filteredUsers, { orderBy: table.orderBy, order: table.order, getValue: sortValue });
     // Server provides pagination; `users` already contains the current page.
     // Keep sorting client-side for the current page only.
     const displayedUsers = sortedUsers;
 
         
 
+    // El Excel lo arma el backend (GET /users/non-parents/excel) con los mismos filtros que el listado:
+    // hoja Usuarios (todos los clientes de cada usuario) y hoja Personal a cargo (pilotos y monitoras).
     const handleDownloadAllUsers = async (category, clientObj) => {
-        try {
-            let allUsers = [];
-            let page = 0;
-            const limit = 500;
-            let total = 0;
-            let fetched = 0;
-
-            // Decide params: when category is Colegio/Corporación ask backend to filter so attached supervisors/auxiliares are included
-            const baseParams = { page: 0, limit, allCycles: true };
-            if (category === 'Colegios') {
-                const schoolId = clientObj ? clientObj.id : null;
-                if (!schoolId) {
-                    notify.warning('Por favor selecciona un colegio para descargar');
-                    return;
-                }
-                baseParams.schoolId = schoolId;
-            } else if (category === 'Corporaciones') {
-                const corpId = clientObj ? clientObj.id : null;
-                if (!corpId) {
-                    notify.warning('Por favor selecciona una corporación para descargar');
-                    return;
-                }
-                baseParams.corporationId = corpId;
-            } else if (category === 'Sin afiliación') {
-                baseParams.sinAfiliacion = true;
-            }
-
-            // Primera petición para saber el total (pedimos al backend según params)
-            let resp = await api.get('/users/non-parents', { params: baseParams, skipSchoolCycleContext: true });
-            allUsers = resp.data.users || [];
-            total = resp.data.count || resp.data.total || allUsers.length;
-            fetched = allUsers.length;
-
-            // Si hay más, sigue pidiendo en lotes conservando los mismos filtros
-            while (fetched < total) {
-                page += 1;
-                const params = { ...baseParams, page };
-                const batchResp = await api.get('/users/non-parents', { params, skipSchoolCycleContext: true });
-                const usersBatch = batchResp.data.users || [];
-                allUsers = allUsers.concat(usersBatch);
-                fetched += usersBatch.length;
-                if (usersBatch.length === 0) {
-                    break;
-                }
-            }
-
-            if (!category) {
-                notify.warning('Por favor selecciona una opción para descargar');
+        if (!category) {
+            notify.warning('Por favor selecciona una opción para descargar');
+            return;
+        }
+        const params = {};
+        if (category === 'Colegios') {
+            if (!clientObj?.id) {
+                notify.warning('Por favor selecciona un colegio para descargar');
                 return;
             }
-            // El cliente ya lo filtró el backend (baseParams), incluido el staff asignado por tabla.
-
-            // Generar Excel (solo columnas solicitadas)
-            const headers = [
-                'Colegio',
-                'Rol',
-                'Nombre',
-                'Correo electrónico',
-                'Pilotos a Cargo',
-                'Monitoras a Cargo'
-            ];
-            const data = [headers];
-            allUsers.forEach((u) => {
-                const roleName = u.Role ? u.Role.name : "";
-                const schoolName = u.School ? u.School.name : "";
-
-                let pilotosACargoStr = "";
-                if (roleName.toLowerCase() === "supervisor" && u.supervisorPilots) {
-                    const emails = u.supervisorPilots.map(sp => {
-                        const pilot = allPilots.find(ap => ap.id === sp.pilotId);
-                        return pilot ? pilot.email : "";
-                    });
-                    pilotosACargoStr = emails.join(";");
-                }
-
-                let monitorasACargoStr = "";
-                if (roleName.toLowerCase() === "auxiliar") {
-                    const possibleRelations = u.auxiliarMonitora || u.auxiliarMonitoras || u.auxiliarMonitoraRelations || u.auxiliarMonitoraIds || [];
-                    let ids = [];
-                    if (Array.isArray(possibleRelations) && possibleRelations.length > 0) {
-                        ids = possibleRelations.map(x => {
-                            if (!x) {
-                                return null;
-                            }
-                            if (typeof x === 'number') {
-                                return x;
-                            }
-                            if (typeof x === 'object') {
-                                return x.monitoraId ?? x.monitora?.id ?? x.id ?? null;
-                            }
-                            return null;
-                        }).filter(Boolean);
-                    }
-                    if (ids.length > 0) {
-                        const emails = ids.map(id => {
-                            const m = allMonitoras.find(am => am.id === id || am.monitoraId === id);
-                            return m ? (m.email || m.name || '') : '';
-                        }).filter(Boolean);
-                        monitorasACargoStr = emails.join(';');
-                    } else {
-                        const monitorasSame = allMonitoras.filter(am => (u.school && String(am.school) === String(u.school)) || (u.corporationId && String(am.corporationId || am.corporation?.id) === String(u.corporationId)));
-                        monitorasACargoStr = monitorasSame.map(m => m.email || m.name || '').filter(Boolean).join(';');
-                    }
-                }
-
-                const row = [
-                    schoolName || '',
-                    roleName || '',
-                    u.name || '',
-                    u.email || '',
-                    pilotosACargoStr,
-                    monitorasACargoStr
-                ];
-                data.push(row);
-            });
+            params.schoolId = clientObj.id;
+        } else if (category === 'Corporaciones') {
+            if (!clientObj?.id) {
+                notify.warning('Por favor selecciona una corporación para descargar');
+                return;
+            }
+            params.corporationId = clientObj.id;
+        } else if (category === 'Sin afiliación') {
+            params.sinAfiliacion = true;
+        }
+        try {
             const clientName = clientObj?.name || (category === 'Sin afiliación' ? 'sin afiliacion' : '');
-            await downloadWorkbook(
-                buildWorkbook({
-                    sheets: [{
-                        name: 'Usuarios',
-                        columns: headers.map((header, index) => ({ header, key: `c${index}` })),
-                        rows: data.slice(1),
-                    }],
-                }),
-                buildFileName({ object: 'usuarios', client: clientName, date: todayForFileName(), extension: 'xlsx' })
-            );
+            await downloadFromApi('/users/non-parents/excel', {
+                params,
+                config: { skipSchoolCycleContext: true },
+                fallbackName: buildFileName({ object: 'usuarios', client: clientName, date: todayForFileName(), extension: 'xlsx' })
+            });
         } catch (error) {
             notify.fromError(error, 'Error al descargar todos los usuarios');
         }
@@ -1002,7 +914,7 @@ const RolesManagementPage = () => {
                                     </MobileField>
                                     <MobileField label="Correo">{user.email}</MobileField>
                                     <MobileField label="Rol">{user.Role ? user.Role.name : '—'}</MobileField>
-                                    <MobileField label="Cliente">{user.School ? user.School.name : (user.corporation ? user.corporation.name : '—')}</MobileField>
+                                    <MobileField label="Cliente"><UserClientsCell clients={clientsOf(user)} /></MobileField>
                                 </MobileCard>
                             ))}
                             <AppTablePagination count={totalUsers} {...table.paginationProps} />
@@ -1024,7 +936,7 @@ const RolesManagementPage = () => {
                                                 </TableCell>
                                                 <TableCell>{user.email}</TableCell>
                                                 <TableCell>{user.Role ? user.Role.name : '—'}</TableCell>
-                                                <TableCell>{user.School ? user.School.name : (user.corporation ? user.corporation.name : '—')}</TableCell>
+                                                <TableCell><UserClientsCell clients={clientsOf(user)} /></TableCell>
                                                 <TableCell>
                                                     {formatDateTime(user.updatedAt)}
                                                 </TableCell>
