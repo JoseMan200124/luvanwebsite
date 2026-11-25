@@ -54,6 +54,13 @@ import { buildWorkbook, downloadWorkbook } from '../utils/excel';
 import { buildFileName } from '../utils/fileName';
 import { todayForFileName } from '../utils/download';
 import { loadCatalog, invalidateCatalog } from '../services/catalogStore';
+import {
+    buildStaffSchoolCatalog,
+    toCanonicalSchoolIds,
+    visibleStaffSchoolOptions,
+    staffSchoolLabel,
+    staffSchoolsSummary
+} from '../utils/staffSchoolCatalog';
 
 // Fallback static role list (used as initial value, backend will provide authoritative list)
 const roleOptionsStatic = [
@@ -77,10 +84,6 @@ const BULK_SHEET_ROLE_IDS = Object.freeze({
     Supervisor: 6,
     Auxiliar: 7
 });
-
-// A colegio is identified by its NAME, not its id: the same school has one row per ciclo
-// escolar. Must mirror `normalizeSchoolIdentityForStaffScope` in the backend.
-const normalizeSchoolName = (value) => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
 
 // Columnas de la tabla de usuarios
 const COLUMNS = [
@@ -136,12 +139,15 @@ const RolesManagementPage = () => {
 
     const [users, setUsers] = useState([]);
     const [schools, setSchools] = useState([]);
-    // Canonical school list (one entry per school name) used to assign Supervisor/Auxiliar
-    // clients. Independent of the ciclo escolar filter: staff assignments are global.
+    // Colegios asignables a Supervisor/Auxiliar: uno por grupo (schoolGroupId), con el id canónico
+    // que también usa el backend. No depende del filtro de ciclo: la asignación es global.
     const [assignableSchools, setAssignableSchools] = useState([]);
-    // Map<schoolId, canonicalSchoolId> — resolves any per-cycle school row to the entry
-    // rendered in the assignment selector.
+    // 'cargando' | 'listo' | 'error': sin catálogo el selector no puede nombrar los colegios.
+    const [assignableSchoolsState, setAssignableSchoolsState] = useState('cargando');
+    // Map<schoolId, idCanónico>: lleva cualquier fila-ciclo a la opción del selector.
     const [canonicalSchoolIdById, setCanonicalSchoolIdById] = useState(new Map());
+    // Colegios que el usuario tenía al abrir el diálogo: los archivados solo se ofrecen si están aquí.
+    const [initialStaffSchoolIds, setInitialStaffSchoolIds] = useState([]);
     const [corporations, setCorporations] = useState([]);
     const [roleOptions, setRoleOptions] = useState(roleOptionsStatic);
     // Buses no longer needed for route report generation (slots carry routeNumber)
@@ -198,6 +204,10 @@ const RolesManagementPage = () => {
 
     // (Reporte de rutas removido de la página)
 
+    // Colegios del filtro de cliente y de la descarga: los mismos ids canónicos que manda el backend en
+    // attachedSupervisorSchools/attachedAuxiliarSchools, archivados incluidos y marcados.
+    const clientFilterSchools = assignableSchools.map(s => ({ id: s.id, name: staffSchoolLabel(assignableSchools, s.id) }));
+
     // Filtros: el cliente es { type: 'school' | 'corp' | 'none', id } o null (todos)
     const pageFilters = useFilters({
         fields: [
@@ -212,7 +222,7 @@ const RolesManagementPage = () => {
                     })
                     .map(r => ({ value: String(r.id), label: r.name })),
             }),
-            F.client({ schools, corporations, extraOptions: [NO_AFFILIATION_OPTION], schoolsGroupLabel: 'Colegios' }),
+            F.client({ schools: clientFilterSchools, corporations, extraOptions: [NO_AFFILIATION_OPTION], schoolsGroupLabel: 'Colegios' }),
         ],
         onApplied: table.resetPage,
     });
@@ -316,6 +326,9 @@ const RolesManagementPage = () => {
             if (clientFilter?.type === 'corp') {
                 params.corporationId = clientFilter.id;
             }
+            if (clientFilter?.type === 'none') {
+                params.sinAfiliacion = true;
+            }
 
             const response = await api.get('/users/non-parents', { params, skipSchoolCycleContext: true });
             const data = response.data || {};
@@ -348,48 +361,18 @@ const RolesManagementPage = () => {
         }
     };
 
-    // A school is identified by its NAME: the same colegio exists as one row per ciclo
-    // escolar, each with a different id. Staff clients are picked once per name, so this
-    // list must never be filtered by the selected cycle nor contain repeated names.
-    // The backend already collapses staff assignments to one id per school name, but a
-    // legacy `user.school` (or a stale row) may still point at a sibling-cycle record.
-    const toCanonicalSchoolIds = (schoolIds) => [...new Set(
-        (schoolIds || [])
-            .map(id => Number(id))
-            .filter(Boolean)
-            .map(id => canonicalSchoolIdById.get(id) ?? id)
-    )];
-
     const fetchAssignableSchools = async () => {
         try {
             const [latestSchools, allSchools] = await Promise.all([
-                loadCatalog('schools', { latestPerSchool: true }, { skipSchoolCycleContext: true }),
-                loadCatalog('schools', { allCycles: true }, { skipSchoolCycleContext: true })
+                loadCatalog('schools', { latestPerSchool: true, includeArchived: true }, { skipSchoolCycleContext: true }),
+                loadCatalog('schools', { allCycles: true, includeArchived: true }, { skipSchoolCycleContext: true })
             ]);
-
-            const canonicalByName = new Map();
-            for (const school of latestSchools) {
-                const key = normalizeSchoolName(school.name);
-                const current = canonicalByName.get(key);
-                if (!current || Number(school.id) > Number(current.id)) {
-                    canonicalByName.set(key, school);
-                }
-            }
-            setAssignableSchools(
-                [...canonicalByName.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)))
-            );
-
-            // Maps every per-cycle school row to the canonical id shown in the selector,
-            // so data keyed by a sibling record (e.g. a monitora's school) still resolves.
-            const canonicalBySchoolId = new Map();
-            for (const school of allSchools) {
-                const canonical = canonicalByName.get(normalizeSchoolName(school.name));
-                if (canonical) {
-                    canonicalBySchoolId.set(Number(school.id), Number(canonical.id));
-                }
-            }
-            setCanonicalSchoolIdById(canonicalBySchoolId);
+            const { schools: catalog, canonicalIdBySchoolId } = buildStaffSchoolCatalog(latestSchools, allSchools);
+            setAssignableSchools(catalog);
+            setCanonicalSchoolIdById(canonicalIdBySchoolId);
+            setAssignableSchoolsState('listo');
         } catch (err) {
+            setAssignableSchoolsState('error');
             console.error('[fetchAssignableSchools] Error:', err);
             notify.error('Error al obtener colegios asignables');
         }
@@ -417,6 +400,7 @@ const RolesManagementPage = () => {
             password: '',
             corporationId: user.corporationId || ''
         });
+        setInitialStaffSchoolIds([]);
         // Populate monitoraFullName and phoneNumber from nested MonitoraDetail if present
         if (parsedRoleId === 4) {
             const md = user.monitoraDetail || user.MonitoraDetail || null;
@@ -426,15 +410,13 @@ const RolesManagementPage = () => {
         }
             // Nota: El select de contrato NO se muestra en el diálogo de edición
             if (parsedRoleId === 6 || (user.Role?.name === 'Supervisor')) {
-                // If backend provides attachedSupervisorSchools (optional), use it. Otherwise try to infer from user's school
                 const attachedSchools = user.attachedSupervisorSchools || [];
-                if (attachedSchools.length > 0) {
-                    setSelectedSupervisorSchools(toCanonicalSchoolIds(attachedSchools));
-                } else if (user.school) {
-                    setSelectedSupervisorSchools(toCanonicalSchoolIds([user.school]));
-                } else {
-                    setSelectedSupervisorSchools([]);
-                }
+                const supervisorSchoolIds = toCanonicalSchoolIds(
+                    attachedSchools.length > 0 ? attachedSchools : [user.school],
+                    canonicalSchoolIdById
+                );
+                setSelectedSupervisorSchools(supervisorSchoolIds);
+                setInitialStaffSchoolIds(supervisorSchoolIds);
                 
                 // Load attached corporations for supervisor
                 const attachedCorporations = user.attachedSupervisorCorporations || [];
@@ -447,15 +429,13 @@ const RolesManagementPage = () => {
         
         // Para el caso de Auxiliar
         if (parsedRoleId === 7 || (user.Role?.name === 'Auxiliar')) {
-            // Load attached schools for auxiliar
             const attachedSchools = user.attachedAuxiliarSchools || [];
-            if (attachedSchools.length > 0) {
-                setSelectedAuxiliarSchools(toCanonicalSchoolIds(attachedSchools));
-            } else if (user.school) {
-                setSelectedAuxiliarSchools(toCanonicalSchoolIds([user.school]));
-            } else {
-                setSelectedAuxiliarSchools([]);
-            }
+            const auxiliarSchoolIds = toCanonicalSchoolIds(
+                attachedSchools.length > 0 ? attachedSchools : [user.school],
+                canonicalSchoolIdById
+            );
+            setSelectedAuxiliarSchools(auxiliarSchoolIds);
+            setInitialStaffSchoolIds(auxiliarSchoolIds);
             
             // Load attached corporations for auxiliar (if backend provided them)
             const attachedCorporations = user.attachedAuxiliarCorporations || [];
@@ -486,6 +466,7 @@ const RolesManagementPage = () => {
         setSelectedSupervisorCorporations([]);
         setSelectedAuxiliarSchools([]);
         setSelectedAuxiliarCorporations([]);
+        setInitialStaffSchoolIds([]);
         setOpenDialog(true);
     };
 
@@ -496,6 +477,7 @@ const RolesManagementPage = () => {
         setSelectedSupervisorCorporations([]);
         setSelectedAuxiliarSchools([]);
         setSelectedAuxiliarCorporations([]);
+        setInitialStaffSchoolIds([]);
     };
 
     const handleDeleteClick = async (user) => {
@@ -687,41 +669,8 @@ const RolesManagementPage = () => {
                 return false;
             }
         }
-        if (clientFilter) {
-            const cType = clientFilter.type;
-            if (cType === 'none') {
-                const hasSchool = !!(u.school) || (Array.isArray(u.attachedAuxiliarSchools) && u.attachedAuxiliarSchools.length > 0) || (Array.isArray(u.attachedSupervisorSchools) && u.attachedSupervisorSchools.length > 0);
-                const hasCorp = !!(u.corporationId || u.corporation) || (Array.isArray(u.attachedSupervisorCorporations) && u.attachedSupervisorCorporations.length > 0) || (Array.isArray(u.attachedAuxiliarCorporations) && u.attachedAuxiliarCorporations.length > 0);
-                if (hasSchool || hasCorp) {
-                    return false;
-                }
-            } else {
-                const cId = Number(clientFilter.id);
-                if (cType === 'school') {
-                    if (Number(u.school) === cId) {
-                        // ok
-                    } else if (Array.isArray(u.attachedSupervisorSchools) && u.attachedSupervisorSchools.map(Number).includes(cId)) {
-                        // ok
-                    } else if (Array.isArray(u.attachedAuxiliarSchools) && u.attachedAuxiliarSchools.map(Number).includes(cId)) {
-                        // ok
-                    } else {
-                        return false;
-                    }
-                } else if (cType === 'corp') {
-                    if (Number(u.corporationId) === cId) {
-                        // ok
-                    } else if (Array.isArray(u.attachedSupervisorCorporations) && u.attachedSupervisorCorporations.map(Number).includes(cId)) {
-                        // ok
-                    } else if (Array.isArray(u.attachedAuxiliarCorporations) && u.attachedAuxiliarCorporations.map(Number).includes(cId)) {
-                        // ok
-                    } else {
-                        return false;
-                    }
-                }
-            }
-        }
-        
-
+        // El cliente lo filtra el backend (fetchUsers): aquí solo llega la página actual, y volver a
+        // filtrarla con otras reglas escondía filas que el contador sí contaba.
         return true;
     });
     // --- FIN MODIFICACIÓN ---
@@ -757,6 +706,8 @@ const RolesManagementPage = () => {
                     return;
                 }
                 baseParams.corporationId = corpId;
+            } else if (category === 'Sin afiliación') {
+                baseParams.sinAfiliacion = true;
             }
 
             // Primera petición para saber el total (pedimos al backend según params)
@@ -778,29 +729,11 @@ const RolesManagementPage = () => {
                 }
             }
 
-            // Filtrar según categoría seleccionada
             if (!category) {
                 notify.warning('Por favor selecciona una opción para descargar');
                 return;
             }
-
-            if (category === 'Colegios') {
-                const schoolId = clientObj ? clientObj.id : null;
-                if (!schoolId) {
-                    notify.warning('Por favor selecciona un colegio para descargar');
-                    return;
-                }
-                allUsers = allUsers.filter(u => String(u.school) === String(schoolId));
-            } else if (category === 'Corporaciones') {
-                const corpId = clientObj ? clientObj.id : null;
-                if (!corpId) {
-                    notify.warning('Por favor selecciona una corporación para descargar');
-                    return;
-                }
-                allUsers = allUsers.filter(u => String(u.corporationId || u.corporation?.id || '') === String(corpId));
-            } else if (category === 'Sin afiliación') {
-                allUsers = allUsers.filter(u => !(u.school || u.corporationId || u.corporation));
-            }
+            // El cliente ya lo filtró el backend (baseParams), incluido el staff asignado por tabla.
 
             // Generar Excel (solo columnas solicitadas)
             const headers = [
@@ -883,10 +816,9 @@ const RolesManagementPage = () => {
 
     // Plantilla de la carga masiva: hoja Listas y una hoja por rol que el actor puede gestionar.
     const buildUserTemplate = () => {
-        // 1. Prepara listas de referencia. `assignableSchools` (no `schools`) porque no debe
-        // verse afectada por el filtro de Ciclo Escolar de la página: es una lista fija,
-        // un id canónico por colegio, cargada una sola vez al montar.
-        const colegios = [...assignableSchools].sort((a, b) => a.id - b.id).map(s => [s.id, s.name]);
+        // 1. Prepara listas de referencia. `assignableSchools` (no `schools`) porque no depende del
+        // filtro de Ciclo Escolar: un id canónico por colegio. Los archivados no se ofrecen para altas.
+        const colegios = assignableSchools.filter(s => !s.archived).sort((a, b) => a.id - b.id).map(s => [s.id, s.name]);
         const corporaciones = [...corporations].sort((a, b) => a.id - b.id).map(c => [c.id, c.name]);
         //const pilotos = allPilots.map(p => [p.id, p.name]);
         //const monitoras = allMonitoras.map(m => [m.id, m.name]);
@@ -1310,12 +1242,12 @@ const RolesManagementPage = () => {
                                     value={selectedSupervisorSchools}
                                     onChange={(e) => setSelectedSupervisorSchools(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
                                     label="Seleccionar Colegios"
-                                    renderValue={(selected) => selected.map(id => (assignableSchools.find(s => s.id === id)?.name || id)).join(', ')}
+                                    renderValue={(selected) => staffSchoolsSummary(assignableSchools, selected, assignableSchoolsState)}
                                 >
-                                    {assignableSchools.map(s => (
+                                    {visibleStaffSchoolOptions(assignableSchools, initialStaffSchoolIds).map(s => (
                                         <MenuItem key={s.id} value={s.id}>
                                             <Checkbox checked={selectedSupervisorSchools.includes(s.id)} />
-                                            <ListItemText primary={s.name} />
+                                            <ListItemText primary={staffSchoolLabel(assignableSchools, s.id)} />
                                         </MenuItem>
                                     ))}
                                 </Select>
@@ -1347,7 +1279,10 @@ const RolesManagementPage = () => {
                                 {(() => {
                                     // Compute pilots that belong to selected schools or corporations
                                     const schoolPilots = selectedSupervisorSchools.length > 0 
-                                        ? allPilots.filter(p => selectedSupervisorSchools.includes(Number(p.school)))
+                                        ? allPilots.filter(p => {
+                                            const schoolId = Number(p.school);
+                                            return Boolean(schoolId) && selectedSupervisorSchools.includes(canonicalSchoolIdById.get(schoolId) ?? schoolId);
+                                        })
                                         : [];
                                     const corpPilots = selectedSupervisorCorporations.length > 0
                                         ? allPilots.filter(p => selectedSupervisorCorporations.includes(Number(p.corporationId)))
@@ -1389,12 +1324,12 @@ const RolesManagementPage = () => {
                                     value={selectedAuxiliarSchools}
                                     onChange={(e) => setSelectedAuxiliarSchools(Array.isArray(e.target.value) ? e.target.value : [e.target.value])}
                                     label="Seleccionar Colegios"
-                                    renderValue={(selected) => selected.map(id => (assignableSchools.find(s => s.id === id)?.name || id)).join(', ')}
+                                    renderValue={(selected) => staffSchoolsSummary(assignableSchools, selected, assignableSchoolsState)}
                                 >
-                                    {assignableSchools.map(s => (
+                                    {visibleStaffSchoolOptions(assignableSchools, initialStaffSchoolIds).map(s => (
                                         <MenuItem key={s.id} value={s.id}>
                                             <Checkbox checked={selectedAuxiliarSchools.includes(s.id)} />
-                                            <ListItemText primary={s.name} />
+                                            <ListItemText primary={staffSchoolLabel(assignableSchools, s.id)} />
                                         </MenuItem>
                                     ))}
                                 </Select>
@@ -1523,7 +1458,7 @@ const RolesManagementPage = () => {
                 {downloadCategory === 'Colegios' && (
                     <Box sx={{ mt: 2 }}>
                         <Autocomplete
-                            options={schools}
+                            options={clientFilterSchools}
                             getOptionLabel={(opt) => opt?.name || ''}
                             value={selectedClientForDownload}
                             onChange={(e, v) => setSelectedClientForDownload(v)}
