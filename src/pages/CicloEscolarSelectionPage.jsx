@@ -33,6 +33,7 @@ import {
     Divider,
     Popover,
     Radio,
+    RadioGroup,
     Stack
 } from '@mui/material';
 import { 
@@ -51,6 +52,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
+import { shiftIsoDateByYears } from '../utils/shiftIsoDateByYears';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 import PageContainer from '../components/layout/PageContainer';
@@ -80,6 +82,7 @@ import { formatClock, formatDateTime } from '../utils/dateFormat';
 import { formatQ } from '../utils/currency';
 import { SCHOOL_OPERATION_STATUS, SCHOOL_ENROLLMENT_STATUS, getStatusMeta } from '../constants/statuses';
 import AppDialog from '../components/dialogs/AppDialog';
+import SimilarSchoolDialog from '../components/SimilarSchoolDialog';
 import { invalidateCatalog } from '../services/catalogStore';
 
 const SchoolCard = styled(Card)`
@@ -220,12 +223,16 @@ const CicloEscolarSelectionPage = () => {
     
     // Estados para diálogos y acciones
     const [selectedSchool, setSelectedSchool] = useState(null);
+    const [editGroupCycles, setEditGroupCycles] = useState([]);
+    const [renameScope, setRenameScope] = useState('THIS_CYCLE');
     const [openEditDialog, setOpenEditDialog] = useState(false);
     const [savingSchool, setSavingSchool] = useState(false);
     const [prefillSchools, setPrefillSchools] = useState([]);
     const [prefillSchoolsLoading, setPrefillSchoolsLoading] = useState(false);
     const [selectedPrefillSchoolId, setSelectedPrefillSchoolId] = useState('');
+    const [similarPrompt, setSimilarPrompt] = useState(null); // { candidates, fromSave }
     const [draftEnrollmentTiers, setDraftEnrollmentTiers] = useState([]);
+    const [tiersEditorKey, setTiersEditorKey] = useState(0);
     const [openEditSchedulesModal, setOpenEditSchedulesModal] = useState(false);
     const [openSubmissionDialog, setOpenSubmissionDialog] = useState(false);
     const [submissions, setSubmissions] = useState([]);
@@ -247,6 +254,10 @@ const CicloEscolarSelectionPage = () => {
     const [schoolYearEnd, setSchoolYearEnd] = useState('');
     // Valores con que se abrió el formulario de colegio: cerrar con cambios pide confirmación.
     const schoolInitialRef = useRef('');
+    // Último nombre consultado en similar-names y último colegio elegido en el prellenado: descartan respuestas tardías.
+    const similarQueryRef = useRef(null);
+    const prefillLoadRef = useRef(null);
+    const prefillRequestRef = useRef(null);
     const schoolFormSnapshot = JSON.stringify([selectedSchool, schoolExtraFields, schoolYearStart, schoolYearEnd]);
     useEffect(() => {
         if (openEditDialog) {
@@ -412,8 +423,13 @@ const CicloEscolarSelectionPage = () => {
         return aligned;
     };
 
-    const resetCreateSchoolDraft = (sourceSchool = null) => {
+    const resetCreateSchoolDraft = (sourceSchool = null, sourceTiers = []) => {
         const source = sourceSchool || {};
+        // Prellenar = continuar el MISMO colegio en el ciclo elegido: fechas y tramos se mueven al año del ciclo nuevo.
+        const targetYear = Number(ciclosEscolares.find((ciclo) => String(ciclo.id) === String(selectedCicloEscolarId))?.anio) || 0;
+        const sourceYear = Number(source.cicloEscolar?.anio) || 0;
+        const yearShift = sourceSchool && targetYear && sourceYear ? targetYear - sourceYear : 0;
+        const shift = (fecha) => shiftIsoDateByYears(String(fecha || '').slice(0, 10), yearShift);
         const routeNumbers = parseArrayField(source.routeNumbers).map(String);
         const schedules = sourceSchool
             ? ensureFourSchedules(parseArrayField(source.schedules)).map((schedule) => ({ ...schedule, _originalCode: null }))
@@ -421,6 +437,8 @@ const CicloEscolarSelectionPage = () => {
 
         setSelectedSchool(sourceSchool ? {
             ...buildEmptySchoolDraft(),
+            continuesSchoolId: source.id,
+            confirmNewSchool: false,
             name: source.name || '',
             address: source.address || '',
             city: source.city || '',
@@ -446,10 +464,16 @@ const CicloEscolarSelectionPage = () => {
         setSchoolExtraFields(parseArrayField(source.extraEnrollmentFields));
         setSchoolRouteNumbers(routeNumbers);
         setSchoolRouteSchedules(sourceSchool ? normalizeRouteSchedulesFromSchool(source, routeNumbers) : []);
-        setSchoolYearStart(source.schoolYearStart || '');
-        setSchoolYearEnd(source.schoolYearEnd || '');
+        setSchoolYearStart(shift(source.schoolYearStart));
+        setSchoolYearEnd(shift(source.schoolYearEnd));
         setNewGradeName('');
-        setDraftEnrollmentTiers([]);
+        setDraftEnrollmentTiers(sourceTiers.map((tier) => ({
+            untilDate: shift(tier.untilDate),
+            discountType: tier.discountType,
+            discountValue: tier.discountValue
+        })));
+        // El editor de tramos lee los tramos del borrador solo al montarse: se vuelve a montar con los copiados.
+        setTiersEditorKey((key) => key + 1);
     };
 
     const fetchCiclosEscolares = useCallback(async () => {
@@ -545,31 +569,33 @@ const CicloEscolarSelectionPage = () => {
 
     const fetchPrefillSchools = useCallback(async () => {
         if (!auth.token) {
-            return;
+            return [];
         }
 
         setPrefillSchoolsLoading(true);
         try {
-            const response = await api.get('/schools', {
-                headers: {
-                    Authorization: `Bearer ${auth.token}`,
-                },
-                params: {
-                    includeArchived: true,
-                    includeAllCycles: true,
-                    useHighestSchoolCycle: true
-                }
-            });
-
-            const rawSchools = Array.isArray(response.data.schools) ? response.data.schools : [];
-            setPrefillSchools(rawSchools.filter((school) => school?.id));
+            const [listado, fuentes] = await Promise.all([
+                api.get('/schools', {
+                    headers: { Authorization: `Bearer ${auth.token}` },
+                    params: { includeArchived: true, includeAllCycles: true }
+                }),
+                api.get('/schools/continuation-sources', { params: { cicloEscolarId: selectedCicloEscolarId } })
+            ]);
+            // Una fila por colegio: la de su ciclo anterior más cercano al ciclo elegido. Los colegios que ya existen
+            // en este ciclo no aparecen.
+            const fuenteIds = new Set((fuentes.data?.schoolIds || []).map(String));
+            const rawSchools = Array.isArray(listado.data.schools) ? listado.data.schools : [];
+            const fuentesDelCiclo = rawSchools.filter((school) => fuenteIds.has(String(school.id)));
+            setPrefillSchools(fuentesDelCiclo);
+            return fuentesDelCiclo;
         } catch (err) {
             console.error('Error fetching prefill schools:', err);
             notify.error('Error al obtener colegios para prellenar');
+            return [];
         } finally {
             setPrefillSchoolsLoading(false);
         }
-    }, [auth.token, notify]);
+    }, [auth.token, selectedCicloEscolarId, notify]);
 
     // Register page-level refresh handler for global refresh control
     useRegisterPageRefresh(async () => {
@@ -655,8 +681,14 @@ const CicloEscolarSelectionPage = () => {
             wasPaymentsEnabled: school.paymentsEnabled !== false,
             paymentsToggleLocked: !!school.paymentsToggleLocked,
             operationStatus: school.operationStatus || 'ACTIVE',
-            enrollmentStatus: school.enrollmentStatus || 'OPEN'
+            enrollmentStatus: school.enrollmentStatus || 'OPEN',
+            originalName: school.name
         });
+        setRenameScope('THIS_CYCLE');
+        setEditGroupCycles([]);
+        api.get(`/schools/${school.id}/group-cycles`)
+            .then(({ data }) => setEditGroupCycles(Array.isArray(data?.cycles) ? data.cycles : []))
+            .catch((err) => console.error('Error cargando los ciclos del colegio:', err));
 
         let parsedSchedules = [];
         if (Array.isArray(school.schedules)) {
@@ -913,28 +945,43 @@ const CicloEscolarSelectionPage = () => {
     const handleAddSchool = () => {
         setSelectedPrefillSchoolId('');
         resetCreateSchoolDraft();
-        fetchPrefillSchools();
+        prefillLoadRef.current = fetchPrefillSchools();
         setOpenEditDialog(true);
     };
 
-    const handlePrefillSchoolChange = (event) => {
-        const nextSchoolId = event.target.value;
-        setSelectedPrefillSchoolId(nextSchoolId);
+    // Aplica un colegio de otro ciclo como origen de la continuación (prellenado + tramos con fechas movidas).
+    const applyContinuationSource = async (sourceSchool) => {
+        let sourceTiers = [];
+        try {
+            const { data } = await api.get(`/schools/${sourceSchool.id}/enrollment-fee-config`);
+            sourceTiers = Array.isArray(data?.tiers) ? data.tiers : [];
+        } catch (err) {
+            console.error('Error cargando los tramos del colegio de origen:', err);
+            notify.warning('No se pudieron copiar los tramos de inscripción del colegio de origen; agrégalos si aplican.');
+        }
+        if (String(prefillRequestRef.current) !== String(sourceSchool.id)) {
+            return;
+        }
+        resetCreateSchoolDraft(sourceSchool, sourceTiers);
+    };
 
+    const handlePrefillSchoolChange = async (event) => {
+        const nextSchoolId = event.target.value;
+        prefillRequestRef.current = nextSchoolId;
+        setSelectedPrefillSchoolId(nextSchoolId);
         if (!nextSchoolId) {
             resetCreateSchoolDraft();
             return;
         }
-
         const sourceSchool = prefillSchools.find((school) => String(school.id) === String(nextSchoolId));
-        if (!sourceSchool) {
-            return;
+        if (sourceSchool) {
+            await applyContinuationSource(sourceSchool);
         }
-
-        resetCreateSchoolDraft(sourceSchool);
     };
 
     const handleCloseEditDialog = () => {
+        similarQueryRef.current = null;
+        prefillRequestRef.current = null;
         setOpenEditDialog(false);
         setOpenEditSchedulesModal(false);
         setOperationalConflict(null);
@@ -1054,7 +1101,56 @@ const CicloEscolarSelectionPage = () => {
         setSelectedSchool((prev) => ({
             ...prev,
             [e.target.name]: e.target.value,
+            ...(e.target.name === 'name' ? { confirmNewSchool: false } : {}),
         }));
+    };
+
+    // Al salir del campo Nombre (solo al crear y sin prellenado) se consultan colegios con nombre parecido.
+    const handleNameBlur = async () => {
+        if (selectedSchool?.id || selectedSchool?.continuesSchoolId || selectedSchool?.confirmNewSchool) {
+            return;
+        }
+        const nombre = String(selectedSchool?.name || '').trim();
+        if (!nombre) {
+            return;
+        }
+        similarQueryRef.current = nombre;
+        try {
+            const { data } = await api.get('/schools/similar-names', { params: { name: nombre, cicloEscolarId: selectedCicloEscolarId } });
+            const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
+            // Respuesta tardía: el formulario se cerró o el nombre cambió mientras se consultaba.
+            if (similarQueryRef.current === nombre && candidates.length > 0) {
+                // Si el usuario pulsó Guardar sin salir antes del campo, el 409 del guardado ya abrió el diálogo con
+                // fromSave: true; esta respuesta (que puede llegar después) no lo pisa, o "No, es un colegio nuevo"
+                // dejaría de guardar.
+                setSimilarPrompt((prev) => prev ?? { candidates, fromSave: false });
+            }
+        } catch (err) {
+            console.error('Error consultando colegios con nombre parecido:', err);
+        }
+    };
+
+    const handleSimilarContinue = async (candidate) => {
+        setSimilarPrompt(null);
+        // Si la lista del prellenado todavía se está cargando, se espera a que termine en vez de dar el colegio por inexistente.
+        const fuentes = prefillSchools.length > 0 ? prefillSchools : await prefillLoadRef.current;
+        const source = (fuentes || []).find((school) => String(school.id) === String(candidate.schoolId));
+        if (!source) {
+            notify.warning('No se encontró ese colegio en el prellenado. Elígelo en "Prellenar con colegio existente".');
+            return;
+        }
+        prefillRequestRef.current = String(source.id);
+        setSelectedPrefillSchoolId(String(source.id));
+        await applyContinuationSource(source);
+    };
+
+    const handleSimilarNewSchool = () => {
+        const fromSave = similarPrompt?.fromSave === true;
+        setSimilarPrompt(null);
+        setSelectedSchool((prev) => ({ ...prev, confirmNewSchool: true }));
+        if (fromSave) {
+            handleSave({ confirmNewSchool: true });
+        }
     };
 
     const DAY_OPTIONS = [
@@ -1345,12 +1441,20 @@ const CicloEscolarSelectionPage = () => {
                         discountValue: row.discountType === 'FREE' ? 0 : Number(row.discountValue) || 0,
                     }))
                 }),
+                ...(selectedSchool.id ? {} : {
+                    continuesSchoolId: selectedSchool.continuesSchoolId || undefined,
+                    confirmNewSchool: selectedSchool.confirmNewSchool === true ? true : undefined
+                }),
                 // school year bounds
                 schoolYearStart: schoolYearStart || null,
                 schoolYearEnd: schoolYearEnd || null,
                 cicloEscolarId: selectedCicloEscolarId || null,
                 operationStatus: selectedSchool.operationStatus || 'ACTIVE',
                 enrollmentStatus: selectedSchool.enrollmentStatus || 'OPEN',
+                ...(selectedSchool.id
+                    && String(selectedSchool.name || '').trim() !== String(selectedSchool.originalName || '').trim()
+                    ? { renameScope }
+                    : {}),
                 ...extraPayload
             };
 
@@ -1404,6 +1508,18 @@ const CicloEscolarSelectionPage = () => {
                     confirmText: ''
                 });
                 notify.warning(responseData.message || 'Se requiere decidir desde qué fecha iniciará el cobro.');
+                return;
+            }
+            if (err.response?.status === 409 && responseData?.code === 'SCHOOL_DUPLICATE_IN_CYCLE') {
+                notify.warning(responseData.message || 'Ya existe un colegio con ese nombre en este ciclo.');
+                return;
+            }
+            if (err.response?.status === 409 && responseData?.code === 'SCHOOL_SIMILAR_NAME') {
+                setSimilarPrompt({ candidates: responseData.candidates || [], fromSave: true });
+                return;
+            }
+            if (['SCHOOL_NAME_LOCKED', 'SCHOOL_CONTINUATION_SOURCE_NOT_FOUND', 'SCHOOL_NAME_REQUIRED'].includes(responseData?.code)) {
+                notify.warning(responseData.message || 'No se pudo guardar el colegio.');
                 return;
             }
             notify.error('Error al guardar el colegio');
@@ -1801,6 +1917,21 @@ const CicloEscolarSelectionPage = () => {
             >
                 {!selectedSchool?.id && (
                     <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: 'grey.50' }}>
+                        <Alert severity="info" sx={{ mb: 2 }}>
+                            <Typography sx={{ fontWeight: 600 }}>
+                                ¿Es un colegio que ya existía en otro ciclo? Usa &quot;Prellenar con colegio existente&quot;.
+                            </Typography>
+                            <Typography variant="body2">
+                                Así el sistema sabe que es el <strong>mismo colegio</strong> en un ciclo nuevo y no uno distinto con nombre parecido. Al prellenar:
+                            </Typography>
+                            <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                                <li>El nombre queda igual (si necesita cambiar, se edita después de crearlo).</li>
+                                <li>Se copian contacto, tarifas, banco, mora, horarios, grados, rutas, campos extra y tramos de inscripción.</li>
+                                <li>Las fechas del año escolar y de los tramos se mueven al año del ciclo nuevo (puedes corregirlas antes de guardar).</li>
+                                <li>Se asigna automáticamente el mismo personal: supervisores, auxiliares, pilotos y monitoras.</li>
+                                <li>Nace &quot;Sin operación&quot; e inscripciones cerradas; se activa manualmente al arrancar el ciclo.</li>
+                            </Box>
+                        </Alert>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                             <FormControl fullWidth size="small">
                                 <InputLabel>Prellenar con colegio existente</InputLabel>
@@ -1852,7 +1983,33 @@ const CicloEscolarSelectionPage = () => {
                                 variant="outlined"
                                 value={selectedSchool ? selectedSchool.name : ''}
                                 onChange={handleInputChange}
+                                onBlur={handleNameBlur}
+                                disabled={Boolean(!selectedSchool?.id && selectedSchool?.continuesSchoolId)}
+                                helperText={!selectedSchool?.id && selectedSchool?.continuesSchoolId
+                                    ? 'Para cambiar el nombre, créalo y luego usa Editar.'
+                                    : undefined}
                             />
+                            {selectedSchool?.id
+                                && editGroupCycles.length > 1
+                                && String(selectedSchool.name || '').trim() !== String(selectedSchool.originalName || '').trim() && (
+                                <FormControl component="fieldset">
+                                    <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                                        Este colegio existe en {editGroupCycles.length} ciclos. ¿Dónde se cambia el nombre?
+                                    </Typography>
+                                    <RadioGroup value={renameScope} onChange={(event) => setRenameScope(event.target.value)}>
+                                        <FormControlLabel
+                                            value="THIS_CYCLE"
+                                            control={<Radio size="small" />}
+                                            label={`Solo este ciclo (${selectedSchool.cicloEscolar?.anio ?? 'actual'})`}
+                                        />
+                                        <FormControlLabel
+                                            value="ALL_CYCLES"
+                                            control={<Radio size="small" />}
+                                            label={`Todos los ciclos de este colegio (${editGroupCycles.map((ciclo) => ciclo.anio).filter(Boolean).join(', ')})`}
+                                        />
+                                    </RadioGroup>
+                                </FormControl>
+                            )}
                             <TextField
                                 name="city"
                                 label="Ciudad"
@@ -2113,6 +2270,7 @@ const CicloEscolarSelectionPage = () => {
                             />
 
                             <EnrollmentFeeTiersEditor
+                                key={`tiers-${tiersEditorKey}`}
                                 schoolId={selectedSchool?.id}
                                 draftTiers={draftEnrollmentTiers}
                                 onDraftTiersChange={setDraftEnrollmentTiers}
@@ -2818,6 +2976,14 @@ const CicloEscolarSelectionPage = () => {
                     </Box>
                 )}
             </AppDialog>
+
+            <SimilarSchoolDialog
+                open={Boolean(similarPrompt)}
+                candidates={similarPrompt?.candidates || []}
+                onContinue={handleSimilarContinue}
+                onNewSchool={handleSimilarNewSchool}
+                onClose={() => setSimilarPrompt(null)}
+            />
 
             {/* Diálogo de formularios de inscripción */}
             <AppDialog
