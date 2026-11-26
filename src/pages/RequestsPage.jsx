@@ -24,7 +24,8 @@ import {
     Visibility as VisibilityIcon,
     Delete as DeleteIcon,
     Edit as EditIcon,
-    HelpOutline as HelpOutlineIcon
+    HelpOutline as HelpOutlineIcon,
+    Add as AddIcon
 } from '@mui/icons-material';
 import {
     Cancel as CancelIcon,
@@ -33,7 +34,7 @@ import {
 } from '@mui/icons-material';
 import StatusChip from '../components/StatusChip';
 import { REQUEST_STATUS, getStatusLabel } from '../constants/statuses';
-import { formatDateTime } from '../utils/dateFormat';
+import { formatDate, formatDateTime } from '../utils/dateFormat';
 import {
     getAllRequests,
     getRequestById,
@@ -66,6 +67,10 @@ import useClientScope from '../hooks/useClientScope';
 import AppDialog from '../components/dialogs/AppDialog';
 import { StatCard, StatCardGrid } from '../components/StatCard';
 import usePermissions from '../hooks/usePermissions';
+import NuevaSolicitudDialog from '../components/requests/NuevaSolicitudDialog';
+import FechaLimiteEditor from '../components/requests/FechaLimiteEditor';
+import { useCurrentDate } from '../hooks/useCurrentDate';
+import { estaVencida } from '../utils/solicitudesFamilias';
 
 const SELECTABLE_REQUEST_STATES = Object.keys(REQUEST_STATES).filter((s) => s !== 'approved');
 
@@ -104,6 +109,7 @@ const COLUMNS = [
     { id: 'titulo', label: 'Título' },
     { id: 'solicitante', label: 'Solicitante' },
     { id: 'creada_por', label: 'Creada por' },
+    { id: 'dueDate', label: 'Fecha límite', sortable: true },
     { id: 'estado', label: 'Estado' },
     { id: 'acciones', label: 'Acciones', align: 'right' },
 ];
@@ -125,6 +131,13 @@ const RequestsPage = () => {
         || location.state?.cicloEscolar || stateSchool?.cicloEscolar || stateSchool?.CicloEscolar || null;
     const currentCycleLabel = getCicloEscolarYear(currentCicloEscolar);
     const scope = useClientScope({ entity: scopeData || (schoolId ? stateSchool : stateCorporation), cicloEscolar: currentCicloEscolar });
+    const { currentDate } = useCurrentDate();
+    const hoy = currentDate.format('YYYY-MM-DD');
+    // Solo en la fila operativa del colegio (ni archivada ni ciclo siguiente). Sin los campos, oculto: la API igual responde 409.
+    const puedeCrear = Boolean(schoolId)
+        && String(scopeData?.operationStatus || '').toUpperCase() === 'ACTIVE'
+        && String(scopeData?.cycleStatus || '').toUpperCase() !== 'ARCHIVED';
+    const [nuevaOpen, setNuevaOpen] = useState(false);
 
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -224,13 +237,19 @@ const RequestsPage = () => {
     useEffect(() => {
         const stateScope = schoolId ? stateSchool : stateCorporation;
         if (stateScope) {
+            // El estado de navegación pinta el encabezado de inmediato.
             setScopeData(stateScope);
-            return;
+            // Un colegio sin operationStatus (estado parcial) se completa con el GET: sin ese dato
+            // se ocultaría el botón "Nueva solicitud".
+            if (!schoolId || stateScope.operationStatus) {
+                return;
+            }
         }
         const fetchScopeData = async () => {
             try {
                 const response = await api.get(schoolId ? `/schools/${schoolId}` : `/corporations/${corporationId}`);
-                setScopeData(response.data);
+                // GET /schools/:id responde { school } y GET /corporations/:id responde { corporation }.
+                setScopeData(schoolId ? response.data?.school : response.data?.corporation);
             } catch (error) {
                 console.error('Error al obtener datos del encabezado:', error);
             }
@@ -561,6 +580,9 @@ const RequestsPage = () => {
         if (action === 'commented') {
             return 'Comentario agregado';
         }
+        if (action === 'due_date_changed') {
+            return 'Fecha límite';
+        }
         return 'Actualización';
     };
 
@@ -575,6 +597,11 @@ const RequestsPage = () => {
         if (action === 'created') {
             const requestType = meta?.requestType || selectedRequest?.requestType;
             mainText = `Tipo: ${getRequestTypeLabel(requestType)}`;
+            // La nota automática ("Solicitud creada de tipo schedule_change" en registros viejos) repite el tipo
+            // y puede traer la clave en inglés: solo se muestra una nota escrita por alguien.
+            if (/^Solicitud creada de tipo /i.test(notes)) {
+                return mainText;
+            }
         } else if (action === 'status_updated') {
             const rawFromMeta = extractStatusFromMetadata(meta);
 
@@ -689,6 +716,9 @@ const RequestsPage = () => {
                 back={scope.back}
                 period={scope.periodLabel(schoolId ? currentCycleLabel : fiscalYear)}
                 meta={[`${totalCount} solicitudes encontradas`]}
+                actions={[
+                    puedeCrear && { key: 'nueva', label: 'Nueva solicitud', icon: <AddIcon />, primary: true, permission: 'solicitudes-crear', onClick: () => setNuevaOpen(true) },
+                ]}
             />
 
             {/* Statistics */}
@@ -734,9 +764,9 @@ const RequestsPage = () => {
                         <SortableTableHead columns={COLUMNS} {...table.sortProps} />
                         <TableBody>
                             {loading ? (
-                                <TableRow><TableCell colSpan={8} align="center"><CircularProgress size={24} /></TableCell></TableRow>
+                                <TableRow><TableCell colSpan={9} align="center"><CircularProgress size={24} /></TableCell></TableRow>
                             ) : requests.length === 0 ? (
-                                <TableRow><TableCell colSpan={8} align="center">No hay solicitudes</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={9} align="center">No hay solicitudes</TableCell></TableRow>
                             ) : requests.map(r => (
                                 <TableRow key={r.id} hover sx={{ '&:hover': { backgroundColor: '#fafafa' } }}>
                                         <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDateTime(r.createdAt)}</TableCell>
@@ -745,6 +775,10 @@ const RequestsPage = () => {
                                         <TableCell sx={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</TableCell>
                                         <TableCell>{r.requester?.name || r.requester?.fullName || r.userId}</TableCell>
                                         <TableCell>{r.createdBy?.name || r.createdBy?.email || r.requester?.name || '-'}</TableCell>
+                                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                            {r.dueDate ? formatDate(r.dueDate) : '-'}
+                                            {estaVencida(r, hoy) && <Chip label="Vencida" color="error" size="small" sx={{ ml: 1 }} />}
+                                        </TableCell>
                                         <TableCell>{getStatusChip(r.status)}</TableCell>
                                     <TableCell align="right">
                                         <RowActions
@@ -771,6 +805,15 @@ const RequestsPage = () => {
                     </Table>
                 </AppTableContainer>
                 <AppTablePagination count={totalCount} {...table.paginationProps} />
+
+            {puedeCrear && (
+                <NuevaSolicitudDialog
+                    open={nuevaOpen}
+                    schoolId={schoolId}
+                    onClose={() => setNuevaOpen(false)}
+                    onCreated={() => { fetchRequests(); fetchStatistics(); }}
+                />
+            )}
 
             {/* Detail modal */}
             <AppDialog
@@ -830,6 +873,27 @@ const RequestsPage = () => {
                                             Prioridad
                                         </Typography>
                                         <Box sx={{ mt: 0.5 }}>{getPriorityChip(selectedRequest.priority)}</Box>
+                                    </Grid>
+
+                                    <Grid item xs={12} sm={6}>
+                                        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
+                                            Fecha límite
+                                        </Typography>
+                                        <FechaLimiteEditor
+                                            request={selectedRequest}
+                                            editable={hasPermission('solicitudes-actualizar-estado')}
+                                            hoy={hoy}
+                                            onSaved={async (actualizada) => {
+                                                setSelectedRequest((anterior) => ({ ...anterior, dueDate: actualizada?.dueDate ?? null }));
+                                                try {
+                                                    setRequestEvents(await getRequestEvents(selectedRequest.id));
+                                                } catch (err) {
+                                                    // La fecha ya se guardó: solo falló refrescar el historial.
+                                                    console.error('Error al refrescar el historial', err);
+                                                }
+                                                fetchRequests();
+                                            }}
+                                        />
                                     </Grid>
 
                                     <Grid item xs={12}>
