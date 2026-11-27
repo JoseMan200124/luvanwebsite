@@ -2,7 +2,7 @@
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import api from '../utils/axiosConfig';
+import api, { REENROLLMENT_SCHOOL_KEY } from '../utils/axiosConfig';
 import { jwtDecode } from 'jwt-decode';
 
 import { loginUser } from '../services/authService';
@@ -42,7 +42,7 @@ const AuthProvider = ({ children }) => {
     const resetTimer = useCallback(() => setSharedLastActivity(ahoraReal()), [setSharedLastActivity]);
 
     const logout = useCallback(() => {
-        try { clearCatalogs(); localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); clearStoredSchoolContext(); } catch (e) {}
+        try { clearCatalogs(); localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); localStorage.removeItem(REENROLLMENT_SCHOOL_KEY); clearStoredSchoolContext(); } catch (e) {}
         closeSocket(); setAuth({ user: null, token: null }); navigate('/login');
     }, [navigate]);
 
@@ -208,6 +208,9 @@ const AuthProvider = ({ children }) => {
             const response = await loginUser({ email, password });
             const { token, refreshToken } = response.data;
             const mustChangePassword = getMustChangePassword(response.data);
+            // Familia desactivada en un ciclo anterior: sesión limitada a reinscribirse (sin refresh token).
+            const reenrollmentOnly = response.data?.reenrollmentOnly === true;
+            const reenrollmentSchoolId = response.data?.reenrollmentSchoolId ?? null;
             const decoded = jwtDecode(token);
             const restrictedRoles = [4,5]; if (restrictedRoles.includes(decoded.roleId)) {
                 throw new Error(`Para tu usuario ${(decoded.name||'Usuario')}, solo acceso desde la app móvil.`);
@@ -216,13 +219,21 @@ const AuthProvider = ({ children }) => {
             localStorage.setItem('token', token);
             if (refreshToken) {
                 localStorage.setItem('refreshToken', refreshToken);
+            } else {
+                localStorage.removeItem('refreshToken');
+            }
+            // El interceptor de axios lo usa para devolver al enlace de inscripción si la sesión limitada sale de él.
+            if (reenrollmentOnly && reenrollmentSchoolId) {
+                localStorage.setItem(REENROLLMENT_SCHOOL_KEY, String(reenrollmentSchoolId));
+            } else {
+                localStorage.removeItem(REENROLLMENT_SCHOOL_KEY);
             }
             if (decoded.roleId === 9) {
                 await verifyToken(token);
             } else {
                 setAuth({ user: { ...decoded, roleId: decoded.roleId }, token });
             }
-            return { mustChangePassword, roleId: decoded.roleId };
+            return { mustChangePassword, roleId: decoded.roleId, reenrollmentOnly, reenrollmentSchoolId };
         } catch (error) { throw error; }
     }, [verifyToken]);
 

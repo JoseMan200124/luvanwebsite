@@ -5,7 +5,8 @@
 //
 // Estado por alumno del borrador: `matchedStudentId` solo existe si el usuario lo eligió (número = ese alumno
 // actual o inactivo, null = alumno nuevo); ausente = automático. Estado por familia: `leavingActions` = qué pasa con
-// cada actual sin pareja ('desactivar' por defecto, 'conservar' o 'eliminar'). Los inactivos (desactivados por el
+// cada actual sin pareja ('desactivar', 'conservar' o 'eliminar'; por defecto 'desactivar', o 'conservar' si la
+// familia se inscribió sola: ver defaultLeavingAction). Los inactivos (desactivados por el
 // colegio) solo vuelven si una fila los elige; una fila que coincide por nombre con uno no se empareja sola.
 
 // Ignora tildes, mayúsculas y espacios al emparejar alumnos (igual que el servidor). También la usa la edición de
@@ -48,7 +49,7 @@ export const pairByHeuristic = (existingStudents, incomingStudents) => {
 // Emparejamiento vigente de una familia: respeta lo elegido por el usuario y completa el resto por heurística
 // con los alumnos actuales que quedan libres. needsDecision[i]: la fila no tiene pareja y su nombre coincide con un
 // inactivo; el usuario debe elegir si es ese alumno (se reactiva) o uno nuevo.
-export const resolvePairing = (existingStudents, students, leavingActions = {}, inactiveStudents = []) => {
+export const resolvePairing = (existingStudents, students, leavingActions = {}, inactiveStudents = [], defaultAction = 'desactivar') => {
     const matchedIds = students.map(student => student.matchedStudentId);
     const taken = new Set(matchedIds.filter(id => id !== undefined && id !== null));
     const free = existingStudents.filter(existing => !taken.has(existing.id));
@@ -65,9 +66,13 @@ export const resolvePairing = (existingStudents, students, leavingActions = {}, 
     const pairedIds = new Set(matchedIds.filter(id => id !== null));
     const unpaired = existingStudents
         .filter(existing => !pairedIds.has(existing.id))
-        .map(existing => ({ ...existing, action: leavingActions[existing.id] || 'desactivar' }));
+        .map(existing => ({ ...existing, action: leavingActions[existing.id] || defaultAction }));
     return { matchedIds, unpaired, needsDecision };
 };
+
+// Familia que se inscribió sola (formulario público o reinscripción): sus alumnos los puso el padre, así que los que
+// el archivo no trae se conservan por defecto. En las creadas por el admin el archivo manda y se desactivan.
+export const defaultLeavingAction = (draft) => (draft?.existing?.selfEnrolled ? 'conservar' : 'desactivar');
 
 export const STUDENT_STATUS_LABELS = {
     new: 'Nuevo',
@@ -134,7 +139,8 @@ export const getServerPairing = (draft) => {
             deleteStudentIds: []
         };
     }
-    const { matchedIds, unpaired } = resolvePairing(existingStudents, draft.students, draft.leavingActions || {}, draft.existing?.inactiveStudents || []);
+    const { matchedIds, unpaired } = resolvePairing(
+        existingStudents, draft.students, draft.leavingActions || {}, draft.existing?.inactiveStudents || [], defaultLeavingAction(draft));
     return {
         students: draft.students.map((student, index) => ({ ...student, matchedStudentId: matchedIds[index] })),
         keepStudentIds: unpaired.filter(student => student.action === 'conservar').map(student => student.id),
@@ -148,6 +154,6 @@ export const hasPendingInactiveDecision = (draft) => {
     if (!existingStudents) {
         return false;
     }
-    return resolvePairing(existingStudents, draft.students, draft.leavingActions || {}, draft.existing?.inactiveStudents || [])
+    return resolvePairing(existingStudents, draft.students, draft.leavingActions || {}, draft.existing?.inactiveStudents || [], defaultLeavingAction(draft))
         .needsDecision.some(Boolean);
 };

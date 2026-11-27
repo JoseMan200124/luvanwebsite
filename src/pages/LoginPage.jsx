@@ -57,10 +57,16 @@ const LoginPage = () => {
         }
 
         try {
-            const { mustChangePassword, roleId } = await login(trimmedEmail, formData.password);
+            const { mustChangePassword, roleId, reenrollmentOnly, reenrollmentSchoolId } = await login(trimmedEmail, formData.password);
 
             if (mustChangePassword) {
                 navigate('/force-password-change');
+                return;
+            }
+
+            // Cuenta inactiva con un ciclo nuevo abierto en su colegio: solo puede reinscribirse.
+            if (reenrollmentOnly && reenrollmentSchoolId) {
+                navigate(`/schools/enroll/${reenrollmentSchoolId}`, { replace: true });
                 return;
             }
 
