@@ -4,12 +4,12 @@ import React, { createContext, useState, useEffect, useCallback, useMemo } from 
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../utils/axiosConfig';
 import { jwtDecode } from 'jwt-decode';
-import Snackbar from '@mui/material/Snackbar';
-import Alert from '@mui/material/Alert';
 
 import { loginUser } from '../services/authService';
 import { initSocket, closeSocket } from '../services/socketService';
 import { clearStoredSchoolContext } from '../utils/schoolContext';
+import { clearCatalogs } from '../services/catalogStore';
+import useNotify from '../hooks/useNotify';
 import { ahoraReal } from '../utils/relojReal';
 
 export const AuthContext = createContext();
@@ -26,7 +26,7 @@ const AuthProvider = ({ children }) => {
 
     const [initialLoad, setInitialLoad] = useState(true);
     const [auth, setAuth] = useState({ user: null, token: null });
-    const [showIdleSnackbar, setShowIdleSnackbar] = useState(false);
+    const notify = useNotify();
 
     // lastActivity se sincroniza entre pestañas vía localStorage
     const [lastActivity, setLastActivity] = useState(() => {
@@ -42,14 +42,15 @@ const AuthProvider = ({ children }) => {
     const resetTimer = useCallback(() => setSharedLastActivity(ahoraReal()), [setSharedLastActivity]);
 
     const logout = useCallback(() => {
-        try { localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); clearStoredSchoolContext(); } catch (e) {}
+        try { clearCatalogs(); localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); clearStoredSchoolContext(); } catch (e) {}
         closeSocket(); setAuth({ user: null, token: null }); navigate('/login');
     }, [navigate]);
 
     const logoutByIdle = useCallback(() => {
-        try { localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); clearStoredSchoolContext(); } catch (e) {}
-        closeSocket(); setAuth({ user: null, token: null }); setShowIdleSnackbar(true); navigate('/login');
-    }, [navigate]);
+        try { clearCatalogs(); localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); clearStoredSchoolContext(); } catch (e) {}
+        closeSocket(); setAuth({ user: null, token: null }); navigate('/login');
+        notify.warning('El tiempo de inactividad venció. Vuelva a iniciar sesión.', { duration: null, closeOnClickAway: true });
+    }, [navigate, notify]);
 
     const silentRefreshIfNeeded = useCallback(async () => {
         try {
@@ -72,7 +73,7 @@ const AuthProvider = ({ children }) => {
                 }
             }
         } catch (err) {
-            try { localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); clearStoredSchoolContext(); } catch (e) {}
+            try { clearCatalogs(); localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); clearStoredSchoolContext(); } catch (e) {}
             logout();
         }
     }, [logout]);
@@ -235,9 +236,6 @@ const AuthProvider = ({ children }) => {
     return (
         <AuthContext.Provider value={value}>
             {children}
-            <Snackbar open={showIdleSnackbar} onClose={() => setShowIdleSnackbar(false)} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
-                <Alert severity="warning" sx={{ width: '100%' }}>El tiempo de inactividad venció. Vuelva a iniciar sesión.</Alert>
-            </Snackbar>
         </AuthContext.Provider>
     );
 };

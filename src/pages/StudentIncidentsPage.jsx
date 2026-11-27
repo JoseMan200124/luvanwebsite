@@ -7,26 +7,13 @@ import {
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    TablePagination,
     CircularProgress,
     Box,
     Grid,
-    Card,
-    CardContent,
     Chip,
-    IconButton,
-    Tooltip,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Button,
 } from '@mui/material';
 import { Visibility as VisibilityIcon } from '@mui/icons-material';
-import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { getAllStudentIncidents, getStudentIncidentById, INCIDENT_TYPES } from '../services/studentIncidentService';
 import api from '../utils/axiosConfig';
@@ -39,16 +26,40 @@ import { F, toPlateOptions, toRouteOptions } from '../components/filters/filterF
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
-
-moment.tz.setDefault('America/Guatemala');
+import useNotify from '../hooks/useNotify';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import RowActions from '../components/table/RowActions';
+import { formatDateTime } from '../utils/dateFormat';
+import AppDialog from '../components/dialogs/AppDialog';
+import { ReportProblem as ReportIcon, Category as CategoryIcon, Schedule as ScheduleIcon } from '@mui/icons-material';
+import { StatCard, StatCardGrid } from '../components/StatCard';
+import { loadCatalog } from '../services/catalogStore';
 
 const SCHEDULE_OPTIONS = DEFAULT_SCHEDULE_CODES.map((code) => ({ value: code, label: SCHEDULE_LABELS[code] || code }));
 
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'fecha', label: 'Fecha' },
+    { id: 'estudiante', label: 'Estudiante' },
+    { id: 'tipo_de_incidente', label: 'Tipo de Incidente' },
+    { id: 'horario', label: 'Horario' },
+    { id: 'monitora', label: 'Monitora' },
+    { id: 'placa', label: 'Placa' },
+    { id: 'ruta', label: 'Ruta' },
+    { id: 'colegio', label: 'Colegio' },
+    { id: 'acciones', label: 'Acciones', align: 'center' },
+];
+
 const StudentIncidentsPage = () => {
+    const notify = useNotify();
     const [incidents, setIncidents] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(25);
+    // Paginación (en el servidor)
+    const table = useTableState();
+    const { page, rowsPerPage } = table;
     const [totalCount, setTotalCount] = useState(0);
 
     // Filtros
@@ -67,7 +78,7 @@ const StudentIncidentsPage = () => {
             F.search('studentName', { label: 'Buscar estudiante', width: 'md' }),
             F.dateRange('dates'),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const {
         cycle: selectedCicloEscolar,
@@ -115,8 +126,8 @@ const StudentIncidentsPage = () => {
 
     const fetchSchools = async () => {
         try {
-            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true } });
-            const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
+            const schoolsList = await loadCatalog('schools', { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true });
+            const schoolsData = schoolsList;
             setSchools(schoolsData);
         } catch (error) {
             console.error('Error al cargar colegios:', error);
@@ -208,6 +219,7 @@ const StudentIncidentsPage = () => {
             });
         } catch (error) {
             console.error('Error al cargar incidentes:', error);
+            notify.fromError(error, 'Error al cargar los reportes de conducta');
         } finally {
             setLoading(false);
         }
@@ -218,15 +230,6 @@ const StudentIncidentsPage = () => {
         await fetchIncidents();
     }, [fetchIncidents]);
 
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
-
     const handleViewDetails = async (incidentId) => {
         try {
             console.log('Cargando detalles del incidente:', incidentId);
@@ -236,7 +239,7 @@ const StudentIncidentsPage = () => {
             setDetailsOpen(true);
         } catch (error) {
             console.error('Error al cargar detalles del incidente:', error);
-            alert('Error al cargar los detalles del incidente');
+            notify.fromError(error, 'Error al cargar los detalles del reporte');
         }
     };
 
@@ -255,52 +258,27 @@ const StudentIncidentsPage = () => {
                 />
 
                 {/* Estadísticas */}
-                <Grid container spacing={3} mb={3}>
-                    <Grid item xs={12} sm={6} md={4}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Total Incidentes
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.total}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={4}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Tipo Más Común
-                                </Typography>
-                                <Typography variant="h6">
-                                    {Object.keys(statistics.byType).length > 0
-                                        ? INCIDENT_TYPES[Object.keys(statistics.byType).reduce((a, b) => 
-                                            statistics.byType[a] > statistics.byType[b] ? a : b
-                                        )]
-                                        : 'N/A'}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={4}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Horario Más Incidentes
-                                </Typography>
-                                <Typography variant="h6">
-                                    {Object.keys(statistics.bySchedule).length > 0
-                                        ? getScheduleLabel(Object.keys(statistics.bySchedule).reduce((a, b) => 
-                                            statistics.bySchedule[a] > statistics.bySchedule[b] ? a : b
-                                        ))
-                                        : 'N/A'}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                </Grid>
+                <StatCardGrid columns={3}>
+                    <StatCard label="Total incidentes" value={statistics.total} icon={<ReportIcon />} format="number" />
+                    <StatCard label="Tipo más común" icon={<CategoryIcon />}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>
+                            {Object.keys(statistics.byType).length > 0
+                                ? INCIDENT_TYPES[Object.keys(statistics.byType).reduce((a, b) => (
+                                    statistics.byType[a] > statistics.byType[b] ? a : b
+                                ))]
+                                : 'N/A'}
+                        </Typography>
+                    </StatCard>
+                    <StatCard label="Horario con más incidentes" icon={<ScheduleIcon />}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>
+                            {Object.keys(statistics.bySchedule).length > 0
+                                ? getScheduleLabel(Object.keys(statistics.bySchedule).reduce((a, b) => (
+                                    statistics.bySchedule[a] > statistics.bySchedule[b] ? a : b
+                                )))
+                                : 'N/A'}
+                        </Typography>
+                    </StatCard>
+                </StatCardGrid>
 
                 {/* Filtros */}
                 <FilterBar {...pageFilters.barProps} loading={loading} />
@@ -313,26 +291,14 @@ const StudentIncidentsPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer>
+                            <AppTableContainer>
                                 <Table>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>Fecha</TableCell>
-                                            <TableCell>Estudiante</TableCell>
-                                            <TableCell>Tipo de Incidente</TableCell>
-                                            <TableCell>Horario</TableCell>
-                                            <TableCell>Monitora</TableCell>
-                                            <TableCell>Placa</TableCell>
-                                            <TableCell>Ruta</TableCell>
-                                            <TableCell>Colegio</TableCell>
-                                            <TableCell align="center">Acciones</TableCell>
-                                        </TableRow>
-                                    </TableHead>
+                                    <SortableTableHead columns={COLUMNS} />
                                     <TableBody>
                                         {incidents.map((incident) => (
                                             <TableRow key={incident.id}>
                                                 <TableCell>
-                                                    {moment(incident.fecha).format('DD/MM/YYYY HH:mm')}
+                                                    {formatDateTime(incident.fecha)}
                                                 </TableCell>
                                                 <TableCell>
                                                     {incident.student ? (incident.student.fullName || 'N/A') : 'N/A'}
@@ -365,15 +331,11 @@ const StudentIncidentsPage = () => {
                                                     {incident.school?.name || 'N/A'}
                                                 </TableCell>
                                                 <TableCell align="center">
-                                                    <Tooltip title="Ver detalles">
-                                                        <IconButton
-                                                            size="small"
-                                                            onClick={() => handleViewDetails(incident.id)}
-                                                            color="primary"
-                                                        >
-                                                            <VisibilityIcon />
-                                                        </IconButton>
-                                                    </Tooltip>
+                                                    <RowActions
+                                                        actions={[
+                                                            { key: 'view', kind: 'view', color: 'primary', label: 'Ver detalles', icon: <VisibilityIcon fontSize="small" />, onClick: () => handleViewDetails(incident.id) },
+                                                        ]}
+                                                    />
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -386,122 +348,104 @@ const StudentIncidentsPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={totalCount}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                labelRowsPerPage="Registros por página:"
-                                labelDisplayedRows={({ from, to, count }) =>
-                                    `${from}-${to} de ${count !== -1 ? count : `más de ${to}`}`
-                                }
-                            />
+                            </AppTableContainer>
+                            <AppTablePagination count={totalCount} {...table.paginationProps} />
                         </>
                     )}
                 </Paper>
 
                 {/* Modal de Detalles */}
-                <Dialog
+                <AppDialog
                     open={detailsOpen}
                     onClose={handleCloseDetails}
-                    maxWidth="md"
-                    fullWidth
+                    title="Detalles del incidente"
+                    size="md"
+                    readOnly
                 >
-                    <DialogTitle>Detalles del Incidente</DialogTitle>
-                    <DialogContent dividers>
-                        {selectedIncident && (
-                            <Grid container spacing={2}>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Fecha y Hora
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {moment(selectedIncident.fecha).format('DD/MM/YYYY HH:mm')}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Estudiante
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.student ? (selectedIncident.student.fullName || 'N/A') : 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Tipo de Incidente
-                                    </Typography>
-                                    <Chip 
-                                        label={selectedIncident.incidentType === 'otro' && selectedIncident.customIncidentType 
-                                            ? `Otro: ${selectedIncident.customIncidentType}`
-                                            : INCIDENT_TYPES[selectedIncident.incidentType]}
-                                        sx={{ mt: 1 }}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Horario
-                                    </Typography>
-                                    <Chip 
-                                        label={getScheduleLabel(selectedIncident.scheduleType)}
-                                        color={getScheduleColor(selectedIncident.scheduleType)}
-                                        sx={{ mt: 1 }}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Monitora
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.monitora?.name || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Placa
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.bus?.plate || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Ruta
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.routeNumber || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Colegio
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.school?.name || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Descripción del Incidente
-                                    </Typography>
-                                    <Paper sx={{ p: 2, mt: 1, backgroundColor: '#f5f5f5' }}>
-                                        <Typography variant="body1">
-                                            {selectedIncident.description}
-                                        </Typography>
-                                    </Paper>
-                                </Grid>
+                    {selectedIncident && (
+                        <Grid container spacing={2}>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Fecha y Hora
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {formatDateTime(selectedIncident.fecha)}
+                                </Typography>
                             </Grid>
-                        )}
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCloseDetails} color="primary">
-                            Cerrar
-                        </Button>
-                    </DialogActions>
-                </Dialog>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Estudiante
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.student ? (selectedIncident.student.fullName || 'N/A') : 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Tipo de Incidente
+                                </Typography>
+                                <Chip 
+                                    label={selectedIncident.incidentType === 'otro' && selectedIncident.customIncidentType 
+                                        ? `Otro: ${selectedIncident.customIncidentType}`
+                                        : INCIDENT_TYPES[selectedIncident.incidentType]}
+                                    sx={{ mt: 1 }}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Horario
+                                </Typography>
+                                <Chip 
+                                    label={getScheduleLabel(selectedIncident.scheduleType)}
+                                    color={getScheduleColor(selectedIncident.scheduleType)}
+                                    sx={{ mt: 1 }}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Monitora
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.monitora?.name || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Placa
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.bus?.plate || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Ruta
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.routeNumber || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Colegio
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.school?.name || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Descripción del Incidente
+                                </Typography>
+                                <Paper sx={{ p: 2, mt: 1, backgroundColor: '#f5f5f5' }}>
+                                    <Typography variant="body1">
+                                        {selectedIncident.description}
+                                    </Typography>
+                                </Paper>
+                            </Grid>
+                        </Grid>
+                    )}
+                </AppDialog>
             </PageContainer>
     );
 };

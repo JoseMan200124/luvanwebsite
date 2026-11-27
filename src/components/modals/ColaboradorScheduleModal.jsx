@@ -2,21 +2,30 @@ import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import api from '../../utils/axiosConfig';
 import usePermissions from '../../hooks/usePermissions';
-
-// Función para convertir tiempo de 24h a 12h con AM/PM
-const formatTime12Hour = (time24) => {
-    if (!time24) {
-        return '';
-    }
-    const [hours, minutes] = time24.split(':');
-    const hour = Number.parseInt(hours, 10);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const hour12 = hour % 12 || 12;
-    return `${hour12}:${minutes} ${ampm}`;
-};
+import useNotify from '../../hooks/useNotify';
+import useConfirm from '../../hooks/useConfirm';
+import { formatClock } from '../../utils/dateFormat';
 
 // Modal de horarios para colaboradores - similar a StudentScheduleModal
 export default function ColaboradorScheduleModal({ colaborador, corporation, open, onClose, onScheduleUpdated }) {
+    const notify = useNotify();
+    const confirm = useConfirm();
+
+    const confirmRemoveSlot = (slotId, day) => confirm({
+        title: 'Eliminar horario',
+        message: 'Se eliminará este horario. Esta acción no se puede deshacer.',
+        confirmLabel: 'Eliminar',
+        tone: 'danger',
+        onConfirm: () => removeSlotForDay(slotId, day),
+    });
+
+    const confirmRemoveAll = () => confirm({
+        title: 'Eliminar todos los horarios',
+        message: `Se eliminarán todos los horarios de ${colaborador?.name || 'este colaborador'}. Esta acción no se puede deshacer.`,
+        confirmLabel: 'Eliminar todo',
+        tone: 'danger',
+        onConfirm: removeAllSlots,
+    });
     const { hasAllPermissions } = usePermissions();
     const puedeGuardarHorario = hasAllPermissions(['horarios-crear', 'horarios-editar', 'horarios-eliminar']);
     const getIsMobileViewport = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 600px)').matches;
@@ -25,11 +34,6 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
     const [loading, setLoading] = useState(false);
     const [assignOpen, setAssignOpen] = useState(false);
     const [assignEditing, setAssignEditing] = useState(null); // { slotId, day }
-    const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-    const [confirmTarget, setConfirmTarget] = useState({ slotId: null, day: null });
-    const [confirmLoading, setConfirmLoading] = useState(false);
-    const [confirmDeleteAllOpen, setConfirmDeleteAllOpen] = useState(false);
-    const [confirmDeleteAllLoading, setConfirmDeleteAllLoading] = useState(false);
 
     // Formulario de asignación de horario
     const [assignForm, setAssignForm] = useState({
@@ -144,17 +148,17 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
         console.log('[ColaboradorScheduleModal] saveAssignedSchedule - assignForm:', assignForm);
         
         if (!pickupTime || !stopName || !routeNumber || !stopType || !days || days.length === 0) {
-            alert('Completa todos los campos obligatorios (hora, parada, ruta, tipo y días)');
+            notify.warning('Completa todos los campos obligatorios (hora, parada, ruta, tipo y días)');
             return;
         }
 
         if (!colaborador?.id) {
-            alert('No se encontró el colaborador');
+            notify.error('No se encontró el colaborador');
             return;
         }
 
         if (!corporation?.id) {
-            alert('No se encontró el corporativo asociado');
+            notify.error('No se encontró el corporativo asociado');
             return;
         }
 
@@ -220,7 +224,7 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
             }
         } catch (err) {
             console.error('[ColaboradorScheduleModal] Error saving schedule:', err);
-            alert('Error guardando el horario: ' + (err.response?.data?.message || err.message));
+            notify.fromError(err, 'Error al guardar el horario');
         }
     };
 
@@ -248,7 +252,7 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
             }
         } catch (err) {
             console.error('[ColaboradorScheduleModal] Error deleting slot:', err);
-            alert('Error eliminando el horario');
+            notify.fromError(err, 'Error al eliminar el horario');
         }
     };
 
@@ -263,7 +267,7 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
             }
         } catch (err) {
             console.error('[ColaboradorScheduleModal] Error deleting all slots:', err);
-            alert('Error eliminando los horarios');
+            notify.fromError(err, 'Error al eliminar los horarios');
         }
     };
 
@@ -351,7 +355,7 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => setConfirmDeleteAllOpen(true)}
+                                        onClick={confirmRemoveAll}
                                         style={{ 
                                             background: '#ffffff', 
                                             color: '#DC2626', 
@@ -417,15 +421,12 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                                                 marginBottom: 6 
                                             }}>
                                                 <div style={{ fontSize: 15, fontWeight: 700 }}>
-                                                    {formatTime12Hour(slot.time)}
+                                                    {formatClock(slot.time)}
                                                 </div>
                                                 <div style={{ display: 'flex', gap: 8 }}>
                                                     <button 
                                                         type="button" 
-                                                        onClick={() => {
-                                                            setConfirmTarget({ slotId: slot.id, day });
-                                                            setConfirmDeleteOpen(true);
-                                                        }}
+                                                        onClick={() => confirmRemoveSlot(slot.id, day)}
                                                         style={{ 
                                                             background: 'transparent', 
                                                             border: 'none', 
@@ -583,15 +584,12 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                                                 marginBottom: 6 
                                             }}>
                                                 <div style={{ fontSize: 15, fontWeight: 700 }}>
-                                                    {formatTime12Hour(slot.time)}
+                                                    {formatClock(slot.time)}
                                                 </div>
                                                 <div style={{ display: 'flex', gap: 8 }}>
                                                     <button 
                                                         type="button" 
-                                                        onClick={() => {
-                                                            setConfirmTarget({ slotId: slot.id, day });
-                                                            setConfirmDeleteOpen(true);
-                                                        }}
+                                                        onClick={() => confirmRemoveSlot(slot.id, day)}
                                                         style={{ 
                                                             background: 'transparent', 
                                                             border: 'none', 
@@ -986,167 +984,6 @@ export default function ColaboradorScheduleModal({ colaborador, corporation, ope
                                     Guardar
                                 </button>
                                 )}
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Popup de confirmación de eliminación */}
-                {confirmDeleteOpen && (
-                    <div style={{ 
-                        position: 'fixed', 
-                        inset: 0, 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'center', 
-                        zIndex: 32000 
-                    }}>
-                        <div style={{ 
-                            background: '#fff', 
-                            padding: 20, 
-                            borderRadius: 8, 
-                            width: 'min(520px, 95vw)', 
-                            boxShadow: '0 6px 24px rgba(0,0,0,0.2)' 
-                        }}>
-                            <h3 style={{ marginTop: 0 }}>Confirmar eliminación</h3>
-                            <div style={{ marginTop: 8 }}>
-                                ¿Estás seguro que deseas eliminar este horario?
-                            </div>
-                            <div style={{ 
-                                display: 'flex', 
-                                justifyContent: 'flex-end', 
-                                gap: 8, 
-                                marginTop: 12 
-                            }}>
-                                <button 
-                                    type="button"
-                                    onClick={() => {
-                                        if (confirmLoading) {
-                                            return;
-                                        }
-                                        setConfirmDeleteOpen(false);
-                                        setConfirmTarget({ slotId: null, day: null });
-                                    }}
-                                    style={{ 
-                                        padding: '8px 12px', 
-                                        borderRadius: 6,
-                                        border: '1px solid #d1d5db',
-                                        background: '#fff',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    Cancelar
-                                </button>
-                                <button 
-                                    type="button"
-                                    onClick={async () => {
-                                        if (confirmLoading) {
-                                            return;
-                                        }
-                                        setConfirmLoading(true);
-                                        try {
-                                            await removeSlotForDay(
-                                                confirmTarget.slotId, 
-                                                confirmTarget.day
-                                            );
-                                            setConfirmDeleteOpen(false);
-                                            setConfirmTarget({ slotId: null, day: null });
-                                        } catch (err) {
-                                            console.error(err);
-                                        } finally {
-                                            setConfirmLoading(false);
-                                        }
-                                    }}
-                                    style={{ 
-                                        padding: '8px 12px', 
-                                        borderRadius: 6, 
-                                        background: '#DC2626', 
-                                        color: '#fff',
-                                        border: 'none',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    {confirmLoading ? 'Eliminando...' : 'Eliminar'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Popup de confirmación de eliminar todo */}
-                {confirmDeleteAllOpen && (
-                    <div style={{ 
-                        position: 'fixed', 
-                        inset: 0, 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'center', 
-                        zIndex: 32000 
-                    }}>
-                        <div style={{ 
-                            background: '#fff', 
-                            padding: 20, 
-                            borderRadius: 8, 
-                            width: 'min(520px, 95vw)', 
-                            boxShadow: '0 6px 24px rgba(0,0,0,0.2)' 
-                        }}>
-                            <h3 style={{ marginTop: 0 }}>Eliminar todos los horarios</h3>
-                            <div style={{ marginTop: 8 }}>
-                                ¿Seguro que deseas eliminar todos los horarios de {colaborador?.name || 'este colaborador'}?
-                            </div>
-                            <div style={{ 
-                                display: 'flex', 
-                                justifyContent: 'flex-end', 
-                                gap: 8, 
-                                marginTop: 12 
-                            }}>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        if (confirmDeleteAllLoading) {
-                                            return;
-                                        }
-                                        setConfirmDeleteAllOpen(false);
-                                    }}
-                                    style={{ 
-                                        padding: '8px 12px', 
-                                        borderRadius: 6,
-                                        border: '1px solid #d1d5db',
-                                        background: '#fff',
-                                        cursor: 'pointer'
-                                    }}
-                                    disabled={confirmDeleteAllLoading}
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={async () => {
-                                        if (confirmDeleteAllLoading) {
-                                            return;
-                                        }
-                                        setConfirmDeleteAllLoading(true);
-                                        try {
-                                            await removeAllSlots();
-                                            setConfirmDeleteAllOpen(false);
-                                        } catch (err) {
-                                            console.error(err);
-                                        } finally {
-                                            setConfirmDeleteAllLoading(false);
-                                        }
-                                    }}
-                                    style={{ 
-                                        padding: '8px 12px', 
-                                        borderRadius: 6, 
-                                        background: '#DC2626', 
-                                        color: '#fff',
-                                        border: 'none',
-                                        cursor: 'pointer'
-                                    }}
-                                    disabled={confirmDeleteAllLoading}
-                                >
-                                    {confirmDeleteAllLoading ? 'Eliminando...' : 'Eliminar todo'}
-                                </button>
                             </div>
                         </div>
                     </div>

@@ -4,6 +4,7 @@
 // caracteres (límite de celda 32.767) con su conteo para detectar truncado. Las hojas se
 // protegen sin contraseña: no impide editar, pero obliga a un paso consciente.
 import ExcelJS from 'exceljs';
+import { downloadBlob } from '../../utils/download';
 import { COLUMNAS_PARADAS, filasDeVista, valorCelda } from './excelNormalizar';
 
 const TROZO = 32000;
@@ -76,15 +77,7 @@ export async function construirExcel(exp) {
 
 export async function descargarExcel(exp) {
     const buffer = await construirExcel(exp);
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = exp.nombreArchivo;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    downloadBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), exp.nombreArchivo);
 }
 
 const DANADO = 'La parte interna del archivo fue modificada o está dañada; no se puede usar.';

@@ -7,23 +7,13 @@ import {
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    TablePagination,
-    TableSortLabel,
     CircularProgress,
     Box,
     Grid,
-    Card,
-    CardContent,
     Chip,
     IconButton,
     Tooltip,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     Button,
     TextField,
     Divider,
@@ -43,6 +33,7 @@ import {
     PictureAsPdf as PictureAsPdfIcon,
     Edit as EditIcon,
     Add as AddIcon,
+    ReportProblem as ReportProblemIcon,
 } from '@mui/icons-material';
 import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
@@ -52,16 +43,29 @@ import ClientSelector from '../components/ClientSelector';
 import { getClientSchoolId, getClientCorporationId } from '../utils/clientValue';
 import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
 import PermissionGuard from '../components/PermissionGuard';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import RowActions from '../components/table/RowActions';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F, YES_NO_OPTIONS, toPlateOptions, toRouteOptions } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
 import FailureMappingFormDialog from '../components/FailureMappingFormDialog';
+import AppDialog from '../components/dialogs/AppDialog';
 import { AuthContext } from '../context/AuthProvider';
-
-moment.tz.setDefault('America/Guatemala');
+import { formatDate, formatDateTime } from '../utils/dateFormat';
+import { useCurrentDate } from '../hooks/useCurrentDate';
+import { downloadBlob, readBlobError } from '../utils/download';
+import { buildFileName } from '../utils/fileName';
+import { Assignment as AssignmentIcon, AltRoute as AltRouteIcon, EventBusy as EventBusyIcon } from '@mui/icons-material';
+import { StatCard, StatCardGrid } from '../components/StatCard';
+import { loadCatalog } from '../services/catalogStore';
 
 const NO_FAILURES_FILTER_VALUE = 'sin_fallas';
 
@@ -70,7 +74,25 @@ const FAILURE_TYPE_OPTIONS = [
     ...Object.entries(FAILURE_TYPES).map(([value, label]) => ({ value, label })),
 ];
 
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'fecha', label: 'Fecha', sortable: true },
+    { id: 'colegio', label: 'Colegio/Corp.', sortable: true },
+    { id: 'tipo', label: 'Tipo', sortable: true },
+    { id: 'placaBus', label: 'Placa', sortable: true },
+    { id: 'numeroRuta', label: 'Ruta', sortable: true },
+    { id: 'fueOperacional', label: 'Día Operacional', sortable: true, align: 'center' },
+    { id: 'tipoFalla', label: 'Tipo de Falla', sortable: true },
+    { id: 'routeAffected', label: 'Afectó Recorrido', sortable: true, align: 'center' },
+    { id: 'pudoContinuarRuta', label: 'Continuó Ruta', sortable: true, align: 'center' },
+    { id: 'registrado_por', label: 'Registrado por' },
+    { id: 'acciones', label: 'Acciones', align: 'center' },
+];
+
 const FailureMappingPage = () => {
+    const { currentDate } = useCurrentDate();
+    const notify = useNotify();
+    const confirm = useConfirm();
     const removeDiacritics = (s = '') => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const normalizeLabel = (s = '') => removeDiacritics(String(s)).toLowerCase().trim();
 
@@ -79,13 +101,11 @@ const FailureMappingPage = () => {
     const isGestor = Number(auth?.user?.roleId || 0) === 1;
     const [formOpen, setFormOpen] = useState(false);
     const [formRecord, setFormRecord] = useState(null);
-    // Un registro pertenece a un día: la fecha se muestra sin hora (la hora de captura es createdAt).
-    const formatFechaRegistro = (r) => moment(r?.fecha, 'YYYY-MM-DD').format('DD/MM/YYYY');
-
     const [incidents, setIncidents] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(25);
+    // Paginación y orden (en el servidor)
+    const table = useTableState({ defaultOrderBy: 'fecha', defaultOrder: 'desc' });
+    const { page, rowsPerPage, orderBy, order } = table;
     const [totalCount, setTotalCount] = useState(0);
 
     // Filtros
@@ -105,7 +125,7 @@ const FailureMappingPage = () => {
             F.select('operacional', { label: 'Operacional', width: 'sm', options: YES_NO_OPTIONS }),
             F.dateRange('dates'),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const {
         cycle: selectedCicloEscolar,
@@ -124,8 +144,6 @@ const FailureMappingPage = () => {
     const draftCorporationId = getClientCorporationId(pageFilters.draft.client);
 
     // Ordenamiento
-    const [orderBy, setOrderBy] = useState('fecha');
-    const [order, setOrder] = useState('desc');
 
     // Modal de detalles
     const [detailsOpen, setDetailsOpen] = useState(false);
@@ -133,8 +151,6 @@ const FailureMappingPage = () => {
     const [loadingDetails, setLoadingDetails] = useState(false);
 
     // Modal de eliminación
-    const [deleteOpen, setDeleteOpen] = useState(false);
-    const [deleteId, setDeleteId] = useState(null);
 
     // Estadísticas
     const [statistics, setStatistics] = useState({
@@ -153,7 +169,7 @@ const FailureMappingPage = () => {
     const [pdfModalClient, setPdfModalClient] = useState(null);
     const pdfModalSchoolId = getClientSchoolId(pdfModalClient);
     const pdfModalCorporationId = getClientCorporationId(pdfModalClient);
-    const [pdfModalMonth, setPdfModalMonth] = useState(moment().startOf('month'));
+    const [pdfModalMonth, setPdfModalMonth] = useState(moment(currentDate).startOf('month'));
     const [pdfModalSchools, setPdfModalSchools] = useState([]);
 
     // Indicadores extra (estructurados por secciones) para Resumen Ejecutivo del PDF
@@ -190,8 +206,8 @@ const FailureMappingPage = () => {
 
     const fetchSchools = async () => {
         try {
-            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true } });
-            const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
+            const schoolsList = await loadCatalog('schools', { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true });
+            const schoolsData = schoolsList;
             setSchools(schoolsData);
         } catch (error) {
             console.error('Error al cargar colegios:', error);
@@ -201,8 +217,8 @@ const FailureMappingPage = () => {
 
     const fetchCorporations = async () => {
         try {
-            const response = await api.get('/corporations', { params: getCicloEscolarFilterParams(draftCycle) });
-            const corporationsData = Array.isArray(response.data) ? response.data : (response.data?.corporations || []);
+            const corporationsList = await loadCatalog('corporations', getCicloEscolarFilterParams(draftCycle));
+            const corporationsData = corporationsList;
             setCorporations(corporationsData);
         } catch (error) {
             console.error('Error al cargar corporaciones:', error);
@@ -315,6 +331,7 @@ const FailureMappingPage = () => {
             });
         } catch (error) {
             console.error('Error al cargar mapeos de fallas:', error);
+            notify.fromError(error, 'Error al cargar los mapeos de fallas');
         } finally {
             setLoading(false);
         }
@@ -325,18 +342,10 @@ const FailureMappingPage = () => {
         await fetchIncidents();
     }, [fetchIncidents]);
 
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
 
     const handleOpenPdfModal = () => {
         setPdfModalClient(null);
-        setPdfModalMonth(moment().startOf('month'));
+        setPdfModalMonth(moment(currentDate).startOf('month'));
         setPdfModalSchools([]);
         // Initialize default sections (Operación e Incidentes) and default Operación indicators
         setPdfExtraSections([
@@ -404,8 +413,8 @@ const FailureMappingPage = () => {
     // Colegios de todos los ciclos para el modal: el selector de cliente los agrupa por ciclo
     const fetchPdfModalSchools = async () => {
         try {
-            const response = await api.get('/schools', { params: { allCycles: true, includeArchived: true } });
-            const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
+            const schoolsList = await loadCatalog('schools', { allCycles: true, includeArchived: true });
+            const schoolsData = schoolsList;
             setPdfModalSchools(schoolsData);
         } catch (error) {
             console.error('Error al cargar colegios para modal PDF:', error);
@@ -421,11 +430,11 @@ const FailureMappingPage = () => {
 
     const handleExportPDF = async () => {
         if (!pdfModalSchoolId && !pdfModalCorporationId) {
-            alert('Selecciona un cliente para generar el reporte.');
+            notify.warning('Selecciona un cliente para generar el reporte');
             return;
         }
         if (!pdfModalMonth?.isValid()) {
-            alert('Selecciona un mes para generar el reporte.');
+            notify.warning('Selecciona un mes para generar el reporte');
             return;
         }
         setExportingPdf(true);
@@ -451,7 +460,7 @@ const FailureMappingPage = () => {
                 const txt = await blob.text();
                 let message = 'No se pudo generar el PDF.';
                 try { const parsed = JSON.parse(txt); message = parsed?.message || parsed?.error || message; } catch (_) { message = (txt || '').slice(0, 240); }
-                alert(`Error generando PDF: ${message}`);
+                notify.error(`Error al generar el PDF: ${message}`);
                 return;
             }
 
@@ -460,26 +469,19 @@ const FailureMappingPage = () => {
             const header = new TextDecoder('utf-8').decode(headerBuf);
             if (header !== '%PDF-') {
                 const txt = await blob.text();
-                alert('El archivo recibido no es un PDF válido. ' + (txt || '').slice(0, 240));
+                console.error('Respuesta del reporte PDF que no es un PDF:', (txt || '').slice(0, 240));
+                notify.error('El archivo recibido no es un PDF válido');
                 return;
             }
 
-            const url = window.URL.createObjectURL(blob);
             const clientName = pdfModalSchoolId
                 ? (pdfModalSchools.find(s => String(s.id) === pdfModalSchoolId)?.name || 'cliente')
                 : (corporations.find(c => String(c.id) === pdfModalCorporationId)?.name || 'cliente');
-            const filename = `mapeo_fallas_${clientName.replace(/\s+/g, '_')}_${pdfModalMonth.format('YYYY-MM')}.pdf`;
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            window.URL.revokeObjectURL(url);
+            downloadBlob(blob, buildFileName({ object: 'mapeo fallas', client: clientName, date: pdfModalMonth.format('YYYY-MM'), extension: 'pdf' }));
             setPdfModalOpen(false);
         } catch (error) {
             console.error('Error descargando PDF:', error);
-            alert('Error al descargar el PDF. Revisar consola.');
+            notify.fromError(await readBlobError(error), 'Error al descargar el PDF');
         } finally {
             setExportingPdf(false);
         }
@@ -493,7 +495,7 @@ const FailureMappingPage = () => {
             setSelectedIncident(data);
         } catch (error) {
             console.error('Error al cargar detalles del mapeo:', error);
-            alert('Error al cargar los detalles del mapeo de fallas');
+            notify.fromError(error, 'Error al cargar los detalles del mapeo de fallas');
         } finally {
             setLoadingDetails(false);
         }
@@ -515,6 +517,7 @@ const FailureMappingPage = () => {
     };
 
     const handleFormSaved = () => {
+        notify.success(formRecord ? 'Registro actualizado' : 'Registro creado');
         setFormOpen(false);
         setFormRecord(null);
         fetchIncidents();
@@ -523,31 +526,19 @@ const FailureMappingPage = () => {
         }
     };
 
-    const handleSort = (column) => {
-        const isAsc = orderBy === column && order === 'asc';
-        setOrder(isAsc ? 'desc' : 'asc');
-        setOrderBy(column);
-    };
 
-    const handleOpenDelete = (id) => {
-        setDeleteId(id);
-        setDeleteOpen(true);
-    };
-
-    const handleCancelDelete = () => {
-        setDeleteOpen(false);
-        setDeleteId(null);
-    };
-
-    const handleConfirmDelete = async () => {
-        try {
-            await deleteFailureMapping(deleteId);
-            setDeleteOpen(false);
-            setDeleteId(null);
+    const handleDelete = async (id) => {
+        const ok = await confirm({
+            title: 'Eliminar registro de mapeo de fallas',
+            message: 'Se eliminará el registro. Esta acción no se puede deshacer.',
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: () => deleteFailureMapping(id),
+            errorMessage: 'Error al eliminar el mapeo de fallas',
+        });
+        if (ok) {
+            notify.success('Registro eliminado');
             fetchIncidents();
-        } catch (error) {
-            console.error('Error al eliminar mapeo:', error);
-            alert('Error al eliminar el mapeo de fallas');
         }
     };
 
@@ -599,59 +590,18 @@ const FailureMappingPage = () => {
                 />
 
                 {/* Estadísticas */}
-                <Grid container spacing={3} mb={3}>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Total Registros
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.total}
-                                </Typography>
-                                <Typography variant="caption" color="textSecondary" display="block">
-                                    {statistics.colegios} de colegios · {statistics.corporativos} corporativos
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Accidentes
-                                </Typography>
-                                <Typography variant="h4" color="error">
-                                    {statistics.byTipo['accidente'] || 0}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Afectó Recorrido
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.withRouteAffected}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Días No Operacionales
-                                </Typography>
-                                <Typography variant="h4" color="warning.main">
-                                    {statistics.noOperacional}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                </Grid>
+                <StatCardGrid columns={4}>
+                    <StatCard
+                        label="Total registros"
+                        value={statistics.total}
+                        icon={<AssignmentIcon />}
+                        format="number"
+                        hint={`${statistics.colegios} de colegios · ${statistics.corporativos} corporativos`}
+                    />
+                    <StatCard label="Accidentes" value={statistics.byTipo['accidente'] || 0} icon={<CrashIcon />} valueColor="error" format="number" />
+                    <StatCard label="Afectó recorrido" value={statistics.withRouteAffected} icon={<AltRouteIcon />} format="number" />
+                    <StatCard label="Días no operacionales" value={statistics.noOperacional} icon={<EventBusyIcon />} valueColor="warning.main" format="number" />
+                </StatCardGrid>
 
                 {/* Filtros */}
                 <FilterBar
@@ -670,100 +620,14 @@ const FailureMappingPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer sx={{ overflowX: 'auto' }}>
+                            <AppTableContainer>
                                 <Table sx={{ minWidth: 1100 }}>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'fecha'}
-                                                    direction={orderBy === 'fecha' ? order : 'asc'}
-                                                    onClick={() => handleSort('fecha')}
-                                                >
-                                                    Fecha
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'colegio'}
-                                                    direction={orderBy === 'colegio' ? order : 'asc'}
-                                                    onClick={() => handleSort('colegio')}
-                                                >
-                                                    Colegio/Corp.
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'tipo'}
-                                                    direction={orderBy === 'tipo' ? order : 'asc'}
-                                                    onClick={() => handleSort('tipo')}
-                                                >
-                                                    Tipo
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'placaBus'}
-                                                    direction={orderBy === 'placaBus' ? order : 'asc'}
-                                                    onClick={() => handleSort('placaBus')}
-                                                >
-                                                    Placa
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'numeroRuta'}
-                                                    direction={orderBy === 'numeroRuta' ? order : 'asc'}
-                                                    onClick={() => handleSort('numeroRuta')}
-                                                >
-                                                    Ruta
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="center">
-                                                <TableSortLabel
-                                                    active={orderBy === 'fueOperacional'}
-                                                    direction={orderBy === 'fueOperacional' ? order : 'asc'}
-                                                    onClick={() => handleSort('fueOperacional')}
-                                                >
-                                                    Día Operacional
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'tipoFalla'}
-                                                    direction={orderBy === 'tipoFalla' ? order : 'asc'}
-                                                    onClick={() => handleSort('tipoFalla')}
-                                                >
-                                                    Tipo de Falla
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="center">
-                                                <TableSortLabel
-                                                    active={orderBy === 'routeAffected'}
-                                                    direction={orderBy === 'routeAffected' ? order : 'asc'}
-                                                    onClick={() => handleSort('routeAffected')}
-                                                >
-                                                    Afectó Recorrido
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="center">
-                                                <TableSortLabel
-                                                    active={orderBy === 'pudoContinuarRuta'}
-                                                    direction={orderBy === 'pudoContinuarRuta' ? order : 'asc'}
-                                                    onClick={() => handleSort('pudoContinuarRuta')}
-                                                >
-                                                    Continuó Ruta
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>Registrado por</TableCell>
-                                            <TableCell align="center">Acciones</TableCell>
-                                        </TableRow>
-                                    </TableHead>
+                                    <SortableTableHead columns={COLUMNS} {...table.sortProps} />
                                     <TableBody>
                                         {incidents.map((incident) => (
                                             <TableRow key={incident.id}>
                                                 <TableCell>
-                                                    {formatFechaRegistro(incident)}
+                                                    {formatDate(incident?.fecha)}
                                                     {incident.esRetroactivo && (
                                                         <Chip label="Retroactivo" size="small" color="info" variant="outlined" sx={{ ml: 1 }} />
                                                     )}
@@ -838,26 +702,12 @@ const FailureMappingPage = () => {
                                                     {incident.supervisor?.name || incident.creator?.name || 'N/A'}
                                                 </TableCell>
                                                 <TableCell align="center">
-                                                    <Tooltip title="Ver detalles">
-                                                        <IconButton
-                                                            size="small"
-                                                            onClick={() => handleViewDetails(incident.id)}
-                                                            color="primary"
-                                                        >
-                                                            <VisibilityIcon />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                    <PermissionGuard permission="mapeo-fallas-eliminar">
-                                                    <Tooltip title="Eliminar" >
-                                                        <IconButton
-                                                            size="small"
-                                                            onClick={() => handleOpenDelete(incident.id)}
-                                                            color="error"
-                                                        >
-                                                            <DeleteIcon />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                    </PermissionGuard>
+                                                    <RowActions
+                                                        actions={[
+                                                            { key: 'view', kind: 'view', color: 'primary', label: 'Ver detalles', icon: <VisibilityIcon fontSize="small" />, onClick: () => handleViewDetails(incident.id) },
+                                                            { key: 'delete', kind: 'delete', label: 'Eliminar', icon: <DeleteIcon fontSize="small" />, permission: 'mapeo-fallas-eliminar', onClick: () => handleDelete(incident.id) },
+                                                        ]}
+                                                    />
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -870,409 +720,366 @@ const FailureMappingPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={totalCount}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                labelRowsPerPage="Registros por página:"
-                                labelDisplayedRows={({ from, to, count }) =>
-                                    `${from}-${to} de ${count !== -1 ? count : `más de ${to}`}`
-                                }
-                            />
+                            </AppTableContainer>
+                            <AppTablePagination count={totalCount} {...table.paginationProps} />
                         </>
                     )}
                 </Paper>
 
                 {/* Modal de Detalles */}
-                <Dialog
+                <AppDialog
                     open={detailsOpen}
                     onClose={handleCloseDetails}
-                    maxWidth="md"
-                    fullWidth
+                    title="Detalle del mapeo de fallas"
+                    icon={<ReportProblemIcon />}
+                    size="md"
+                    readOnly
+                    extraActions={selectedIncident ? (
+                        <PermissionGuard permission="mapeo-fallas-editar">
+                            <Button onClick={handleOpenEditFull} startIcon={<EditIcon />} variant="outlined">
+                                Editar registro
+                            </Button>
+                        </PermissionGuard>
+                    ) : null}
                 >
-                    <DialogTitle>Detalles del Mapeo de Fallas</DialogTitle>
-                    <DialogContent dividers>
-                        {loadingDetails ? (
-                            <Box display="flex" justifyContent="center" p={3}>
-                                <CircularProgress />
-                            </Box>
-                        ) : selectedIncident ? (
-                            <Grid container spacing={2}>
-                                <Grid item xs={12} sm={6}>
-                                    <Box display="flex" alignItems="center" gap={1}>
-                                        <Typography variant="subtitle2" color="textSecondary">
-                                            Fecha
-                                        </Typography>
-                                    </Box>
-                                    <>
-                                        <Typography variant="body1" gutterBottom>
-                                            {formatFechaRegistro(selectedIncident)}
-                                            {selectedIncident.esRetroactivo && (
-                                                <Chip label="Retroactivo" size="small" color="info" variant="outlined" sx={{ ml: 1 }} />
-                                            )}
-                                        </Typography>
-                                        <Typography variant="caption" display="block" color="textSecondary">
-                                            {`Registrado el ${moment(selectedIncident.createdAt).tz('America/Guatemala').format('DD/MM/YYYY hh:mm A')}`}
-                                        </Typography>
-                                    </>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
+                    {loadingDetails ? (
+                        <Box display="flex" justifyContent="center" p={3}>
+                            <CircularProgress />
+                        </Box>
+                    ) : selectedIncident ? (
+                        <Grid container spacing={2}>
+                            <Grid item xs={12} sm={6}>
+                                <Box display="flex" alignItems="center" gap={1}>
                                     <Typography variant="subtitle2" color="textSecondary">
-                                        Tipo de Evento
+                                        Fecha
                                     </Typography>
-                                    {selectedIncident.tipo === null ? (
-                                        <Chip label="N/A" size="small" sx={{ mt: 1, bgcolor: 'grey.300', color: 'text.primary' }} />
-                                    ) : (
-                                        <Chip
-                                            label={INCIDENT_EVENT_TYPES[selectedIncident.tipo] || selectedIncident.tipo}
-                                            color={getTipoColor(selectedIncident.tipo)}
-                                            sx={{ mt: 1 }}
-                                        />
-                                    )}
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Tipo de Falla
-                                    </Typography>
-                                    {selectedIncident.fueOperacional === false || selectedIncident.tipoFalla === null ? (
-                                        <Chip label="N/A" size="small" sx={{ mt: 1, bgcolor: 'grey.300', color: 'text.primary' }} />
-                                    ) : selectedIncident.noFallas ? (
-                                        <Chip
-                                            label="Sin Fallas Reportadas"
-                                            color="success"
-                                            icon={<CheckCircleIcon />}
-                                            sx={{ mt: 1 }}
-                                        />
-                                    ) : (
-                                        <Chip
-                                            label={selectedIncident.tipoFalla === 'otro' && selectedIncident.otroFallaDetalle
-                                                ? `Otro: ${selectedIncident.otroFallaDetalle}`
-                                                : FAILURE_TYPES[selectedIncident.tipoFalla] || selectedIncident.tipoFalla}
-                                            color={getTipoFallaColor(selectedIncident.tipoFalla)}
-                                            icon={getTipoFallaIcon(selectedIncident.tipoFalla)}
-                                            sx={{ mt: 1 }}
-                                        />
-                                    )}
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        ¿Fue Operacional? (hubo clases)
-                                    </Typography>
-                                    {selectedIncident.fueOperacional === false ? (
-                                        <Chip label="No" color="warning" size="small" sx={{ mt: 1 }} />
-                                    ) : (
-                                        <Chip label="Sí" color="success" size="small" sx={{ mt: 1 }} />
-                                    )}
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Placa del Bus
-                                    </Typography>
+                                </Box>
+                                <>
                                     <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.allBuses ? 'TODOS' : (selectedIncident.placaBus || 'N/A')}
+                                        {formatDate(selectedIncident?.fecha)}
+                                        {selectedIncident.esRetroactivo && (
+                                            <Chip label="Retroactivo" size="small" color="info" variant="outlined" sx={{ ml: 1 }} />
+                                        )}
                                     </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Número de Ruta
+                                    <Typography variant="caption" display="block" color="textSecondary">
+                                        {`Registrado el ${formatDateTime(selectedIncident.createdAt)}`}
                                     </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.numeroRuta || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Colegio
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.colegio ? `${selectedIncident.colegio}${selectedIncident.cicloEscolarAnio ? ` ${selectedIncident.cicloEscolarAnio}` : ''}` : 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                {selectedIncident.corporacion && (
-                                    <Grid item xs={12} sm={6}>
-                                        <Typography variant="subtitle2" color="textSecondary">
-                                            Corporación
-                                        </Typography>
-                                        <Typography variant="body1" gutterBottom>
-                                            {selectedIncident.corporacion}
-                                        </Typography>
-                                    </Grid>
-                                )}
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Supervisor
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.supervisor?.name || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                {selectedIncident.creator && (
-                                    <Grid item xs={12} sm={6}>
-                                        <Typography variant="subtitle2" color="textSecondary">
-                                            Ingresado manualmente por
-                                        </Typography>
-                                        <Typography variant="body1" gutterBottom>
-                                            {selectedIncident.creator.name}
-                                        </Typography>
-                                    </Grid>
-                                )}
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        ¿Afectó el Recorrido?
-                                    </Typography>
-                                    {selectedIncident.routeAffected === null ? (
-                                        <Chip label="N/A" size="small" sx={{ mt: 1 }} />
-                                    ) : selectedIncident.routeAffected ? (
-                                        <Chip label="Sí" color="error" size="small" sx={{ mt: 1 }} />
-                                    ) : (
-                                        <Chip label="No" color="success" size="small" sx={{ mt: 1 }} />
-                                    )}
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        ¿Pudo Continuar la Ruta?
-                                    </Typography>
-                                    {selectedIncident.pudoContinuarRuta === null ? (
-                                        <Chip label="N/A" size="small" sx={{ mt: 1 }} />
-                                    ) : selectedIncident.pudoContinuarRuta ? (
-                                        <Chip label="Sí" color="success" size="small" sx={{ mt: 1 }} />
-                                    ) : (
-                                        <Chip label="No" color="error" size="small" sx={{ mt: 1 }} />
-                                    )}
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        ¿Se Utilizó Bus Suplente?
-                                    </Typography>
-                                    {selectedIncident.seUtilizoBusSuplente === null ? (
-                                        <Chip label="N/A" size="small" sx={{ mt: 1 }} />
-                                    ) : selectedIncident.seUtilizoBusSuplente ? (
-                                        <Chip label="Sí" color="warning" size="small" sx={{ mt: 1 }} />
-                                    ) : (
-                                        <Chip label="No" color="default" size="small" sx={{ mt: 1 }} />
-                                    )}
-                                </Grid>
-                                {selectedIncident.allBuses && (
-                                    <Grid item xs={12}>
-                                        <Chip
-                                            label="Aplica para todos los buses"
-                                            color="info"
-                                            sx={{ mt: 1 }}
-                                        />
-                                    </Grid>
-                                )}
-                                <Grid item xs={12}>
-                                    <Box display="flex" alignItems="center" gap={1}>
-                                        <Typography variant="subtitle2" color="textSecondary">
-                                            Descripción
-                                        </Typography>
-                                    </Box>
-                                    <Paper sx={{ p: 2, mt: 1, backgroundColor: '#f5f5f5' }}>
-                                        <Typography variant="body1">
-                                            {selectedIncident.descripcion || 'Sin descripción'}
-                                        </Typography>
-                                    </Paper>
-                                </Grid>
+                                </>
                             </Grid>
-                        ) : (
-                            <Typography align="center" color="textSecondary">
-                                No se pudieron cargar los detalles
-                            </Typography>
-                        )}
-                    </DialogContent>
-                    <DialogActions>
-                        {selectedIncident && (
-                            <PermissionGuard permission="mapeo-fallas-editar">
-                                <Button onClick={handleOpenEditFull} startIcon={<EditIcon />} variant="outlined">
-                                    Editar registro
-                                </Button>
-                            </PermissionGuard>
-                        )}
-                        <Button onClick={handleCloseDetails} color="primary">
-                            Cerrar
-                        </Button>
-                    </DialogActions>
-                </Dialog>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Tipo de Evento
+                                </Typography>
+                                {selectedIncident.tipo === null ? (
+                                    <Chip label="N/A" size="small" sx={{ mt: 1, bgcolor: 'grey.300', color: 'text.primary' }} />
+                                ) : (
+                                    <Chip
+                                        label={INCIDENT_EVENT_TYPES[selectedIncident.tipo] || selectedIncident.tipo}
+                                        color={getTipoColor(selectedIncident.tipo)}
+                                        sx={{ mt: 1 }}
+                                    />
+                                )}
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Tipo de Falla
+                                </Typography>
+                                {selectedIncident.fueOperacional === false || selectedIncident.tipoFalla === null ? (
+                                    <Chip label="N/A" size="small" sx={{ mt: 1, bgcolor: 'grey.300', color: 'text.primary' }} />
+                                ) : selectedIncident.noFallas ? (
+                                    <Chip
+                                        label="Sin Fallas Reportadas"
+                                        color="success"
+                                        icon={<CheckCircleIcon />}
+                                        sx={{ mt: 1 }}
+                                    />
+                                ) : (
+                                    <Chip
+                                        label={selectedIncident.tipoFalla === 'otro' && selectedIncident.otroFallaDetalle
+                                            ? `Otro: ${selectedIncident.otroFallaDetalle}`
+                                            : FAILURE_TYPES[selectedIncident.tipoFalla] || selectedIncident.tipoFalla}
+                                        color={getTipoFallaColor(selectedIncident.tipoFalla)}
+                                        icon={getTipoFallaIcon(selectedIncident.tipoFalla)}
+                                        sx={{ mt: 1 }}
+                                    />
+                                )}
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    ¿Fue Operacional? (hubo clases)
+                                </Typography>
+                                {selectedIncident.fueOperacional === false ? (
+                                    <Chip label="No" color="warning" size="small" sx={{ mt: 1 }} />
+                                ) : (
+                                    <Chip label="Sí" color="success" size="small" sx={{ mt: 1 }} />
+                                )}
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Placa del Bus
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.allBuses ? 'TODOS' : (selectedIncident.placaBus || 'N/A')}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Número de Ruta
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.numeroRuta || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Colegio
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.colegio ? `${selectedIncident.colegio}${selectedIncident.cicloEscolarAnio ? ` ${selectedIncident.cicloEscolarAnio}` : ''}` : 'N/A'}
+                                </Typography>
+                            </Grid>
+                            {selectedIncident.corporacion && (
+                                <Grid item xs={12} sm={6}>
+                                    <Typography variant="subtitle2" color="textSecondary">
+                                        Corporación
+                                    </Typography>
+                                    <Typography variant="body1" gutterBottom>
+                                        {selectedIncident.corporacion}
+                                    </Typography>
+                                </Grid>
+                            )}
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Supervisor
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.supervisor?.name || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            {selectedIncident.creator && (
+                                <Grid item xs={12} sm={6}>
+                                    <Typography variant="subtitle2" color="textSecondary">
+                                        Ingresado manualmente por
+                                    </Typography>
+                                    <Typography variant="body1" gutterBottom>
+                                        {selectedIncident.creator.name}
+                                    </Typography>
+                                </Grid>
+                            )}
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    ¿Afectó el Recorrido?
+                                </Typography>
+                                {selectedIncident.routeAffected === null ? (
+                                    <Chip label="N/A" size="small" sx={{ mt: 1 }} />
+                                ) : selectedIncident.routeAffected ? (
+                                    <Chip label="Sí" color="error" size="small" sx={{ mt: 1 }} />
+                                ) : (
+                                    <Chip label="No" color="success" size="small" sx={{ mt: 1 }} />
+                                )}
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    ¿Pudo Continuar la Ruta?
+                                </Typography>
+                                {selectedIncident.pudoContinuarRuta === null ? (
+                                    <Chip label="N/A" size="small" sx={{ mt: 1 }} />
+                                ) : selectedIncident.pudoContinuarRuta ? (
+                                    <Chip label="Sí" color="success" size="small" sx={{ mt: 1 }} />
+                                ) : (
+                                    <Chip label="No" color="error" size="small" sx={{ mt: 1 }} />
+                                )}
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    ¿Se Utilizó Bus Suplente?
+                                </Typography>
+                                {selectedIncident.seUtilizoBusSuplente === null ? (
+                                    <Chip label="N/A" size="small" sx={{ mt: 1 }} />
+                                ) : selectedIncident.seUtilizoBusSuplente ? (
+                                    <Chip label="Sí" color="warning" size="small" sx={{ mt: 1 }} />
+                                ) : (
+                                    <Chip label="No" color="default" size="small" sx={{ mt: 1 }} />
+                                )}
+                            </Grid>
+                            {selectedIncident.allBuses && (
+                                <Grid item xs={12}>
+                                    <Chip
+                                        label="Aplica para todos los buses"
+                                        color="info"
+                                        sx={{ mt: 1 }}
+                                    />
+                                </Grid>
+                            )}
+                            <Grid item xs={12}>
+                                <Box display="flex" alignItems="center" gap={1}>
+                                    <Typography variant="subtitle2" color="textSecondary">
+                                        Descripción
+                                    </Typography>
+                                </Box>
+                                <Paper sx={{ p: 2, mt: 1, backgroundColor: '#f5f5f5' }}>
+                                    <Typography variant="body1">
+                                        {selectedIncident.descripcion || 'Sin descripción'}
+                                    </Typography>
+                                </Paper>
+                            </Grid>
+                        </Grid>
+                    ) : (
+                        <Typography align="center" color="textSecondary">
+                            No se pudieron cargar los detalles
+                        </Typography>
+                    )}
+                </AppDialog>
 
                 {/* Modal Generar PDF */}
-                <Dialog open={pdfModalOpen} onClose={handleClosePdfModal} maxWidth="sm" fullWidth>
-                    <DialogTitle>Generar Reporte PDF</DialogTitle>
-                    <DialogContent dividers>
-                        <Box display="flex" flexDirection="column" gap={2} pt={1}>
-                            <ClientSelector
-                                size="medium"
-                                schools={pdfModalSchools}
-                                corporations={corporations}
-                                value={pdfModalClient}
-                                onChange={setPdfModalClient}
-                            />
-                            <DatePicker
-                                label="Mes del reporte"
-                                value={pdfModalMonth}
-                                onChange={(val) => setPdfModalMonth(val)}
-                                views={['year', 'month']}
-                                openTo="month"
-                                slotProps={{ textField: { fullWidth: true } }}
-                            />
+                <AppDialog
+                    open={pdfModalOpen}
+                    onClose={handleClosePdfModal}
+                    title="Generar reporte PDF"
+                    icon={<PictureAsPdfIcon />}
+                    size="sm"
+                    onSubmit={handleExportPDF}
+                    submitLabel="Generar PDF"
+                    submitting={exportingPdf}
+                    submitDisabled={(!pdfModalSchoolId && !pdfModalCorporationId) || !pdfModalMonth}
+                >
+                    <Box display="flex" flexDirection="column" gap={2}>
+                        <ClientSelector
+                            size="medium"
+                            schools={pdfModalSchools}
+                            corporations={corporations}
+                            value={pdfModalClient}
+                            onChange={setPdfModalClient}
+                        />
+                        <DatePicker
+                            label="Mes del reporte"
+                            value={pdfModalMonth}
+                            onChange={(val) => setPdfModalMonth(val)}
+                            views={['year', 'month']}
+                            openTo="month"
+                            slotProps={{ textField: { fullWidth: true } }}
+                        />
 
-                            <Divider />
+                        <Divider />
 
-                            <Box>
-                                <Typography variant="subtitle2" fontWeight={700} gutterBottom>
-                                    Indicadores Resumen Ejecutivo
-                                </Typography>
-                                <Typography variant="caption" color="textSecondary" display="block" mb={1}>
-                                    Agrega indicadores dentro de cada sección. Las secciones "Operación" e "Incidentes" siempre aparecen.
-                                </Typography>
+                        <Box>
+                            <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                                Indicadores Resumen Ejecutivo
+                            </Typography>
+                            <Typography variant="caption" color="textSecondary" display="block" mb={1}>
+                                Agrega indicadores dentro de cada sección. Las secciones "Operación" e "Incidentes" siempre aparecen.
+                            </Typography>
 
-                                {/* Secciones */}
-                                {pdfExtraSections.map((section, sIdx) => (
-                                    <Box key={sIdx} mb={1}>
-                                        <Box display="flex" alignItems="center" justifyContent="space-between" gap={1} sx={{ bgcolor: '#e8eef7', px: 1.25, py: 0.75, borderRadius: 1 }}>
-                                            <Typography variant="body2" fontWeight={700} color="#1f4e79">
-                                                {section.label}
-                                            </Typography>
-                                            <Box display="flex" gap={1}>
-                                                <Button size="small" variant="outlined" onClick={() => { setPdfAddMode('indicator'); setPdfAddTargetSection(sIdx); setPdfAddLabel(''); setPdfAddValue(''); }}>
-                                                    Agregar indicador
+                            {/* Secciones */}
+                            {pdfExtraSections.map((section, sIdx) => (
+                                <Box key={sIdx} mb={1}>
+                                    <Box display="flex" alignItems="center" justifyContent="space-between" gap={1} sx={{ bgcolor: '#e8eef7', px: 1.25, py: 0.75, borderRadius: 1 }}>
+                                        <Typography variant="body2" fontWeight={700} color="#1f4e79">
+                                            {section.label}
+                                        </Typography>
+                                        <Box display="flex" gap={1}>
+                                            <Button size="small" variant="outlined" onClick={() => { setPdfAddMode('indicator'); setPdfAddTargetSection(sIdx); setPdfAddLabel(''); setPdfAddValue(''); }}>
+                                                Agregar indicador
+                                            </Button>
+                                            {sIdx > 1 && (
+                                                <Button size="small" color="error" variant="text" onClick={() => handlePdfRemoveSection(sIdx)}>
+                                                    Eliminar sección
                                                 </Button>
-                                                {sIdx > 1 && (
-                                                    <Button size="small" color="error" variant="text" onClick={() => handlePdfRemoveSection(sIdx)}>
-                                                        Eliminar sección
-                                                    </Button>
-                                                )}
-                                            </Box>
+                                            )}
                                         </Box>
+                                    </Box>
 
-                                        {/* Indicadores de la sección */}
-                                        {(section.items || []).length > 0 && (
-                                            <Box display="flex" flexDirection="column" gap={0.5} mt={0.5}>
-                                                {section.items.map((it, idx) => {
-                                                    const isOper = normalizeLabel(section.label) === 'operacion';
-                                                    const nl = normalizeLabel(it.label);
-                                                    const isDefaultOpIndicator = isOper && (nl === 'dias con servicio' || nl === 'rutas');
-                                                    if (isDefaultOpIndicator) {
-                                                        return (
-                                                            <Box key={idx} display="flex" alignItems="center" gap={1} sx={{ bgcolor: '#fafafa', border: '1px solid #e0e0e0', borderRadius: 1, px: 1.5, py: 0.75 }}>
-                                                                <Typography variant="body2" sx={{ minWidth: 180 }}>{it.label}</Typography>
-                                                                <TextField
-                                                                    size="small"
-                                                                    value={it.value || ''}
-                                                                    onChange={(e) => {
-                                                                        const v = e.target.value;
-                                                                        setPdfExtraSections(prev => prev.map((s, i) => {
-                                                                            if (i !== sIdx) {
-                                                                                return s;
-                                                                            }
-                                                                            const next = { ...s, items: (s.items || []).map((x, j) => j === idx ? ({ ...x, value: v }) : x) };
-                                                                            return next;
-                                                                        }));
-                                                                    }}
-                                                                    sx={{ flex: 1 }}
-                                                                />
-                                                            </Box>
-                                                        );
-                                                    }
-
+                                    {/* Indicadores de la sección */}
+                                    {(section.items || []).length > 0 && (
+                                        <Box display="flex" flexDirection="column" gap={0.5} mt={0.5}>
+                                            {section.items.map((it, idx) => {
+                                                const isOper = normalizeLabel(section.label) === 'operacion';
+                                                const nl = normalizeLabel(it.label);
+                                                const isDefaultOpIndicator = isOper && (nl === 'dias con servicio' || nl === 'rutas');
+                                                if (isDefaultOpIndicator) {
                                                     return (
                                                         <Box key={idx} display="flex" alignItems="center" gap={1} sx={{ bgcolor: '#fafafa', border: '1px solid #e0e0e0', borderRadius: 1, px: 1.5, py: 0.75 }}>
-                                                            <Typography variant="body2" flex={1}>
-                                                                <strong>{it.label}:</strong>{it.value ? ` ${it.value}` : ''}
-                                                            </Typography>
-                                                            <Tooltip title="Eliminar">
-                                                                <IconButton size="small" onClick={() => handlePdfRemoveIndicator(sIdx, idx)} color="error">
-                                                                    <DeleteIcon fontSize="small" />
-                                                                </IconButton>
-                                                            </Tooltip>
+                                                            <Typography variant="body2" sx={{ minWidth: 180 }}>{it.label}</Typography>
+                                                            <TextField
+                                                                size="small"
+                                                                value={it.value || ''}
+                                                                onChange={(e) => {
+                                                                    const v = e.target.value;
+                                                                    setPdfExtraSections(prev => prev.map((s, i) => {
+                                                                        if (i !== sIdx) {
+                                                                            return s;
+                                                                        }
+                                                                        const next = { ...s, items: (s.items || []).map((x, j) => j === idx ? ({ ...x, value: v }) : x) };
+                                                                        return next;
+                                                                    }));
+                                                                }}
+                                                                sx={{ flex: 1 }}
+                                                            />
                                                         </Box>
                                                     );
-                                                })}
-                                            </Box>
-                                        )}
+                                                }
 
-                                        {/* Inline add form for this section */}
-                                        {pdfAddMode === 'indicator' && pdfAddTargetSection === sIdx && (
-                                            <Box display="flex" flexDirection="column" gap={1} mt={1} sx={{ border: '1px dashed #90caf9', borderRadius: 1, p: 1.25 }}>
-                                                <TextField label="Nombre del indicador" value={pdfAddLabel} onChange={(e) => setPdfAddLabel(e.target.value)} size="small" fullWidth autoFocus />
-                                                <TextField label="Valor" value={pdfAddValue} onChange={(e) => setPdfAddValue(e.target.value)} size="small" fullWidth />
-                                                <Box display="flex" gap={1}>
-                                                    <Button size="small" variant="contained" onClick={handlePdfAddConfirm} disabled={!pdfAddLabel.trim()}>
-                                                        Agregar
-                                                    </Button>
-                                                    <Button size="small" variant="outlined" onClick={handlePdfAddCancel}>
-                                                        Cancelar
-                                                    </Button>
-                                                </Box>
-                                            </Box>
-                                        )}
-                                    </Box>
-                                ))}
+                                                return (
+                                                    <Box key={idx} display="flex" alignItems="center" gap={1} sx={{ bgcolor: '#fafafa', border: '1px solid #e0e0e0', borderRadius: 1, px: 1.5, py: 0.75 }}>
+                                                        <Typography variant="body2" flex={1}>
+                                                            <strong>{it.label}:</strong>{it.value ? ` ${it.value}` : ''}
+                                                        </Typography>
+                                                        <Tooltip title="Eliminar">
+                                                            <IconButton size="small" onClick={() => handlePdfRemoveIndicator(sIdx, idx)} color="error">
+                                                                <DeleteIcon fontSize="small" />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    </Box>
+                                                );
+                                            })}
+                                        </Box>
+                                    )}
 
-                                {/* Agregar nueva sección */}
-                                {!pdfAddMode && (
-                                    <Box display="flex" gap={1} mt={1}>
-                                        <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={() => { setPdfAddMode('section'); setPdfAddLabel(''); }}>
+                                    {/* Inline add form for this section */}
+                                    {pdfAddMode === 'indicator' && pdfAddTargetSection === sIdx && (
+                                        <Box display="flex" flexDirection="column" gap={1} mt={1} sx={{ border: '1px dashed #90caf9', borderRadius: 1, p: 1.25 }}>
+                                            <TextField label="Nombre del indicador" value={pdfAddLabel} onChange={(e) => setPdfAddLabel(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (pdfAddLabel.trim()) { handlePdfAddConfirm(); } } }} size="small" fullWidth autoFocus />
+                                            <TextField label="Valor" value={pdfAddValue} onChange={(e) => setPdfAddValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (pdfAddLabel.trim()) { handlePdfAddConfirm(); } } }} size="small" fullWidth />
+                                            <Box display="flex" gap={1}>
+                                                <Button size="small" variant="contained" onClick={handlePdfAddConfirm} disabled={!pdfAddLabel.trim()}>
+                                                    Agregar
+                                                </Button>
+                                                <Button size="small" variant="outlined" onClick={handlePdfAddCancel}>
+                                                    Cancelar
+                                                </Button>
+                                            </Box>
+                                        </Box>
+                                    )}
+                                </Box>
+                            ))}
+
+                            {/* Agregar nueva sección */}
+                            {!pdfAddMode && (
+                                <Box display="flex" gap={1} mt={1}>
+                                    <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={() => { setPdfAddMode('section'); setPdfAddLabel(''); }}>
+                                        Agregar sección
+                                    </Button>
+                                </Box>
+                            )}
+
+                            {/* Formulario para nueva sección */}
+                            {pdfAddMode === 'section' && (
+                                <Box display="flex" flexDirection="column" gap={1} mt={1} sx={{ border: '1px dashed #90caf9', borderRadius: 1, p: 1.25 }}>
+                                    <TextField label="Nombre de la sección" value={pdfAddLabel} onChange={(e) => setPdfAddLabel(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (pdfAddLabel.trim()) { handlePdfAddConfirm(); } } }} size="small" fullWidth autoFocus />
+                                    <Box display="flex" gap={1}>
+                                        <Button size="small" variant="contained" onClick={handlePdfAddConfirm} disabled={!pdfAddLabel.trim()}>
                                             Agregar sección
                                         </Button>
+                                        <Button size="small" variant="outlined" onClick={handlePdfAddCancel}>
+                                            Cancelar
+                                        </Button>
                                     </Box>
-                                )}
-
-                                {/* Formulario para nueva sección */}
-                                {pdfAddMode === 'section' && (
-                                    <Box display="flex" flexDirection="column" gap={1} mt={1} sx={{ border: '1px dashed #90caf9', borderRadius: 1, p: 1.25 }}>
-                                        <TextField label="Nombre de la sección" value={pdfAddLabel} onChange={(e) => setPdfAddLabel(e.target.value)} size="small" fullWidth autoFocus />
-                                        <Box display="flex" gap={1}>
-                                            <Button size="small" variant="contained" onClick={handlePdfAddConfirm} disabled={!pdfAddLabel.trim()}>
-                                                Agregar sección
-                                            </Button>
-                                            <Button size="small" variant="outlined" onClick={handlePdfAddCancel}>
-                                                Cancelar
-                                            </Button>
-                                        </Box>
-                                    </Box>
-                                )}
-                            </Box>
+                                </Box>
+                            )}
                         </Box>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleClosePdfModal} color="inherit">Cancelar</Button>
-                        <Button
-                            onClick={handleExportPDF}
-                            variant="contained"
-                            disabled={exportingPdf || (!pdfModalSchoolId && !pdfModalCorporationId) || !pdfModalMonth}
-                            startIcon={exportingPdf ? <CircularProgress size={16} color="inherit" /> : <PictureAsPdfIcon />}
-                        >
-                            {exportingPdf ? 'Generando...' : 'Generar PDF'}
-                        </Button>
-                    </DialogActions>
-                </Dialog>
+                    </Box>
+                </AppDialog>
 
-                {/* Modal de Confirmación de Eliminación */}
-                <Dialog
-                    open={deleteOpen}
-                    onClose={handleCancelDelete}
-                    maxWidth="xs"
-                    fullWidth
-                >
-                    <DialogTitle>Confirmar Eliminación</DialogTitle>
-                    <DialogContent>
-                        <Typography>
-                            ¿Estás seguro de que deseas eliminar este registro? Esta acción no se puede deshacer.
-                        </Typography>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCancelDelete} color="inherit">
-                            Cancelar
-                        </Button>
-                        <Button onClick={handleConfirmDelete} color="error" variant="contained">
-                            Eliminar
-                        </Button>
-                    </DialogActions>
-                </Dialog>
                 <FailureMappingFormDialog
                     open={formOpen}
                     onClose={() => { setFormOpen(false); setFormRecord(null); }}

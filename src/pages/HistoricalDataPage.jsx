@@ -7,21 +7,23 @@ import {
     Typography,
     Paper,
     Table,
-    TableHead,
     TableRow,
     TableCell,
     TableBody,
-    CircularProgress,
-    useTheme,
-    useMediaQuery
+    CircularProgress
 } from '@mui/material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
 import { getCiclosEscolares, getCicloEscolarYear } from '../services/cicloEscolarService';
 import tw, { styled } from 'twin.macro';
 import PageContainer from '../components/layout/PageContainer';
+import AppTableContainer from '../components/table/AppTableContainer';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import useTableState from '../hooks/useTableState';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
+import useIsMobile from '../hooks/useIsMobile';
 
 // Contenedores y estilos básicos
 const SectionPaper = styled(Paper)(() => [
@@ -31,10 +33,40 @@ const SectionPaper = styled(Paper)(() => [
 const SectionTitle = styled(Typography)(() => [tw`text-xl font-semibold mb-2`, { color: '#2563EB' }]);
 const NoData = styled(Typography)(() => [tw`text-center text-gray-500 my-4`]);
 
+const GenericTable = ({ rows }) => {
+    const table = useTableState();
+    const { resetPage } = table;
+    useEffect(() => {
+        resetPage();
+    }, [rows, resetPage]);
+    if (!rows || rows.length === 0) {
+        return null;
+    }
+    const columns = Object.keys(rows[0]).map((key) => ({ id: key, label: key, sx: { fontWeight: 'bold', bgcolor: '#DCF3FF' } }));
+    return (
+        <>
+            <AppTableContainer>
+                <Table size="small">
+                    <SortableTableHead columns={columns} />
+                    <TableBody>
+                        {table.paginate(rows).map((row, i) => (
+                            <TableRow key={i} hover>
+                                {columns.map((column) => (
+                                    <TableCell key={column.id}>{row[column.id] ?? '—'}</TableCell>
+                                ))}
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </AppTableContainer>
+            <AppTablePagination count={rows.length} {...table.paginationProps} />
+        </>
+    );
+};
+
 const HistoricalDataPage = () => {
     const { auth } = useContext(AuthContext);
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
 
     const currentYear = new Date().getFullYear();
     const fallbackYear = currentYear;
@@ -86,36 +118,6 @@ const HistoricalDataPage = () => {
     }, [selectedYear, auth.token]);
 
     const handleTabChange = (_, newValue) => setSelectedYear(newValue);
-
-    // Renderiza una tabla genérica dado un array de objetos
-    const GenericTable = ({ rows }) => {
-        if (!rows || rows.length === 0) {
-            return null;
-        }
-        const columns = Object.keys(rows[0]);
-        return (
-            <Table size="small">
-                <TableHead>
-                    <TableRow>
-                        {columns.map(col => (
-                            <TableCell key={col} sx={{ fontWeight: 'bold', bgcolor: '#DCF3FF' }}>
-                                {col}
-                            </TableCell>
-                        ))}
-                    </TableRow>
-                </TableHead>
-                <TableBody>
-                    {rows.map((row, i) => (
-                        <TableRow key={i} hover>
-                            {columns.map(col => (
-                                <TableCell key={col}>{row[col] ?? '—'}</TableCell>
-                            ))}
-                        </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
-        );
-    };
 
     return (
         <PageContainer width="xl">

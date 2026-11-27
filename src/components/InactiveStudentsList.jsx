@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Typography, Button, Chip } from '@mui/material';
-import moment from 'moment';
+import { formatDate } from '../utils/dateFormat';
 
 // Alumnos desactivados de la familia: no cuentan para cobro, buses ni reportes. "Reactivar" llama a la API en el acto.
 const InactiveStudentsList = ({ students, canReactivate, busyId, onReactivate }) => {
@@ -18,7 +18,7 @@ const InactiveStudentsList = ({ students, canReactivate, busyId, onReactivate })
                     <Chip size="small" label="Inactivo" />
                     <Typography variant="body2" sx={{ flex: '1 1 200px' }}>
                         {student.fullName} ({student.grade})
-                        {student.inactivoDesde ? ` — desde ${moment(student.inactivoDesde).format('DD/MM/YYYY')}` : ''}
+                        {student.inactivoDesde ? ` — desde ${formatDate(student.inactivoDesde)}` : ''}
                         {student.notaFin && (
                             <Typography component="span" variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                                 Motivo: {student.notaFin}

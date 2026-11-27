@@ -16,8 +16,6 @@ import {
     TableHead,
     TableRow,
     Paper,
-    Snackbar,
-    Alert,
     TextField,
     Autocomplete,
     Chip
@@ -32,6 +30,7 @@ import ScheduleThresholdsDialog from '../components/ScheduleThresholdsDialog';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import useClientScope from '../hooks/useClientScope';
+import useNotify from '../hooks/useNotify';
 
 const CorporateBusesPage = () => {
     const { hasPermission } = usePermissions();
@@ -53,7 +52,7 @@ const CorporateBusesPage = () => {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [crewChangeIntent, setCrewChangeIntent] = useState({});
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
     // Umbrales de horario por ruta: { [routeNumber]: { [scheduleCode]: { routeStartMaxTime, routeEndMarginMinutes } } }
     const [routeThresholds, setRouteThresholds] = useState({});
     const [scheduleModalRoute, setScheduleModalRoute] = useState(null);
@@ -113,12 +112,12 @@ const CorporateBusesPage = () => {
             setCorporationScheduleNames(Object.fromEntries(names.map((name) => [name, name])));
         } catch (err) {
             console.error('Error fetching corporation data:', err);
-            setSnackbar({ open: true, message: 'Error al obtener datos de la corporación', severity: 'error' });
+            notify.error('Error al obtener datos de la corporación');
             setCorporationRouteNumbers([]);
             setCorporationScheduleCodes([]);
             setCorporationScheduleNames({});
         }
-    }, [auth.token, corporationId]);
+    }, [auth.token, corporationId, notify]);
 
     const fetchBuses = useCallback(async () => {
         if (!corporationId) {
@@ -148,10 +147,10 @@ const CorporateBusesPage = () => {
             setRoutePilotAssignments(routePilots);
         } catch (err) {
             console.error('Error fetching buses:', err);
-            setSnackbar({ open: true, message: 'Error al obtener buses', severity: 'error' });
+            notify.error('Error al obtener buses');
             setBuses([]);
         }
-    }, [auth.token, corporationId]);
+    }, [auth.token, corporationId, notify]);
 
     const fetchPilots = useCallback(async () => {
         if (!corporationId) {
@@ -257,12 +256,12 @@ const CorporateBusesPage = () => {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
 
-            setSnackbar({ open: true, message: `Horarios de la Ruta ${scheduleModalRoute} guardados`, severity: 'success' });
+            notify.success(`Horarios de la Ruta ${scheduleModalRoute} guardados`);
             setScheduleModalRoute(null);
             await fetchRouteAssignments();
         } catch (err) {
             console.error('Error saving corporation route schedules:', err);
-            setSnackbar({ open: true, message: err.response?.data?.message || 'Error al guardar horarios', severity: 'error' });
+            notify.fromError(err, 'Error al guardar horarios');
         } finally {
             setSavingSchedule(false);
         }
@@ -321,17 +320,13 @@ const CorporateBusesPage = () => {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
 
-            setSnackbar({
-                open: true,
-                message: response?.data?.message || 'Asignaciones guardadas exitosamente',
-                severity: 'success'
-            });
+            notify.success(response?.data?.message || 'Asignaciones guardadas');
 
             setCrewChangeIntent({});
             await Promise.all([fetchBuses(), fetchRouteAssignments()]);
         } catch (err) {
             console.error('Error saving assignments:', err);
-            setSnackbar({ open: true, message: `Error al guardar asignaciones: ${err.response?.data?.message || err.message}`, severity: 'error' });
+            notify.error(`Error al guardar asignaciones: ${err.response?.data?.message || err.message}`);
         } finally {
             setSaving(false);
         }
@@ -351,10 +346,10 @@ const CorporateBusesPage = () => {
         try {
             await Promise.all([fetchCorporationData(), fetchBuses(), fetchPilots(), fetchRouteAssignments()]);
             setCrewChangeIntent({});
-            setSnackbar({ open: true, message: 'Datos actualizados', severity: 'success' });
+            notify.success('Datos actualizados');
         } catch (err) {
             console.error('Error refreshing data:', err);
-            setSnackbar({ open: true, message: 'Error al actualizar datos', severity: 'error' });
+            notify.error('Error al actualizar datos');
         } finally {
             setLoading(false);
         }
@@ -624,17 +619,6 @@ const CorporateBusesPage = () => {
                     )}
                 </CardContent>
             </Card>
-
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
 
             <ScheduleThresholdsDialog
                 open={Boolean(scheduleModalRoute)}

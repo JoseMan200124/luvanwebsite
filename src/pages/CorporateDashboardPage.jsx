@@ -8,8 +8,6 @@ import {
     CardContent,
     Button,
     CircularProgress,
-    Snackbar,
-    Alert,
     Grid,
     Chip,
     Divider,
@@ -53,6 +51,7 @@ import { generateCorporateRouteOccupancyPDF } from '../utils/pdfExport';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import useClientScope from '../hooks/useClientScope';
+import useNotify from '../hooks/useNotify';
 
 const SummaryCard = styled(Card)`
     ${tw`h-full`}
@@ -86,7 +85,7 @@ const CorporateDashboardPage = () => {
         byDepartment: []
     });
     const [loading, setLoading] = useState(false);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
     
     // Estado para el filtro de día (default Lunes)
     // Día de la ocupación por ruta (los 7 días; Lunes es el valor inicial)
@@ -178,13 +177,9 @@ const CorporateDashboardPage = () => {
             });
         } catch (err) {
             console.error('Error fetching corporation data:', err);
-            setSnackbar({ 
-                open: true, 
-                message: 'Error al obtener datos de la corporación', 
-                severity: 'error' 
-            });
+            notify.error('Error al obtener datos de la corporación');
         }
-    }, [auth.token, corporationId]);
+    }, [auth.token, corporationId, notify]);
 
     const fetchRouteOccupancy = useCallback(async () => {
         if (!corporationId) {
@@ -404,7 +399,7 @@ const CorporateDashboardPage = () => {
     // Exportar PDF para TODOS los días (flujo colegios)
     const handleExportPDFAll = async () => {
         if (!corporationId) {
-            setSnackbar({ open: true, message: 'Corporación no seleccionada', severity: 'error' });
+            notify.error('Corporación no seleccionada');
             return;
         }
 
@@ -450,10 +445,10 @@ const CorporateDashboardPage = () => {
                 }
             });
 
-            setSnackbar({ open: true, message: 'PDF generado exitosamente', severity: 'success' });
+            notify.success('PDF generado');
         } catch (err) {
             console.error('Error exporting PDF (all days):', err);
-            setSnackbar({ open: true, message: 'Error al generar PDF', severity: 'error' });
+            notify.error('Error al generar PDF');
         }
     };
 
@@ -968,20 +963,6 @@ const CorporateDashboardPage = () => {
             </Grid>
 
             {/* Snackbar de notificaciones */}
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-            >
-                <Alert 
-                    onClose={() => setSnackbar({ ...snackbar, open: false })} 
-                    severity={snackbar.severity}
-                    variant="filled"
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
 
             {/* Modal de colaboradores por ruta */}
             <RouteColaboradoresModal

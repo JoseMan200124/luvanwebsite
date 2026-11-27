@@ -1,10 +1,6 @@
 // src/components/modals/EditSchedulesModal.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Button,
   TextField,
   Box,
@@ -19,7 +15,7 @@ import {
   Checkbox,
   FormControlLabel
 } from '@mui/material';
-import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { Add as AddIcon, Delete as DeleteIcon, Schedule as ScheduleIcon } from '@mui/icons-material';
 import {
   updateSchoolSchedules,
   validateSchedules,
@@ -28,8 +24,11 @@ import {
   getScheduleDeletionImpact
 } from '../../services/scheduleService';
 import PermissionGuard from '../PermissionGuard';
+import usePermissions from '../../hooks/usePermissions';
+import AppDialog from '../dialogs/AppDialog';
 
 const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
+  const { hasPermission } = usePermissions();
   const notify = (message, severity = 'info') => {
     if (onNotify) {
         onNotify({ open: true, message, severity });
@@ -404,9 +403,19 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
   }, [schedules]);
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>Editar Horarios de {school?.name || 'Colegio'}</DialogTitle>
-      <DialogContent>
+    <>
+      <AppDialog
+        open={open}
+        onClose={onClose}
+        title={`Editar horarios de ${school?.name || 'colegio'}`}
+        icon={<ScheduleIcon />}
+        size="md"
+        onSubmit={handleSubmit}
+        submitLabel="Guardar cambios"
+        submitting={loading}
+        submitDisabled={schedules.length === 0}
+        readOnly={!hasPermission('colegios-editar')}
+      >
         <Alert severity="info" sx={{ mb: 2 }}>
           Cambiar la hora base de un horario aquí NO actualiza automáticamente los horarios de alerta configurados por ruta (Asignación de Buses → Horarios). Si mueves una hora, revisa y ajusta esas alertas manualmente si corresponde.
         </Alert>
@@ -529,67 +538,53 @@ const EditSchedulesModal = ({ open, onClose, school, onSuccess, onNotify }) => {
             </Typography>
           )}
         </Box>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={loading}>
-          Cancelar
-        </Button>
-        <PermissionGuard permission="colegios-editar">
-          <Button
-            onClick={handleSubmit}
-            variant="contained"
-            disabled={loading || schedules.length === 0}
-          >
-            {loading ? <CircularProgress size={24} /> : 'Guardar Cambios'}
-          </Button>
-        </PermissionGuard>
-      </DialogActions>
+      </AppDialog>
 
-      <Dialog open={confirmDeleteOpen} onClose={cancelRemoveSchedule} maxWidth="xs" fullWidth>
-        <DialogTitle>Confirmar eliminación de horario</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" sx={{ mb: 2 }}>
-            {pendingDeleteSchedule?.code
-              ? `¿Seguro que deseas eliminar el horario ${pendingDeleteSchedule.code}?`
-              : '¿Seguro que deseas eliminar este horario?'}
-          </Typography>
-          {deleteImpactLoading ? (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-              <CircularProgress size={18} />
-              <Typography variant="body2" color="text.secondary">
-                Calculando estudiantes y familias afectados...
-              </Typography>
-            </Box>
-          ) : (
-            <Alert severity="warning" sx={{ mb: 2 }}>
-              {`Al eliminar este horario se verán afectados ${deleteImpact?.affectedStudents ?? 0} estudiantes de ${deleteImpact?.affectedFamilies ?? 0} familias.`}
-              {(deleteImpact?.affectedRoutes ?? 0) > 0 && (
-                ` También se perderá la configuración de alertas de horario de ${deleteImpact.affectedRoutes} ruta${deleteImpact.affectedRoutes > 1 ? 's' : ''} (Asignación de Buses → Horarios), sin posibilidad de recuperarla.`
-              )}
-            </Alert>
-          )}
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-            Si no confirmas, el horario no se eliminará.
-          </Typography>
-          <FormControlLabel
-            sx={{ display: isDraft ? 'none' : 'flex' }}
-            control={(
-              <Checkbox
-                checked={downloadAffectedOnSave}
-                onChange={(e) => setDownloadAffectedOnSave(e.target.checked)}
-              />
+      <AppDialog
+        open={confirmDeleteOpen}
+        onClose={cancelRemoveSchedule}
+        title="Eliminar horario"
+        icon={<DeleteIcon />}
+        tone="danger"
+        size="xs"
+        onSubmit={confirmRemoveSchedule}
+        submitLabel="Eliminar horario"
+      >
+        <Typography variant="body2" sx={{ mb: 2 }}>
+          {pendingDeleteSchedule?.code
+            ? `¿Seguro que deseas eliminar el horario ${pendingDeleteSchedule.code}?`
+            : '¿Seguro que deseas eliminar este horario?'}
+        </Typography>
+        {deleteImpactLoading ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+            <CircularProgress size={18} />
+            <Typography variant="body2" color="text.secondary">
+              Calculando estudiantes y familias afectados...
+            </Typography>
+          </Box>
+        ) : (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            {`Al eliminar este horario se verán afectados ${deleteImpact?.affectedStudents ?? 0} estudiantes de ${deleteImpact?.affectedFamilies ?? 0} familias.`}
+            {(deleteImpact?.affectedRoutes ?? 0) > 0 && (
+              ` También se perderá la configuración de alertas de horario de ${deleteImpact.affectedRoutes} ruta${deleteImpact.affectedRoutes > 1 ? 's' : ''} (Asignación de Buses → Horarios), sin posibilidad de recuperarla.`
             )}
-            label="Descargar listado de estudiantes afectados al guardar"
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={cancelRemoveSchedule}>Cancelar</Button>
-          <Button color="error" variant="contained" onClick={confirmRemoveSchedule}>
-            Eliminar horario
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Dialog>
+          </Alert>
+        )}
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          Si no confirmas, el horario no se eliminará.
+        </Typography>
+        <FormControlLabel
+          sx={{ display: isDraft ? 'none' : 'flex' }}
+          control={(
+            <Checkbox
+              checked={downloadAffectedOnSave}
+              onChange={(e) => setDownloadAffectedOnSave(e.target.checked)}
+            />
+          )}
+          label="Descargar listado de estudiantes afectados al guardar"
+        />
+      </AppDialog>
+    </>
   );
 };
 

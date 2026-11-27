@@ -5,14 +5,15 @@
 // El corte es el último día del mes; en un mes en curso, hoy.
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    Box, Button, Chip, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogTitle,
-    FormControlLabel, IconButton, InputAdornment, Stack, Switch, Table, TableBody, TableCell, TableHead, TableRow,
-    TextField, Tooltip, Typography
+    Box, Button, Chip, CircularProgress, Collapse, FormControlLabel, IconButton, Stack, Switch, Table, TableBody, TableCell, TableHead, TableRow,
+    Tooltip, Typography
 } from '@mui/material';
 import {
-    CheckCircleOutline, DeleteOutline, ExpandLess, ExpandMore, PauseCircleOutline, Search
+    CheckCircleOutline, DeleteOutline, ExpandLess, ExpandMore, PauseCircleOutline
 } from '@mui/icons-material';
 import { ESTADOS, sxChip, numeros, ChipSinPagos } from './FamiliasActivasComun';
+import AppDialog from '../dialogs/AppDialog';
+import SearchInput from '../form/SearchInput';
 
 const ESTADO_ALUMNO = {
     ACTIVO: { etiqueta: 'Activo', plural: ['activo', 'activos'], color: 'success', Icono: CheckCircleOutline, orden: 0 },
@@ -321,95 +322,94 @@ const FamiliasActivasDetalleDialog = ({ detalle, cargando, hoy, onClose, onDesca
     });
 
     return (
-        <Dialog open={Boolean(detalle)} onClose={onClose} fullWidth maxWidth="md">
-            <DialogTitle>
-                {detalle?.nombre} — {detalle?.nombreMes}
-                {detalle?.flujoPagos === false && <ChipSinPagos sx={{ ml: 1 }} />}
-                {detalle?.estado && (
-                    <Chip size="small" sx={{ ml: 1 }} color={ESTADOS[detalle.estado]?.color} variant="outlined" label={ESTADOS[detalle.estado]?.etiqueta} />
-                )}
-            </DialogTitle>
-            <DialogContent dividers>
-                {cargando ? <CircularProgress /> : (
-                    <>
-                        <Stack direction="row" spacing={1.5} useFlexGap flexWrap="wrap" sx={{ mb: 2 }}>
-                            <Cifra valor={detalle?.totalFamilias ?? 0} etiqueta={detalle?.totalFamilias === 1 ? 'familia' : 'familias'} color="primary.main" />
-                            <Cifra valor={totales.ACTIVO} etiqueta={totales.ACTIVO === 1 ? 'alumno activo' : 'alumnos activos'} color="success.main" />
-                            <Cifra valor={totales.DESACTIVADO} etiqueta={totales.DESACTIVADO === 1 ? 'desactivado' : 'desactivados'} color={totales.DESACTIVADO > 0 ? 'warning.main' : 'text.disabled'} />
-                            <Cifra valor={totales.ELIMINADO} etiqueta={totales.ELIMINADO === 1 ? 'eliminado' : 'eliminados'} color={totales.ELIMINADO > 0 ? 'error.main' : 'text.disabled'} />
-                        </Stack>
+        <AppDialog
+            open={Boolean(detalle)}
+            onClose={onClose}
+            title={`${detalle?.nombre || ''} — ${detalle?.nombreMes || ''}`}
+            size="md"
+            onSubmit={onDescargar}
+            submitLabel="Descargar Excel"
+            submitDisabled={cargando || !detalle?.schoolId}
+        >
+            {(detalle?.flujoPagos === false || detalle?.estado) && (
+                <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                    {detalle?.flujoPagos === false && <ChipSinPagos />}
+                    {detalle?.estado && (
+                        <Chip size="small" color={ESTADOS[detalle.estado]?.color} variant="outlined" label={ESTADOS[detalle.estado]?.etiqueta} />
+                    )}
+                </Box>
+            )}
+            {cargando ? <CircularProgress /> : (
+                <>
+                    <Stack direction="row" spacing={1.5} useFlexGap flexWrap="wrap" sx={{ mb: 2 }}>
+                        <Cifra valor={detalle?.totalFamilias ?? 0} etiqueta={detalle?.totalFamilias === 1 ? 'familia' : 'familias'} color="primary.main" />
+                        <Cifra valor={totales.ACTIVO} etiqueta={totales.ACTIVO === 1 ? 'alumno activo' : 'alumnos activos'} color="success.main" />
+                        <Cifra valor={totales.DESACTIVADO} etiqueta={totales.DESACTIVADO === 1 ? 'desactivado' : 'desactivados'} color={totales.DESACTIVADO > 0 ? 'warning.main' : 'text.disabled'} />
+                        <Cifra valor={totales.ELIMINADO} etiqueta={totales.ELIMINADO === 1 ? 'eliminado' : 'eliminados'} color={totales.ELIMINADO > 0 ? 'error.main' : 'text.disabled'} />
+                    </Stack>
 
-                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }} justifyContent="space-between" sx={{ mb: 1 }}>
-                            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }}>
-                                <TextField
-                                    size="small"
-                                    value={busqueda}
-                                    onChange={(e) => setBusqueda(e.target.value)}
-                                    placeholder="Buscar familia, correo o alumno"
-                                    sx={{ minWidth: 320 }}
-                                    InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }}
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }} justifyContent="space-between" sx={{ mb: 1 }}>
+                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }}>
+                            <SearchInput
+                                label="Buscar familia, correo o alumno"
+                                value={busqueda}
+                                onChange={setBusqueda}
+                                sx={{ minWidth: 320 }}
+                            />
+                            {hayFamilias && (
+                                <FormControlLabel
+                                    control={<Switch size="small" checked={soloBajas} onChange={(e) => setSoloBajas(e.target.checked)} />}
+                                    label="Solo familias con bajas"
                                 />
-                                {hayFamilias && (
-                                    <FormControlLabel
-                                        control={<Switch size="small" checked={soloBajas} onChange={(e) => setSoloBajas(e.target.checked)} />}
-                                        label="Solo familias con bajas"
-                                    />
-                                )}
-                            </Stack>
-                            {expandibles.length > 0 && (
-                                <Button size="small" onClick={alternarTodas}>
-                                    {todasAbiertas ? 'Contraer todo' : 'Expandir todo'}
-                                </Button>
                             )}
                         </Stack>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                            {visibles.length !== familias.length ? `Mostrando ${visibles.length} de ${familias.length} familias. ` : ''}
-                            {hayFamilias ? 'Haz clic en una familia para ver sus alumnos y su historial de uso del servicio.' : ''}
-                        </Typography>
+                        {expandibles.length > 0 && (
+                            <Button size="small" onClick={alternarTodas}>
+                                {todasAbiertas ? 'Contraer todo' : 'Expandir todo'}
+                            </Button>
+                        )}
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                        {visibles.length !== familias.length ? `Mostrando ${visibles.length} de ${familias.length} familias. ` : ''}
+                        {hayFamilias ? 'Haz clic en una familia para ver sus alumnos y su historial de uso del servicio.' : ''}
+                    </Typography>
 
-                        <Table size="small">
-                            <TableHead>
+                    <Table size="small">
+                        <TableHead>
+                            <TableRow>
+                                <TableCell padding="checkbox" />
+                                <TableCell>Familia</TableCell>
+                                <TableCell>Correo</TableCell>
+                                <TableCell>
+                                    <Tooltip title={contexto ? `Estado de los alumnos ${contexto.corteTexto}.` : ''}>
+                                        <span>Alumnos</span>
+                                    </Tooltip>
+                                </TableCell>
+                                <TableCell align="right">Estudiantes</TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {visibles.map((f) => (
+                                <FilaFamilia
+                                    key={f.userId}
+                                    familia={f}
+                                    abierta={abiertas.has(f.userId)}
+                                    onAlternar={() => alternarFamilia(f.userId)}
+                                    contexto={contexto}
+                                />
+                            ))}
+                            {visibles.length === 0 && (
                                 <TableRow>
-                                    <TableCell padding="checkbox" />
-                                    <TableCell>Familia</TableCell>
-                                    <TableCell>Correo</TableCell>
-                                    <TableCell>
-                                        <Tooltip title={contexto ? `Estado de los alumnos ${contexto.corteTexto}.` : ''}>
-                                            <span>Alumnos</span>
-                                        </Tooltip>
+                                    <TableCell colSpan={5} align="center" sx={{ color: 'text.disabled', fontStyle: 'italic', py: 3 }}>
+                                        {hayFamilias ? 'Ninguna familia coincide con la búsqueda.' : 'Ninguna familia estuvo en servicio este mes.'}
                                     </TableCell>
-                                    <TableCell align="right">Estudiantes</TableCell>
                                 </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {visibles.map((f) => (
-                                    <FilaFamilia
-                                        key={f.userId}
-                                        familia={f}
-                                        abierta={abiertas.has(f.userId)}
-                                        onAlternar={() => alternarFamilia(f.userId)}
-                                        contexto={contexto}
-                                    />
-                                ))}
-                                {visibles.length === 0 && (
-                                    <TableRow>
-                                        <TableCell colSpan={5} align="center" sx={{ color: 'text.disabled', fontStyle: 'italic', py: 3 }}>
-                                            {hayFamilias ? 'Ninguna familia coincide con la búsqueda.' : 'Ninguna familia estuvo en servicio este mes.'}
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </>
-                )}
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={onClose}>Cerrar</Button>
-                <Button variant="contained" onClick={onDescargar} disabled={cargando || !detalle?.schoolId}>
-                    Descargar Excel
-                </Button>
-            </DialogActions>
-        </Dialog>
+                            )}
+                        </TableBody>
+                    </Table>
+                </>
+            )}
+        </AppDialog>
     );
 };
 

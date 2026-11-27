@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useMemo, useRef, useState } from 'react';
+import { clearCatalogs } from '../services/catalogStore';
 
 export const PageRefreshContext = createContext(null);
 
@@ -35,6 +36,7 @@ const PageRefreshProvider = ({ children }) => {
         inFlightRef.current = true;
         setIsRefreshing(true);
         try {
+            clearCatalogs();
             const handler = refreshHandlerRef.current;
             if (typeof handler === 'function') {
                 await handler();

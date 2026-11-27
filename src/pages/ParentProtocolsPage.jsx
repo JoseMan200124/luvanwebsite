@@ -26,23 +26,9 @@ import { AuthContext } from '../context/AuthProvider';
 import useParentSchoolOperational from '../hooks/useParentSchoolOperational';
 import ParentNavbar from '../components/ParentNavbar';
 import api from '../utils/axiosConfig';
+import { formatDateLong } from '../utils/dateFormat';
 
 const safeStr = (v) => (v == null ? '' : String(v)).trim();
-
-const formatDateLong = (dateString) => {
-  if (!dateString) {
-    return '';
-  }
-  try {
-    return new Date(dateString).toLocaleDateString('es-ES', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  } catch {
-    return String(dateString);
-  }
-};
 
 const typeLabel = (t) => (t === 'protocolo' ? 'Protocolo' : t === 'reglamento' ? 'Reglamento' : 'Documento');
 

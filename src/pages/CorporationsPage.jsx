@@ -1,6 +1,6 @@
 // src/pages/CorporationsPage.jsx
 
-import React, { useState, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useContext, useCallback, useRef } from 'react';
 import {
     Typography,
     Box,
@@ -8,16 +8,9 @@ import {
     CardContent,
     Button,
     CircularProgress,
-    Snackbar,
-    Alert,
     Grid,
     IconButton,
     Tooltip,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    DialogContentText,
     TextField,
     Paper,
     Accordion,
@@ -49,6 +42,11 @@ import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import PermissionGuard from '../components/PermissionGuard';
 import usePermissions from '../hooks/usePermissions';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
+import { formatClock } from '../utils/dateFormat';
+import AppDialog from '../components/dialogs/AppDialog';
+import { invalidateCatalog } from '../services/catalogStore';
 
 const CorporationCard = styled(Card)`
     ${tw`cursor-pointer transition-all duration-300`}
@@ -115,18 +113,6 @@ const StyledAccordionSummary = styled(AccordionSummary)`
     }
 `;
 
-// Función para convertir tiempo de 24h a 12h con AM/PM
-const formatTime12Hour = (time24) => {
-    if (!time24) {
-        return '';
-    }
-    const [hours, minutes] = time24.split(':');
-    const hour = Number.parseInt(hours, 10);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const hour12 = hour % 12 || 12;
-    return `${hour12}:${minutes} ${ampm}`;
-};
-
 const CorporationsPage = () => {
     const { auth } = useContext(AuthContext);
     const navigate = useNavigate();
@@ -135,12 +121,12 @@ const CorporationsPage = () => {
     const [corporations, setCorporations] = useState([]);
     const [selectedFiscalYear, setSelectedFiscalYear] = useState(new Date().getFullYear().toString());
     const [loading, setLoading] = useState(false);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
+    const confirm = useConfirm();
     
     // Estados para diálogos
     const [openCreateDialog, setOpenCreateDialog] = useState(false);
     const [openEditDialog, setOpenEditDialog] = useState(false);
-    const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
     const [selectedCorporation, setSelectedCorporation] = useState(null);
     
     // Estados para formulario
@@ -184,6 +170,7 @@ const CorporationsPage = () => {
     ];
 
     const fetchCorporations = useCallback(async () => {
+        invalidateCatalog('corporations');
         setLoading(true);
         try {
             const params = { fiscalYear: selectedFiscalYear };
@@ -263,15 +250,11 @@ const CorporationsPage = () => {
             setCorporations(processedCorporations);
         } catch (err) {
             console.error('Error fetching corporations:', err);
-            setSnackbar({ 
-                open: true, 
-                message: 'Error al obtener las corporaciones', 
-                severity: 'error' 
-            });
+            notify.error('Error al obtener las corporaciones');
         } finally {
             setLoading(false);
         }
-    }, [auth.token, selectedFiscalYear]);
+    }, [auth.token, selectedFiscalYear, notify]);
 
     useEffect(() => {
         if (auth.token && selectedFiscalYear) {
@@ -303,18 +286,10 @@ const CorporationsPage = () => {
         const link = `${baseUrl}/corporations/enroll/${corporationId}`;
         navigator.clipboard.writeText(link)
             .then(() => {
-                setSnackbar({
-                    open: true,
-                    message: 'Enlace de inscripción copiado al portapapeles',
-                    severity: 'success'
-                });
+                notify.success('Enlace de inscripción copiado al portapapeles');
             })
             .catch(() => {
-                setSnackbar({
-                    open: true,
-                    message: 'Error al copiar enlace',
-                    severity: 'error'
-                });
+                notify.error('Error al copiar enlace');
             });
     };
 
@@ -422,21 +397,25 @@ const CorporationsPage = () => {
         setOpenEditDialog(true);
     };
 
-    const handleOpenDeleteDialog = (corporation) => {
-        setSelectedCorporation(corporation);
-        setOpenDeleteDialog(true);
-    };
-
     const handleCloseDialogs = () => {
         setOpenCreateDialog(false);
         setOpenEditDialog(false);
-        setOpenDeleteDialog(false);
         setSelectedCorporation(null);
     };
 
     const handleInputChange = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
     };
+
+    // Valores con que se abrió el formulario: cerrar con cambios pide confirmación.
+    const corporationFormSnapshot = JSON.stringify([formData, corporationSchedules, corporationRouteNumbers, corporationRouteSchedules]);
+    const corporationInitialRef = useRef('');
+    const corporationDialogOpen = openCreateDialog || openEditDialog;
+    useEffect(() => {
+        if (corporationDialogOpen) {
+            corporationInitialRef.current = corporationFormSnapshot;
+        }
+    }, [corporationDialogOpen]);
 
     const handleAddExtraField = () => {
         setFormData(prev => ({
@@ -553,21 +532,13 @@ const CorporationsPage = () => {
                 }
             });
             
-            setSnackbar({
-                open: true,
-                message: 'Corporación creada exitosamente',
-                severity: 'success'
-            });
+            notify.success('Corporación creada');
             
             handleCloseDialogs();
             fetchCorporations();
         } catch (err) {
             console.error('Error creating corporation:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.error || 'Error al crear corporación',
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error al crear corporación');
         }
     };
 
@@ -598,453 +569,423 @@ const CorporationsPage = () => {
                 }
             });
             
-            setSnackbar({
-                open: true,
-                message: 'Corporación actualizada exitosamente',
-                severity: 'success'
-            });
+            notify.success('Corporación actualizada');
             
             handleCloseDialogs();
             fetchCorporations();
         } catch (err) {
             console.error('Error updating corporation:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.error || 'Error al actualizar corporación',
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error al actualizar corporación');
         }
     };
 
-    const handleDeleteCorporation = async () => {
-        if (!selectedCorporation) {
-            return;
-        }
-        
-        try {
-            await api.delete(`/corporations/${selectedCorporation.id}`, {
+    const handleDeleteCorporation = async (corporation) => {
+        const ok = await confirm({
+            title: 'Eliminar corporación',
+            message: `Se eliminará la corporación "${corporation.name}". Esta acción no se puede deshacer.`,
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: () => api.delete(`/corporations/${corporation.id}`, {
                 headers: {
                     Authorization: `Bearer ${auth.token}`,
                 }
-            });
-            
-            setSnackbar({
-                open: true,
-                message: 'Corporación eliminada exitosamente',
-                severity: 'success'
-            });
-            
-            handleCloseDialogs();
+            }),
+            errorMessage: 'Error al eliminar la corporación',
+        });
+        if (ok) {
+            notify.success('Corporación eliminada');
             fetchCorporations();
-        } catch (err) {
-            console.error('Error deleting corporation:', err);
-            setSnackbar({
-                open: true,
-                message: err.response?.data?.error || 'Error al eliminar corporación',
-                severity: 'error'
-            });
         }
     };
 
     const renderCorporationDialog = (isEdit = false) => (
-        <Dialog 
-            open={isEdit ? openEditDialog : openCreateDialog} 
+        <AppDialog
+            open={isEdit ? openEditDialog : openCreateDialog}
             onClose={handleCloseDialogs}
-            maxWidth="md"
-            fullWidth
+            title={isEdit ? 'Editar corporación' : 'Nueva corporación'}
+            icon={<CorporationIcon />}
+            size="md"
+            onSubmit={isEdit ? handleUpdateCorporation : handleCreateCorporation}
+            submitLabel={isEdit ? 'Guardar cambios' : 'Crear corporación'}
+            submitDisabled={!formData.name.trim()}
+            readOnly={!hasPermission(isEdit ? 'corporaciones-editar' : 'corporaciones-crear')}
+            dirty={corporationFormSnapshot !== corporationInitialRef.current}
         >
-            <DialogTitle>
-                {isEdit ? 'Editar Corporación' : 'Añadir Nueva Corporación'}
-            </DialogTitle>
-            <DialogContent sx={{ px: 3, py: 2 }}>
-                {/* Sección: Información Básica */}
-                <StyledAccordion 
-                    expanded={expandedPanels.basicInfo}
-                    onChange={handleAccordionChange('basicInfo')}
-                    TransitionProps={{ unmountOnExit: false }}
-                >
-                    <StyledAccordionSummary expandIcon={<ExpandMore />}>
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                            📋 Información Básica
-                        </Typography>
-                    </StyledAccordionSummary>
-                    <AccordionDetails>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            <TextField
-                                fullWidth
-                                label="Nombre de la Corporación"
-                                value={formData.name}
-                                onChange={(e) => handleInputChange('name', e.target.value)}
-                                required
-                            />
-                            <TextField
-                                fullWidth
-                                label="Ciudad"
-                                value={formData.city}
-                                onChange={(e) => handleInputChange('city', e.target.value)}
-                            />
-                            <TextField
-                                fullWidth
-                                label="Dirección"
-                                value={formData.address}
-                                onChange={(e) => handleInputChange('address', e.target.value)}
-                                multiline
-                                rows={2}
-                            />
-                            <TextField
-                                fullWidth
-                                label="Persona de Contacto"
-                                value={formData.contactPerson}
-                                onChange={(e) => handleInputChange('contactPerson', e.target.value)}
-                            />
-                            <TextField
-                                fullWidth
-                                label="Teléfono de Contacto"
-                                value={formData.contactPhone}
-                                onChange={(e) => handleInputChange('contactPhone', e.target.value)}
-                            />
-                            <TextField
-                                fullWidth
-                                label="Email de Contacto"
-                                type="email"
-                                value={formData.contactEmail}
-                                onChange={(e) => handleInputChange('contactEmail', e.target.value)}
-                            />
-                            <TextField
-                                fullWidth
-                                label="Enlace de WhatsApp"
-                                value={formData.whatsappLink}
-                                onChange={(e) => handleInputChange('whatsappLink', e.target.value)}
-                                placeholder="https://wa.me/50212345678"
-                                helperText="Enlace directo para contacto por WhatsApp"
-                            />
-                            <FormControlLabel
-                                control={
-                                    <Checkbox
-                                        checked={formData.state === 1}
-                                        onChange={(e) => handleInputChange('state', e.target.checked ? 1 : 0)}
-                                    />
-                                }
-                                label="Corporación Activa"
-                            />
-                        </Box>
-                    </AccordionDetails>
-                </StyledAccordion>
-
-                {/* Sección: Horarios */}
-                <StyledAccordion 
-                    expanded={expandedPanels.schedules}
-                    onChange={handleAccordionChange('schedules')}
-                    TransitionProps={{ unmountOnExit: false }}
-                >
-                    <StyledAccordionSummary expandIcon={<ExpandMore />}>
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                            🕐 Horarios de la Corporación
-                        </Typography>
-                    </StyledAccordionSummary>
-                    <AccordionDetails>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            <Box sx={{ display: 'flex', gap: 1, mb: 2, alignItems: 'center' }}>
-                                <TextField
-                                    label="Nombre del Horario"
-                                    value={newScheduleName}
-                                    onChange={(e) => setNewScheduleName(e.target.value)}
-                                    placeholder="Ej: AM, PM, Nocturno"
-                                    sx={{ flex: 2 }}
+            {/* Sección: Información Básica */}
+            <StyledAccordion 
+                expanded={expandedPanels.basicInfo}
+                onChange={handleAccordionChange('basicInfo')}
+                TransitionProps={{ unmountOnExit: false }}
+            >
+                <StyledAccordionSummary expandIcon={<ExpandMore />}>
+                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                        📋 Información Básica
+                    </Typography>
+                </StyledAccordionSummary>
+                <AccordionDetails>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <TextField
+                            fullWidth
+                            label="Nombre de la corporación"
+                            value={formData.name}
+                            onChange={(e) => handleInputChange('name', e.target.value)}
+                            required
+                        />
+                        <TextField
+                            fullWidth
+                            label="Ciudad"
+                            value={formData.city}
+                            onChange={(e) => handleInputChange('city', e.target.value)}
+                        />
+                        <TextField
+                            fullWidth
+                            label="Dirección"
+                            value={formData.address}
+                            onChange={(e) => handleInputChange('address', e.target.value)}
+                            multiline
+                            rows={2}
+                        />
+                        <TextField
+                            fullWidth
+                            label="Persona de Contacto"
+                            value={formData.contactPerson}
+                            onChange={(e) => handleInputChange('contactPerson', e.target.value)}
+                        />
+                        <TextField
+                            fullWidth
+                            label="Teléfono de Contacto"
+                            value={formData.contactPhone}
+                            onChange={(e) => handleInputChange('contactPhone', e.target.value)}
+                        />
+                        <TextField
+                            fullWidth
+                            label="Email de Contacto"
+                            type="email"
+                            value={formData.contactEmail}
+                            onChange={(e) => handleInputChange('contactEmail', e.target.value)}
+                        />
+                        <TextField
+                            fullWidth
+                            label="Enlace de WhatsApp"
+                            value={formData.whatsappLink}
+                            onChange={(e) => handleInputChange('whatsappLink', e.target.value)}
+                            placeholder="https://wa.me/50212345678"
+                            helperText="Enlace directo para contacto por WhatsApp"
+                        />
+                        <FormControlLabel
+                            control={
+                                <Checkbox
+                                    checked={formData.state === 1}
+                                    onChange={(e) => handleInputChange('state', e.target.checked ? 1 : 0)}
                                 />
-                                <TextField
-                                    label="Hora de Entrada"
-                                    type="time"
-                                    value={newScheduleEntry}
-                                    onChange={(e) => setNewScheduleEntry(e.target.value)}
-                                    InputLabelProps={{ shrink: true }}
-                                    sx={{ flex: 1 }}
-                                />
-                                <TextField
-                                    label="Hora de Salida"
-                                    type="time"
-                                    value={newScheduleExit}
-                                    onChange={(e) => setNewScheduleExit(e.target.value)}
-                                    InputLabelProps={{ shrink: true }}
-                                    sx={{ flex: 1 }}
-                                />
-                                <Button 
-                                    variant="contained" 
-                                    onClick={handleAddSchedule}
-                                    startIcon={<Add />}
-                                    disabled={!newScheduleName.trim() || !newScheduleEntry || !newScheduleExit}
-                                >
-                                    Agregar
-                                </Button>
-                            </Box>
-                            
-                            {Array.isArray(corporationSchedules) && corporationSchedules.map((schedule, index) => (
-                                <Paper key={index} sx={{ p: 2, border: '1px solid #e0e0e0' }}>
-                                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                                        <TextField
-                                            label="Nombre"
-                                            value={schedule.name}
-                                            onChange={(e) => handleChangeSchedule(index, 'name', e.target.value)}
-                                            sx={{ flex: 2 }}
-                                        />
-                                        <TextField
-                                            label="Hora de Entrada"
-                                            type="time"
-                                            value={schedule.entryTime}
-                                            onChange={(e) => handleChangeSchedule(index, 'entryTime', e.target.value)}
-                                            InputLabelProps={{ shrink: true }}
-                                            sx={{ flex: 1 }}
-                                        />
-                                        <TextField
-                                            label="Hora de Salida"
-                                            type="time"
-                                            value={schedule.exitTime}
-                                            onChange={(e) => handleChangeSchedule(index, 'exitTime', e.target.value)}
-                                            InputLabelProps={{ shrink: true }}
-                                            sx={{ flex: 1 }}
-                                        />
-                                        <IconButton 
-                                            color="error" 
-                                            onClick={() => handleRemoveSchedule(index)}
-                                        >
-                                            <Delete />
-                                        </IconButton>
-                                    </Box>
-                                </Paper>
-                            ))}
-                            
-                            {corporationSchedules.length === 0 && (
-                                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                                    No hay horarios agregados. Los horarios permiten definir diferentes turnos para los colaboradores.
-                                </Typography>
-                            )}
-                        </Box>
-                    </AccordionDetails>
-                </StyledAccordion>
+                            }
+                            label="Corporación Activa"
+                        />
+                    </Box>
+                </AccordionDetails>
+            </StyledAccordion>
 
-                {/* Sección: Rutas */}
-                <StyledAccordion 
-                    expanded={expandedPanels.routes}
-                    onChange={handleAccordionChange('routes')}
-                    TransitionProps={{ unmountOnExit: false }}
-                >
-                    <StyledAccordionSummary expandIcon={<ExpandMore />}>
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                            🚌 Números de Ruta
-                        </Typography>
-                    </StyledAccordionSummary>
-                    <AccordionDetails>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-                                <TextField
-                                    fullWidth
-                                    label="Nuevo Número de Ruta"
-                                    value={newRouteNumber}
-                                    onChange={(e) => setNewRouteNumber(e.target.value)}
-                                    onKeyPress={(e) => {
-                                        if (e.key === 'Enter') {
-                                            e.preventDefault();
-                                            handleAddRouteNumber();
-                                        }
-                                    }}
-                                />
-                                <Button 
-                                    variant="contained" 
-                                    onClick={handleAddRouteNumber}
-                                    startIcon={<Add />}
-                                >
-                                    Agregar
-                                </Button>
-                            </Box>
-
-                            {corporationRouteNumbers.map((rn, idx) => {
-                                const entry = (corporationRouteSchedules || []).find(x => String(x.routeNumber) === String(rn)) || { routeNumber: String(rn), schedules: [] };
-                                const selectedSchedules = new Set((entry.schedules || []).map(s => s?.name).filter(Boolean));
-                                
-                                const toggleSchedule = (scheduleName, checked) => {
-                                    setCorporationRouteSchedules(prev => {
-                                        const arr = Array.isArray(prev) ? [...prev] : [];
-                                        let i = arr.findIndex(x => String(x.routeNumber) === String(rn));
-                                        if (i === -1) { 
-                                            arr.push({ routeNumber: String(rn), schedules: [] }); 
-                                            i = arr.length - 1; 
-                                        }
-                                        const curr = Array.isArray(arr[i].schedules) ? [...arr[i].schedules] : [];
-                                        const idxByName = curr.findIndex(s => s && s.name === scheduleName);
-                                        
-                                        if (checked) {
-                                            const scheduleObj = corporationSchedules.find(s => s.name === scheduleName);
-                                            if (scheduleObj) {
-                                                const cleaned = {
-                                                    name: scheduleObj.name,
-                                                    entryTime: scheduleObj.entryTime,
-                                                    exitTime: scheduleObj.exitTime
-                                                };
-                                                if (idxByName === -1) {
-                                                    curr.push(cleaned);
-                                                } 
-                                                else {
-                                                    curr[idxByName] = cleaned;
-                                                }
-                                            }
-                                        } else {
-                                            if (idxByName !== -1) {
-                                                curr.splice(idxByName, 1);
-                                            }
-                                        }
-                                        
-                                        arr[i] = { routeNumber: String(rn), schedules: curr };
-                                        return arr;
-                                    });
-                                };
-
-                                return (
-                                    <Paper key={idx} sx={{ p: 2, border: '1px solid #e0e0e0' }}>
-                                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2 }}>
-                                            <TextField
-                                                fullWidth
-                                                value={rn}
-                                                onChange={(e) => handleChangeRouteNumber(idx, e.target.value)}
-                                                label={`Número de Ruta #${idx + 1}`}
-                                            />
-                                            <IconButton size="small" color="error" onClick={() => handleRemoveRouteNumber(idx)}>
-                                                <Delete />
-                                            </IconButton>
-                                        </Box>
-                                        <Typography variant="body2" sx={{ mb: 1, fontWeight: 600 }}>
-                                            Horarios asignados a esta ruta:
-                                        </Typography>
-                                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                                            {corporationSchedules.length === 0 ? (
-                                                <Typography variant="body2" color="text.secondary">
-                                                    Agregue horarios en la sección de arriba para poder asignarlos a esta ruta
-                                                </Typography>
-                                            ) : (
-                                                Array.isArray(corporationSchedules) && corporationSchedules.map((sch, si) => {
-                                                    const label = `${sch.name} (${formatTime12Hour(sch.entryTime)} - ${formatTime12Hour(sch.exitTime)})`;
-                                                    const checked = selectedSchedules.has(sch.name);
-                                                    return (
-                                                        <FormControlLabel
-                                                            key={`rn-${idx}-sch-${si}`}
-                                                            control={
-                                                                <Checkbox 
-                                                                    size="small" 
-                                                                    checked={checked} 
-                                                                    onChange={(e) => toggleSchedule(sch.name, e.target.checked)} 
-                                                                />
-                                                            }
-                                                            label={label}
-                                                        />
-                                                    );
-                                                })
-                                            )}
-                                        </Box>
-                                    </Paper>
-                                );
-                            })}
-                            
-                            {corporationRouteNumbers.length === 0 && (
-                                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                                    No hay rutas agregadas
-                                </Typography>
-                            )}
-                        </Box>
-                    </AccordionDetails>
-                </StyledAccordion>
-
-                {/* Sección: Campos de Inscripción Extra */}
-                <StyledAccordion 
-                    expanded={expandedPanels.extraFields}
-                    onChange={handleAccordionChange('extraFields')}
-                    TransitionProps={{ unmountOnExit: false }}
-                >
-                    <StyledAccordionSummary expandIcon={<ExpandMore />}>
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                            � Campos de Inscripción Extra
-                        </Typography>
-                    </StyledAccordionSummary>
-                    <AccordionDetails>
-                        <Box>
+            {/* Sección: Horarios */}
+            <StyledAccordion 
+                expanded={expandedPanels.schedules}
+                onChange={handleAccordionChange('schedules')}
+                TransitionProps={{ unmountOnExit: false }}
+            >
+                <StyledAccordionSummary expandIcon={<ExpandMore />}>
+                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                        🕐 Horarios de la Corporación
+                    </Typography>
+                </StyledAccordionSummary>
+                <AccordionDetails>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <Box sx={{ display: 'flex', gap: 1, mb: 2, alignItems: 'center' }}>
+                            <TextField
+                                label="Nombre del Horario"
+                                value={newScheduleName}
+                                onChange={(e) => setNewScheduleName(e.target.value)}
+                                placeholder="Ej: AM, PM, Nocturno"
+                                sx={{ flex: 2 }}
+                            />
+                            <TextField
+                                label="Hora de Entrada"
+                                type="time"
+                                value={newScheduleEntry}
+                                onChange={(e) => setNewScheduleEntry(e.target.value)}
+                                InputLabelProps={{ shrink: true }}
+                                sx={{ flex: 1 }}
+                            />
+                            <TextField
+                                label="Hora de Salida"
+                                type="time"
+                                value={newScheduleExit}
+                                onChange={(e) => setNewScheduleExit(e.target.value)}
+                                InputLabelProps={{ shrink: true }}
+                                sx={{ flex: 1 }}
+                            />
                             <Button 
-                                variant="outlined" 
-                                onClick={handleAddExtraField}
+                                variant="contained" 
+                                onClick={handleAddSchedule}
                                 startIcon={<Add />}
-                                sx={{ mb: 2 }}
+                                disabled={!newScheduleName.trim() || !newScheduleEntry || !newScheduleExit}
                             >
-                                Agregar Campo
+                                Agregar
                             </Button>
-                            {Array.isArray(formData.extraEnrollmentFields) && formData.extraEnrollmentFields.map((field, index) => (
-                                <Box 
-                                    key={index}
-                                    sx={{ 
-                                        display: 'flex', 
-                                        gap: 2, 
-                                        mb: 2, 
-                                        p: 2, 
-                                        border: '1px solid #e0e0e0',
-                                        borderRadius: 1,
-                                        alignItems: 'center'
-                                    }}
-                                >
+                        </Box>
+                            
+                        {Array.isArray(corporationSchedules) && corporationSchedules.map((schedule, index) => (
+                            <Paper key={index} sx={{ p: 2, border: '1px solid #e0e0e0' }}>
+                                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                                     <TextField
-                                        fullWidth
-                                        label="Nombre del Campo"
-                                        value={field.fieldName}
-                                        onChange={(e) => handleChangeExtraField(index, 'fieldName', e.target.value)}
+                                        label="Nombre"
+                                        value={schedule.name}
+                                        onChange={(e) => handleChangeSchedule(index, 'name', e.target.value)}
+                                        sx={{ flex: 2 }}
                                     />
-                                    <FormControl sx={{ minWidth: 150 }}>
-                                        <InputLabel>Tipo</InputLabel>
-                                        <Select
-                                            value={field.type}
-                                            onChange={(e) => handleChangeExtraField(index, 'type', e.target.value)}
-                                            label="Tipo"
-                                        >
-                                            <MenuItem value="text">Texto</MenuItem>
-                                            <MenuItem value="email">Email</MenuItem>
-                                            <MenuItem value="number">Número</MenuItem>
-                                            <MenuItem value="tel">Teléfono</MenuItem>
-                                            <MenuItem value="date">Fecha</MenuItem>
-                                        </Select>
-                                    </FormControl>
-                                    <FormControlLabel
-                                        control={
-                                            <Checkbox
-                                                checked={field.required}
-                                                onChange={(e) => handleChangeExtraField(index, 'required', e.target.checked)}
-                                            />
-                                        }
-                                        label="Requerido"
+                                    <TextField
+                                        label="Hora de Entrada"
+                                        type="time"
+                                        value={schedule.entryTime}
+                                        onChange={(e) => handleChangeSchedule(index, 'entryTime', e.target.value)}
+                                        InputLabelProps={{ shrink: true }}
+                                        sx={{ flex: 1 }}
+                                    />
+                                    <TextField
+                                        label="Hora de Salida"
+                                        type="time"
+                                        value={schedule.exitTime}
+                                        onChange={(e) => handleChangeSchedule(index, 'exitTime', e.target.value)}
+                                        InputLabelProps={{ shrink: true }}
+                                        sx={{ flex: 1 }}
                                     />
                                     <IconButton 
                                         color="error" 
-                                        onClick={() => handleRemoveExtraField(index)}
+                                        onClick={() => handleRemoveSchedule(index)}
                                     >
                                         <Delete />
                                     </IconButton>
                                 </Box>
-                            ))}
-                            {(!Array.isArray(formData.extraEnrollmentFields) || formData.extraEnrollmentFields.length === 0) && (
-                                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                                    No hay campos extra agregados. Estos campos aparecerán en el formulario de inscripción pública.
-                                </Typography>
-                            )}
+                            </Paper>
+                        ))}
+                            
+                        {corporationSchedules.length === 0 && (
+                            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                No hay horarios agregados. Los horarios permiten definir diferentes turnos para los colaboradores.
+                            </Typography>
+                        )}
+                    </Box>
+                </AccordionDetails>
+            </StyledAccordion>
+
+            {/* Sección: Rutas */}
+            <StyledAccordion 
+                expanded={expandedPanels.routes}
+                onChange={handleAccordionChange('routes')}
+                TransitionProps={{ unmountOnExit: false }}
+            >
+                <StyledAccordionSummary expandIcon={<ExpandMore />}>
+                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                        🚌 Números de Ruta
+                    </Typography>
+                </StyledAccordionSummary>
+                <AccordionDetails>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                            <TextField
+                                fullWidth
+                                label="Nuevo Número de Ruta"
+                                value={newRouteNumber}
+                                onChange={(e) => setNewRouteNumber(e.target.value)}
+                                onKeyPress={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleAddRouteNumber();
+                                    }
+                                }}
+                            />
+                            <Button 
+                                variant="contained" 
+                                onClick={handleAddRouteNumber}
+                                startIcon={<Add />}
+                            >
+                                Agregar
+                            </Button>
                         </Box>
-                    </AccordionDetails>
-                </StyledAccordion>
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={handleCloseDialogs}>Cancelar</Button>
-                {hasPermission(isEdit ? 'corporaciones-editar' : 'corporaciones-crear') && (
-                    <Button
-                        onClick={isEdit ? handleUpdateCorporation : handleCreateCorporation}
-                        variant="contained"
-                        disabled={!formData.name.trim()}
-                    >
-                        {isEdit ? 'Guardar Cambios' : 'Crear Corporación'}
-                    </Button>
-                )}
-            </DialogActions>
-        </Dialog>
+
+                        {corporationRouteNumbers.map((rn, idx) => {
+                            const entry = (corporationRouteSchedules || []).find(x => String(x.routeNumber) === String(rn)) || { routeNumber: String(rn), schedules: [] };
+                            const selectedSchedules = new Set((entry.schedules || []).map(s => s?.name).filter(Boolean));
+                                
+                            const toggleSchedule = (scheduleName, checked) => {
+                                setCorporationRouteSchedules(prev => {
+                                    const arr = Array.isArray(prev) ? [...prev] : [];
+                                    let i = arr.findIndex(x => String(x.routeNumber) === String(rn));
+                                    if (i === -1) { 
+                                        arr.push({ routeNumber: String(rn), schedules: [] }); 
+                                        i = arr.length - 1; 
+                                    }
+                                    const curr = Array.isArray(arr[i].schedules) ? [...arr[i].schedules] : [];
+                                    const idxByName = curr.findIndex(s => s && s.name === scheduleName);
+                                        
+                                    if (checked) {
+                                        const scheduleObj = corporationSchedules.find(s => s.name === scheduleName);
+                                        if (scheduleObj) {
+                                            const cleaned = {
+                                                name: scheduleObj.name,
+                                                entryTime: scheduleObj.entryTime,
+                                                exitTime: scheduleObj.exitTime
+                                            };
+                                            if (idxByName === -1) {
+                                                curr.push(cleaned);
+                                            } 
+                                            else {
+                                                curr[idxByName] = cleaned;
+                                            }
+                                        }
+                                    } else {
+                                        if (idxByName !== -1) {
+                                            curr.splice(idxByName, 1);
+                                        }
+                                    }
+                                        
+                                    arr[i] = { routeNumber: String(rn), schedules: curr };
+                                    return arr;
+                                });
+                            };
+
+                            return (
+                                <Paper key={idx} sx={{ p: 2, border: '1px solid #e0e0e0' }}>
+                                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2 }}>
+                                        <TextField
+                                            fullWidth
+                                            value={rn}
+                                            onChange={(e) => handleChangeRouteNumber(idx, e.target.value)}
+                                            label={`Número de Ruta #${idx + 1}`}
+                                        />
+                                        <IconButton size="small" color="error" onClick={() => handleRemoveRouteNumber(idx)}>
+                                            <Delete />
+                                        </IconButton>
+                                    </Box>
+                                    <Typography variant="body2" sx={{ mb: 1, fontWeight: 600 }}>
+                                        Horarios asignados a esta ruta:
+                                    </Typography>
+                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                        {corporationSchedules.length === 0 ? (
+                                            <Typography variant="body2" color="text.secondary">
+                                                Agregue horarios en la sección de arriba para poder asignarlos a esta ruta
+                                            </Typography>
+                                        ) : (
+                                            Array.isArray(corporationSchedules) && corporationSchedules.map((sch, si) => {
+                                                const label = `${sch.name} (${formatClock(sch.entryTime)} - ${formatClock(sch.exitTime)})`;
+                                                const checked = selectedSchedules.has(sch.name);
+                                                return (
+                                                    <FormControlLabel
+                                                        key={`rn-${idx}-sch-${si}`}
+                                                        control={
+                                                            <Checkbox 
+                                                                size="small" 
+                                                                checked={checked} 
+                                                                onChange={(e) => toggleSchedule(sch.name, e.target.checked)} 
+                                                            />
+                                                        }
+                                                        label={label}
+                                                    />
+                                                );
+                                            })
+                                        )}
+                                    </Box>
+                                </Paper>
+                            );
+                        })}
+                            
+                        {corporationRouteNumbers.length === 0 && (
+                            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                No hay rutas agregadas
+                            </Typography>
+                        )}
+                    </Box>
+                </AccordionDetails>
+            </StyledAccordion>
+
+            {/* Sección: Campos de Inscripción Extra */}
+            <StyledAccordion 
+                expanded={expandedPanels.extraFields}
+                onChange={handleAccordionChange('extraFields')}
+                TransitionProps={{ unmountOnExit: false }}
+            >
+                <StyledAccordionSummary expandIcon={<ExpandMore />}>
+                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                        � Campos de Inscripción Extra
+                    </Typography>
+                </StyledAccordionSummary>
+                <AccordionDetails>
+                    <Box>
+                        <Button 
+                            variant="outlined" 
+                            onClick={handleAddExtraField}
+                            startIcon={<Add />}
+                            sx={{ mb: 2 }}
+                        >
+                            Agregar Campo
+                        </Button>
+                        {Array.isArray(formData.extraEnrollmentFields) && formData.extraEnrollmentFields.map((field, index) => (
+                            <Box 
+                                key={index}
+                                sx={{ 
+                                    display: 'flex', 
+                                    gap: 2, 
+                                    mb: 2, 
+                                    p: 2, 
+                                    border: '1px solid #e0e0e0',
+                                    borderRadius: 1,
+                                    alignItems: 'center'
+                                }}
+                            >
+                                <TextField
+                                    fullWidth
+                                    label="Nombre del Campo"
+                                    value={field.fieldName}
+                                    onChange={(e) => handleChangeExtraField(index, 'fieldName', e.target.value)}
+                                />
+                                <FormControl sx={{ minWidth: 150 }}>
+                                    <InputLabel>Tipo</InputLabel>
+                                    <Select
+                                        value={field.type}
+                                        onChange={(e) => handleChangeExtraField(index, 'type', e.target.value)}
+                                        label="Tipo"
+                                    >
+                                        <MenuItem value="text">Texto</MenuItem>
+                                        <MenuItem value="email">Email</MenuItem>
+                                        <MenuItem value="number">Número</MenuItem>
+                                        <MenuItem value="tel">Teléfono</MenuItem>
+                                        <MenuItem value="date">Fecha</MenuItem>
+                                    </Select>
+                                </FormControl>
+                                <FormControlLabel
+                                    control={
+                                        <Checkbox
+                                            checked={field.required}
+                                            onChange={(e) => handleChangeExtraField(index, 'required', e.target.checked)}
+                                        />
+                                    }
+                                    label="Requerido"
+                                />
+                                <IconButton 
+                                    color="error" 
+                                    onClick={() => handleRemoveExtraField(index)}
+                                >
+                                    <Delete />
+                                </IconButton>
+                            </Box>
+                        ))}
+                        {(!Array.isArray(formData.extraEnrollmentFields) || formData.extraEnrollmentFields.length === 0) && (
+                            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                No hay campos extra agregados. Estos campos aparecerán en el formulario de inscripción pública.
+                            </Typography>
+                        )}
+                    </Box>
+                </AccordionDetails>
+            </StyledAccordion>
+        </AppDialog>
     );
 
     return (
@@ -1194,7 +1135,7 @@ const CorporationsPage = () => {
                                                             color="error"
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                handleOpenDeleteDialog(corporation);
+                                                                handleDeleteCorporation(corporation);
                                                             }}
                                                         >
                                                             <Delete fontSize="small" />
@@ -1215,38 +1156,6 @@ const CorporationsPage = () => {
             {renderCorporationDialog(false)}
             {renderCorporationDialog(true)}
 
-            {/* Diálogo de Eliminar */}
-            <Dialog open={openDeleteDialog} onClose={handleCloseDialogs}>
-                <DialogTitle>Confirmar Eliminación</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        ¿Está seguro que desea eliminar la corporación "{selectedCorporation?.name}"?
-                        Esta acción no se puede deshacer.
-                    </DialogContentText>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseDialogs}>Cancelar</Button>
-                    <Button onClick={handleDeleteCorporation} color="error" variant="contained">
-                        Eliminar
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Snackbar de notificaciones */}
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-            >
-                <Alert 
-                    onClose={() => setSnackbar({ ...snackbar, open: false })} 
-                    severity={snackbar.severity}
-                    variant="filled"
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </PageContainer>
     );
 };

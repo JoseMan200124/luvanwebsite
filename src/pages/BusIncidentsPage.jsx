@@ -7,23 +7,13 @@ import {
     Table,
     TableBody,
     TableCell,
-    TableContainer,
-    TableHead,
     TableRow,
-    TablePagination,
-    TableSortLabel,
     CircularProgress,
     Box,
     Grid,
-    Card,
-    CardContent,
     Chip,
     IconButton,
     Tooltip,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     Button,
     TextField,
 } from '@mui/material';
@@ -46,17 +36,27 @@ import moment from 'moment-timezone';
 import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import { getAllBusIncidents, getBusIncidentById, deleteBusIncident, updateBusIncident, FAILURE_TYPES, INCIDENT_EVENT_TYPES } from '../services/busIncidentService';
 import api from '../utils/axiosConfig';
+import { loadCatalog } from '../services/catalogStore';
 import { getClientSchoolId, getClientCorporationId } from '../utils/clientValue';
 import { ALL_CYCLES_VALUE, getCicloEscolarFilterParams } from '../utils/cicloEscolarFilterParams';
 import PermissionGuard from '../components/PermissionGuard';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import RowActions from '../components/table/RowActions';
 import FilterBar from '../components/filters/FilterBar';
 import useFilters from '../hooks/useFilters';
 import { F, toPlateOptions, toRouteOptions } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
-
-moment.tz.setDefault('America/Guatemala');
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
+import { formatDateTime } from '../utils/dateFormat';
+import AppDialog from '../components/dialogs/AppDialog';
+import { ReportProblem as ReportIcon, AltRoute as AltRouteIcon } from '@mui/icons-material';
+import { StatCard, StatCardGrid } from '../components/StatCard';
 
 const NO_FAILURES_FILTER_VALUE = 'sin_fallas';
 
@@ -65,11 +65,28 @@ const FAILURE_TYPE_OPTIONS = [
     ...Object.entries(FAILURE_TYPES).map(([value, label]) => ({ value, label })),
 ];
 
+// Columnas de la tabla
+const COLUMNS = [
+    { id: 'fecha', label: 'Fecha', sortable: true },
+    { id: 'tipo', label: 'Tipo', sortable: true },
+    { id: 'tipoFalla', label: 'Tipo de Falla', sortable: true },
+    { id: 'placaBus', label: 'Placa', sortable: true },
+    { id: 'numeroRuta', label: 'Ruta', sortable: true },
+    { id: 'colegio', label: 'Colegio/Corp.', sortable: true },
+    { id: 'piloto', label: 'Piloto' },
+    { id: 'routeAffected', label: 'Afectó Recorrido', sortable: true, align: 'center' },
+    { id: 'pudoContinuarRuta', label: 'Continuó Ruta', sortable: true, align: 'center' },
+    { id: 'acciones', label: 'Acciones', align: 'center' },
+];
+
 const BusIncidentsPage = () => {
+    const notify = useNotify();
+    const confirm = useConfirm();
     const [incidents, setIncidents] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(25);
+    // Paginación y orden (en el servidor)
+    const table = useTableState({ defaultOrderBy: 'fecha', defaultOrder: 'desc' });
+    const { page, rowsPerPage, orderBy, order } = table;
     const [totalCount, setTotalCount] = useState(0);
 
     // Filtros
@@ -89,7 +106,7 @@ const BusIncidentsPage = () => {
             F.select('tipo', { label: 'Tipo', options: INCIDENT_EVENT_TYPES }),
             F.dateRange('dates'),
         ],
-        onApplied: () => setPage(0),
+        onApplied: table.resetPage,
     });
     const {
         cycle: selectedCicloEscolar,
@@ -107,8 +124,6 @@ const BusIncidentsPage = () => {
     const draftCorporationId = getClientCorporationId(pageFilters.draft.client);
 
     // Ordenamiento
-    const [orderBy, setOrderBy] = useState('fecha');
-    const [order, setOrder] = useState('desc');
 
     // Modal de detalles
     const [detailsOpen, setDetailsOpen] = useState(false);
@@ -116,8 +131,6 @@ const BusIncidentsPage = () => {
     const [loadingDetails, setLoadingDetails] = useState(false);
 
     // Modal de eliminación
-    const [deleteOpen, setDeleteOpen] = useState(false);
-    const [deleteId, setDeleteId] = useState(null);
 
     // Edición de descripción
     const [editingDescription, setEditingDescription] = useState(false);
@@ -164,9 +177,7 @@ const BusIncidentsPage = () => {
 
     const fetchSchools = async () => {
         try {
-            const response = await api.get('/schools', { params: { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true } });
-            const schoolsData = Array.isArray(response.data) ? response.data : (response.data?.schools || []);
-            setSchools(schoolsData);
+            setSchools(await loadCatalog('schools', { ...getCicloEscolarFilterParams(draftCycle), includeArchived: true }));
         } catch (error) {
             console.error('Error al cargar colegios:', error);
             setSchools([]);
@@ -177,9 +188,7 @@ const BusIncidentsPage = () => {
 
     const fetchCorporations = async () => {
         try {
-            const response = await api.get('/corporations', { params: getCicloEscolarFilterParams(draftCycle) });
-            const corporationsData = Array.isArray(response.data) ? response.data : (response.data?.corporations || []);
-            setCorporations(corporationsData);
+            setCorporations(await loadCatalog('corporations', getCicloEscolarFilterParams(draftCycle)));
         } catch (error) {
             console.error('Error al cargar corporaciones:', error);
             setCorporations([]);
@@ -322,6 +331,7 @@ const BusIncidentsPage = () => {
             }
         } catch (error) {
             console.error('Error al cargar incidentes:', error);
+            notify.fromError(error, 'Error al cargar los incidentes');
         } finally {
             setLoading(false);
         }
@@ -332,14 +342,6 @@ const BusIncidentsPage = () => {
         await fetchIncidents();
     }, [fetchIncidents]);
 
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(Number.parseInt(event.target.value, 10));
-        setPage(0);
-    };
 
     const handleViewDetails = async (incidentId) => {
         setLoadingDetails(true);
@@ -349,7 +351,7 @@ const BusIncidentsPage = () => {
             setSelectedIncident(data);
         } catch (error) {
             console.error('Error al cargar detalles del incidente:', error);
-            alert('Error al cargar los detalles del incidente');
+            notify.fromError(error, 'Error al cargar los detalles del incidente');
         } finally {
             setLoadingDetails(false);
         }
@@ -389,9 +391,10 @@ const BusIncidentsPage = () => {
             setSelectedIncident(prev => ({ ...prev, fecha: fechaValue.toISOString() }));
             setEditingFecha(false);
             setFechaValue(null);
+            notify.success('Fecha guardada');
         } catch (error) {
             console.error('Error al guardar fecha:', error);
-            alert('Error al guardar la fecha');
+            notify.fromError(error, 'Error al guardar la fecha');
         } finally {
             setSavingFecha(false);
         }
@@ -412,39 +415,28 @@ const BusIncidentsPage = () => {
             setSelectedIncident(prev => ({ ...prev, descripcion: descriptionValue }));
             setEditingDescription(false);
             setDescriptionValue('');
+            notify.success('Descripción guardada');
         } catch (error) {
             console.error('Error al guardar descripción:', error);
-            alert('Error al guardar la descripción');
+            notify.fromError(error, 'Error al guardar la descripción');
         } finally {
             setSavingDescription(false);
         }
     };
 
-    const handleSort = (column) => {
-        const isAsc = orderBy === column && order === 'asc';
-        setOrder(isAsc ? 'desc' : 'asc');
-        setOrderBy(column);
-    };
 
-    const handleOpenDelete = (id) => {
-        setDeleteId(id);
-        setDeleteOpen(true);
-    };
-
-    const handleCancelDelete = () => {
-        setDeleteOpen(false);
-        setDeleteId(null);
-    };
-
-    const handleConfirmDelete = async () => {
-        try {
-            await deleteBusIncident(deleteId);
-            setDeleteOpen(false);
-            setDeleteId(null);
+    const handleDelete = async (id) => {
+        const ok = await confirm({
+            title: 'Eliminar incidente',
+            message: 'Se eliminará el incidente. Esta acción no se puede deshacer.',
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: () => deleteBusIncident(id),
+            errorMessage: 'Error al eliminar el incidente',
+        });
+        if (ok) {
+            notify.success('Incidente eliminado');
             fetchIncidents();
-        } catch (error) {
-            console.error('Error al eliminar incidente:', error);
-            alert('Error al eliminar el incidente');
         }
     };
 
@@ -492,63 +484,26 @@ const BusIncidentsPage = () => {
                 />
 
                 {/* Estadísticas */}
-                <Grid container spacing={3} mb={3}>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Total Incidentes
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.total}
-                                </Typography>
-                                <Typography variant="caption" color="textSecondary" display="block">
-                                    {statistics.colegios || 0} de colegios · {statistics.corporativos || 0} corporativos
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Tipo de Falla Más Común
-                                </Typography>
-                                <Typography variant="h6">
-                                    {Object.keys(statistics.byTipoFalla).length > 0
-                                        ? FAILURE_TYPES[Object.keys(statistics.byTipoFalla).reduce((a, b) => 
-                                            statistics.byTipoFalla[a] > statistics.byTipoFalla[b] ? a : b
-                                        )] || 'Sin Falla'
-                                        : 'N/A'}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Accidentes
-                                </Typography>
-                                <Typography variant="h4" color="error">
-                                    {statistics.byTipo['accidente'] || 0}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <Card sx={{ height: '100%' }}>
-                            <CardContent>
-                                <Typography color="textSecondary" gutterBottom>
-                                    Afectó Recorrido
-                                </Typography>
-                                <Typography variant="h4">
-                                    {statistics.withRouteAffected}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                </Grid>
+                <StatCardGrid columns={4}>
+                    <StatCard
+                        label="Total incidentes"
+                        value={statistics.total}
+                        icon={<ReportIcon />}
+                        format="number"
+                        hint={`${statistics.colegios || 0} de colegios · ${statistics.corporativos || 0} corporativos`}
+                    />
+                    <StatCard label="Tipo de falla más común" icon={<BuildIcon />}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>
+                            {Object.keys(statistics.byTipoFalla).length > 0
+                                ? FAILURE_TYPES[Object.keys(statistics.byTipoFalla).reduce((a, b) => (
+                                    statistics.byTipoFalla[a] > statistics.byTipoFalla[b] ? a : b
+                                ))] || 'Sin Falla'
+                                : 'N/A'}
+                        </Typography>
+                    </StatCard>
+                    <StatCard label="Accidentes" value={statistics.byTipo['accidente'] || 0} icon={<CrashIcon />} valueColor="error" format="number" />
+                    <StatCard label="Afectó recorrido" value={statistics.withRouteAffected} icon={<AltRouteIcon />} format="number" />
+                </StatCardGrid>
 
                 {/* Filtros */}
                 <FilterBar
@@ -567,91 +522,14 @@ const BusIncidentsPage = () => {
                         </Box>
                     ) : (
                         <>
-                            <TableContainer sx={{ overflowX: 'auto' }}>
+                            <AppTableContainer>
                                 <Table sx={{ minWidth: 1100 }}>
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'fecha'}
-                                                    direction={orderBy === 'fecha' ? order : 'asc'}
-                                                    onClick={() => handleSort('fecha')}
-                                                >
-                                                    Fecha
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'tipo'}
-                                                    direction={orderBy === 'tipo' ? order : 'asc'}
-                                                    onClick={() => handleSort('tipo')}
-                                                >
-                                                    Tipo
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'tipoFalla'}
-                                                    direction={orderBy === 'tipoFalla' ? order : 'asc'}
-                                                    onClick={() => handleSort('tipoFalla')}
-                                                >
-                                                    Tipo de Falla
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'placaBus'}
-                                                    direction={orderBy === 'placaBus' ? order : 'asc'}
-                                                    onClick={() => handleSort('placaBus')}
-                                                >
-                                                    Placa
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'numeroRuta'}
-                                                    direction={orderBy === 'numeroRuta' ? order : 'asc'}
-                                                    onClick={() => handleSort('numeroRuta')}
-                                                >
-                                                    Ruta
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>
-                                                <TableSortLabel
-                                                    active={orderBy === 'colegio'}
-                                                    direction={orderBy === 'colegio' ? order : 'asc'}
-                                                    onClick={() => handleSort('colegio')}
-                                                >
-                                                    Colegio/Corp.
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell>Piloto</TableCell>
-                                            <TableCell align="center">
-                                                <TableSortLabel
-                                                    active={orderBy === 'routeAffected'}
-                                                    direction={orderBy === 'routeAffected' ? order : 'asc'}
-                                                    onClick={() => handleSort('routeAffected')}
-                                                >
-                                                    Afectó Recorrido
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="center">
-                                                <TableSortLabel
-                                                    active={orderBy === 'pudoContinuarRuta'}
-                                                    direction={orderBy === 'pudoContinuarRuta' ? order : 'asc'}
-                                                    onClick={() => handleSort('pudoContinuarRuta')}
-                                                >
-                                                    Continuó Ruta
-                                                </TableSortLabel>
-                                            </TableCell>
-                                            <TableCell align="center">Acciones</TableCell>
-                                        </TableRow>
-                                    </TableHead>
+                                    <SortableTableHead columns={COLUMNS} {...table.sortProps} />
                                     <TableBody>
                                         {incidents.map((incident) => (
                                             <TableRow key={incident.id}>
                                                 <TableCell>
-                                                    {moment(incident.fecha).format('DD/MM/YYYY hh:mm A')}
+                                                    {formatDateTime(incident.fecha)}
                                                 </TableCell>
                                                 <TableCell>
                                                     <Chip 
@@ -706,26 +584,12 @@ const BusIncidentsPage = () => {
                                                     )}
                                                 </TableCell>
                                                 <TableCell align="center">
-                                                    <Tooltip title="Ver detalles">
-                                                        <IconButton
-                                                            size="small"
-                                                            onClick={() => handleViewDetails(incident.id)}
-                                                            color="primary"
-                                                        >
-                                                            <VisibilityIcon />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                    <PermissionGuard permission="incidentes-buses-eliminar">
-                                                        <Tooltip title="Eliminar">
-                                                            <IconButton
-                                                                size="small"
-                                                                onClick={() => handleOpenDelete(incident.id)}
-                                                                color="error"
-                                                            >
-                                                                <DeleteIcon />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    </PermissionGuard>
+                                                    <RowActions
+                                                        actions={[
+                                                            { key: 'view', kind: 'view', color: 'primary', label: 'Ver detalles', icon: <VisibilityIcon fontSize="small" />, onClick: () => handleViewDetails(incident.id) },
+                                                            { key: 'delete', kind: 'delete', label: 'Eliminar', icon: <DeleteIcon fontSize="small" />, permission: 'incidentes-buses-eliminar', onClick: () => handleDelete(incident.id) },
+                                                        ]}
+                                                    />
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -738,300 +602,260 @@ const BusIncidentsPage = () => {
                                         )}
                                     </TableBody>
                                 </Table>
-                            </TableContainer>
-                            <TablePagination
-                                component="div"
-                                count={totalCount}
-                                page={page}
-                                onPageChange={handleChangePage}
-                                rowsPerPage={rowsPerPage}
-                                onRowsPerPageChange={handleChangeRowsPerPage}
-                                labelRowsPerPage="Registros por página:"
-                                labelDisplayedRows={({ from, to, count }) =>
-                                    `${from}-${to} de ${count !== -1 ? count : `más de ${to}`}`
-                                }
-                            />
+                            </AppTableContainer>
+                            <AppTablePagination count={totalCount} {...table.paginationProps} />
                         </>
                     )}
                 </Paper>
 
                 {/* Modal de Detalles */}
-                <Dialog
+                <AppDialog
                     open={detailsOpen}
                     onClose={handleCloseDetails}
-                    maxWidth="md"
-                    fullWidth
+                    title="Detalle del incidente"
+                    icon={<CrashIcon />}
+                    size="md"
+                    readOnly
                 >
-                    <DialogTitle>Detalles del Incidente</DialogTitle>
-                    <DialogContent dividers>
-                        {loadingDetails ? (
-                            <Box display="flex" justifyContent="center" p={3}>
-                                <CircularProgress />
-                            </Box>
-                        ) : selectedIncident ? (
-                            <Grid container spacing={2}>
-                                <Grid item xs={12} sm={6}>
-                                    <Box display="flex" alignItems="center" gap={1}>
-                                        <Typography variant="subtitle2" color="textSecondary">
-                                            Fecha y Hora
-                                        </Typography>
-                                        {!editingFecha && (
+                    {loadingDetails ? (
+                        <Box display="flex" justifyContent="center" p={3}>
+                            <CircularProgress />
+                        </Box>
+                    ) : selectedIncident ? (
+                        <Grid container spacing={2}>
+                            <Grid item xs={12} sm={6}>
+                                <Box display="flex" alignItems="center" gap={1}>
+                                    <Typography variant="subtitle2" color="textSecondary">
+                                        Fecha y Hora
+                                    </Typography>
+                                    {!editingFecha && (
+                                        <PermissionGuard permission="incidentes-buses-editar">
+                                            <Tooltip title="Editar fecha y hora">
+                                                <IconButton size="small" onClick={handleStartEditFecha}>
+                                                    <EditIcon fontSize="small" />
+                                                </IconButton>
+                                            </Tooltip>
+                                        </PermissionGuard>
+                                    )}
+                                </Box>
+                                {editingFecha ? (
+                                    <Box mt={1}>
+                                        <LocalizationProvider dateAdapter={AdapterMoment}>
+                                            <DateTimePicker
+                                                value={fechaValue}
+                                                onChange={(val) => setFechaValue(val)}
+                                                disabled={savingFecha}
+                                                slotProps={{ textField: { size: 'small', fullWidth: true } }}
+                                                ampm
+                                            />
+                                        </LocalizationProvider>
+                                        <Box display="flex" gap={1} mt={1}>
                                             <PermissionGuard permission="incidentes-buses-editar">
-                                                <Tooltip title="Editar fecha y hora">
-                                                    <IconButton size="small" onClick={handleStartEditFecha}>
-                                                        <EditIcon fontSize="small" />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            </PermissionGuard>
-                                        )}
-                                    </Box>
-                                    {editingFecha ? (
-                                        <Box mt={1}>
-                                            <LocalizationProvider dateAdapter={AdapterMoment}>
-                                                <DateTimePicker
-                                                    value={fechaValue}
-                                                    onChange={(val) => setFechaValue(val)}
-                                                    disabled={savingFecha}
-                                                    slotProps={{ textField: { size: 'small', fullWidth: true } }}
-                                                    ampm
-                                                />
-                                            </LocalizationProvider>
-                                            <Box display="flex" gap={1} mt={1}>
-                                                <PermissionGuard permission="incidentes-buses-editar">
-                                                    <Button
-                                                        variant="contained"
-                                                        size="small"
-                                                        startIcon={savingFecha ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
-                                                        onClick={handleSaveFecha}
-                                                        disabled={savingFecha || !fechaValue}
-                                                    >
-                                                        Guardar
-                                                    </Button>
-                                                </PermissionGuard>
                                                 <Button
-                                                    variant="outlined"
+                                                    variant="contained"
                                                     size="small"
-                                                    startIcon={<CancelIcon />}
-                                                    onClick={handleCancelEditFecha}
-                                                    disabled={savingFecha}
+                                                    startIcon={savingFecha ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
+                                                    onClick={handleSaveFecha}
+                                                    disabled={savingFecha || !fechaValue}
                                                 >
-                                                    Cancelar
+                                                    Guardar
                                                 </Button>
-                                            </Box>
-                                        </Box>
-                                    ) : (
-                                        <Typography variant="body1" gutterBottom>
-                                            {moment(selectedIncident.fecha).format('DD/MM/YYYY hh:mm A')}
-                                        </Typography>
-                                    )}
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Tipo de Evento
-                                    </Typography>
-                                    <Chip 
-                                        label={INCIDENT_EVENT_TYPES[selectedIncident.tipo] || selectedIncident.tipo}
-                                        color={getTipoColor(selectedIncident.tipo)}
-                                        sx={{ mt: 1 }}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Tipo de Falla
-                                    </Typography>
-                                    {selectedIncident.noFallas ? (
-                                        <Chip 
-                                            label="Sin Fallas Reportadas"
-                                            color="success"
-                                            icon={<CheckCircleIcon />}
-                                            sx={{ mt: 1 }}
-                                        />
-                                    ) : (
-                                        <Chip 
-                                            label={selectedIncident.tipoFalla === 'otro' && selectedIncident.otroFallaDetalle 
-                                                ? `Otro: ${selectedIncident.otroFallaDetalle}`
-                                                : FAILURE_TYPES[selectedIncident.tipoFalla] || selectedIncident.tipoFalla}
-                                            color={getTipoFallaColor(selectedIncident.tipoFalla)}
-                                            icon={getTipoFallaIcon(selectedIncident.tipoFalla)}
-                                            sx={{ mt: 1 }}
-                                        />
-                                    )}
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Placa del Bus
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.placaBus || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Número de Ruta
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.numeroRuta || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Colegio
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.colegio || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                {selectedIncident.corporacion && (
-                                    <Grid item xs={12} sm={6}>
-                                        <Typography variant="subtitle2" color="textSecondary">
-                                            Corporación
-                                        </Typography>
-                                        <Typography variant="body1" gutterBottom>
-                                            {selectedIncident.corporacion}
-                                        </Typography>
-                                    </Grid>
-                                )}
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Piloto
-                                    </Typography>
-                                    <Typography variant="body1" gutterBottom>
-                                        {selectedIncident.piloto?.name || 'N/A'}
-                                    </Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        ¿Afectó el Recorrido?
-                                    </Typography>
-                                    {selectedIncident.routeAffected ? (
-                                        <Chip label="Sí" color="error" size="small" sx={{ mt: 1 }} />
-                                    ) : (
-                                        <Chip label="No" color="success" size="small" sx={{ mt: 1 }} />
-                                    )}
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        ¿Pudo Continuar la Ruta?
-                                    </Typography>
-                                    {selectedIncident.pudoContinuarRuta ? (
-                                        <Chip label="Sí" color="success" size="small" sx={{ mt: 1 }} />
-                                    ) : (
-                                        <Chip label="No" color="error" size="small" sx={{ mt: 1 }} />
-                                    )}
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        ¿Se Utilizó Bus Suplente?
-                                    </Typography>
-                                    {selectedIncident.seUtilizoBusSuplente ? (
-                                        <Chip label="Sí" color="warning" size="small" sx={{ mt: 1 }} />
-                                    ) : (
-                                        <Chip label="No" color="default" size="small" sx={{ mt: 1 }} />
-                                    )}
-                                </Grid>
-                                {selectedIncident.allBuses && (
-                                    <Grid item xs={12}>
-                                        <Chip 
-                                            label="Aplica para todos los buses" 
-                                            color="info" 
-                                            sx={{ mt: 1 }} 
-                                        />
-                                    </Grid>
-                                )}
-                                <Grid item xs={12}>
-                                    <Box display="flex" alignItems="center" gap={1}>
-                                        <Typography variant="subtitle2" color="textSecondary">
-                                            Descripción del Incidente
-                                        </Typography>
-                                        {!editingDescription && (
-                                            <PermissionGuard permission="incidentes-buses-editar">
-                                                <Tooltip title="Editar descripción">
-                                                    <IconButton size="small" onClick={handleStartEditDescription}>
-                                                        <EditIcon fontSize="small" />
-                                                    </IconButton>
-                                                </Tooltip>
                                             </PermissionGuard>
-                                        )}
-                                    </Box>
-                                    {editingDescription ? (
-                                        <Box mt={1}>
-                                            <TextField
-                                                fullWidth
-                                                multiline
-                                                minRows={3}
-                                                value={descriptionValue}
-                                                onChange={(e) => setDescriptionValue(e.target.value)}
+                                            <Button
                                                 variant="outlined"
                                                 size="small"
-                                                disabled={savingDescription}
-                                            />
-                                            <Box display="flex" gap={1} mt={1}>
-                                                <PermissionGuard permission="incidentes-buses-editar">
-                                                    <Button
-                                                        variant="contained"
-                                                        size="small"
-                                                        startIcon={savingDescription ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
-                                                        onClick={handleSaveDescription}
-                                                        disabled={savingDescription}
-                                                    >
-                                                        Guardar
-                                                    </Button>
-                                                </PermissionGuard>
+                                                startIcon={<CancelIcon />}
+                                                onClick={handleCancelEditFecha}
+                                                disabled={savingFecha}
+                                            >
+                                                Cancelar
+                                            </Button>
+                                        </Box>
+                                    </Box>
+                                ) : (
+                                    <Typography variant="body1" gutterBottom>
+                                        {formatDateTime(selectedIncident.fecha)}
+                                    </Typography>
+                                )}
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Tipo de Evento
+                                </Typography>
+                                <Chip 
+                                    label={INCIDENT_EVENT_TYPES[selectedIncident.tipo] || selectedIncident.tipo}
+                                    color={getTipoColor(selectedIncident.tipo)}
+                                    sx={{ mt: 1 }}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Tipo de Falla
+                                </Typography>
+                                {selectedIncident.noFallas ? (
+                                    <Chip 
+                                        label="Sin Fallas Reportadas"
+                                        color="success"
+                                        icon={<CheckCircleIcon />}
+                                        sx={{ mt: 1 }}
+                                    />
+                                ) : (
+                                    <Chip 
+                                        label={selectedIncident.tipoFalla === 'otro' && selectedIncident.otroFallaDetalle 
+                                            ? `Otro: ${selectedIncident.otroFallaDetalle}`
+                                            : FAILURE_TYPES[selectedIncident.tipoFalla] || selectedIncident.tipoFalla}
+                                        color={getTipoFallaColor(selectedIncident.tipoFalla)}
+                                        icon={getTipoFallaIcon(selectedIncident.tipoFalla)}
+                                        sx={{ mt: 1 }}
+                                    />
+                                )}
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Placa del Bus
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.placaBus || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Número de Ruta
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.numeroRuta || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Colegio
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.colegio || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            {selectedIncident.corporacion && (
+                                <Grid item xs={12} sm={6}>
+                                    <Typography variant="subtitle2" color="textSecondary">
+                                        Corporación
+                                    </Typography>
+                                    <Typography variant="body1" gutterBottom>
+                                        {selectedIncident.corporacion}
+                                    </Typography>
+                                </Grid>
+                            )}
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    Piloto
+                                </Typography>
+                                <Typography variant="body1" gutterBottom>
+                                    {selectedIncident.piloto?.name || 'N/A'}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    ¿Afectó el Recorrido?
+                                </Typography>
+                                {selectedIncident.routeAffected ? (
+                                    <Chip label="Sí" color="error" size="small" sx={{ mt: 1 }} />
+                                ) : (
+                                    <Chip label="No" color="success" size="small" sx={{ mt: 1 }} />
+                                )}
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    ¿Pudo Continuar la Ruta?
+                                </Typography>
+                                {selectedIncident.pudoContinuarRuta ? (
+                                    <Chip label="Sí" color="success" size="small" sx={{ mt: 1 }} />
+                                ) : (
+                                    <Chip label="No" color="error" size="small" sx={{ mt: 1 }} />
+                                )}
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <Typography variant="subtitle2" color="textSecondary">
+                                    ¿Se Utilizó Bus Suplente?
+                                </Typography>
+                                {selectedIncident.seUtilizoBusSuplente ? (
+                                    <Chip label="Sí" color="warning" size="small" sx={{ mt: 1 }} />
+                                ) : (
+                                    <Chip label="No" color="default" size="small" sx={{ mt: 1 }} />
+                                )}
+                            </Grid>
+                            {selectedIncident.allBuses && (
+                                <Grid item xs={12}>
+                                    <Chip 
+                                        label="Aplica para todos los buses" 
+                                        color="info" 
+                                        sx={{ mt: 1 }} 
+                                    />
+                                </Grid>
+                            )}
+                            <Grid item xs={12}>
+                                <Box display="flex" alignItems="center" gap={1}>
+                                    <Typography variant="subtitle2" color="textSecondary">
+                                        Descripción del Incidente
+                                    </Typography>
+                                    {!editingDescription && (
+                                        <PermissionGuard permission="incidentes-buses-editar">
+                                            <Tooltip title="Editar descripción">
+                                                <IconButton size="small" onClick={handleStartEditDescription}>
+                                                    <EditIcon fontSize="small" />
+                                                </IconButton>
+                                            </Tooltip>
+                                        </PermissionGuard>
+                                    )}
+                                </Box>
+                                {editingDescription ? (
+                                    <Box mt={1}>
+                                        <TextField
+                                            fullWidth
+                                            multiline
+                                            minRows={3}
+                                            value={descriptionValue}
+                                            onChange={(e) => setDescriptionValue(e.target.value)}
+                                            variant="outlined"
+                                            size="small"
+                                            disabled={savingDescription}
+                                        />
+                                        <Box display="flex" gap={1} mt={1}>
+                                            <PermissionGuard permission="incidentes-buses-editar">
                                                 <Button
-                                                    variant="outlined"
+                                                    variant="contained"
                                                     size="small"
-                                                    startIcon={<CancelIcon />}
-                                                    onClick={handleCancelEditDescription}
+                                                    startIcon={savingDescription ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
+                                                    onClick={handleSaveDescription}
                                                     disabled={savingDescription}
                                                 >
-                                                    Cancelar
+                                                    Guardar
                                                 </Button>
-                                            </Box>
+                                            </PermissionGuard>
+                                            <Button
+                                                variant="outlined"
+                                                size="small"
+                                                startIcon={<CancelIcon />}
+                                                onClick={handleCancelEditDescription}
+                                                disabled={savingDescription}
+                                            >
+                                                Cancelar
+                                            </Button>
                                         </Box>
-                                    ) : (
-                                        <Paper sx={{ p: 2, mt: 1, backgroundColor: '#f5f5f5' }}>
-                                            <Typography variant="body1">
-                                                {selectedIncident.descripcion || 'Sin descripción'}
-                                            </Typography>
-                                        </Paper>
-                                    )}
-                                </Grid>
+                                    </Box>
+                                ) : (
+                                    <Paper sx={{ p: 2, mt: 1, backgroundColor: '#f5f5f5' }}>
+                                        <Typography variant="body1">
+                                            {selectedIncident.descripcion || 'Sin descripción'}
+                                        </Typography>
+                                    </Paper>
+                                )}
                             </Grid>
-                        ) : (
-                            <Typography align="center" color="textSecondary">
-                                No se pudieron cargar los detalles
-                            </Typography>
-                        )}
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCloseDetails} color="primary">
-                            Cerrar
-                        </Button>
-                    </DialogActions>
-                </Dialog>
-
-                {/* Modal de Confirmación de Eliminación */}
-                <Dialog
-                    open={deleteOpen}
-                    onClose={handleCancelDelete}
-                    maxWidth="xs"
-                    fullWidth
-                >
-                    <DialogTitle>Confirmar Eliminación</DialogTitle>
-                    <DialogContent>
-                        <Typography>
-                            ¿Estás seguro de que deseas eliminar este incidente? Esta acción no se puede deshacer.
+                        </Grid>
+                    ) : (
+                        <Typography align="center" color="textSecondary">
+                            No se pudieron cargar los detalles
                         </Typography>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button onClick={handleCancelDelete} color="inherit">
-                            Cancelar
-                        </Button>
-                        <Button onClick={handleConfirmDelete} color="error" variant="contained">
-                            Eliminar
-                        </Button>
-                    </DialogActions>
-                </Dialog>
+                    )}
+                </AppDialog>
             </PageContainer>
         </LocalizationProvider>
     );

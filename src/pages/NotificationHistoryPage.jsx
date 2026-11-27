@@ -1,33 +1,24 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Paper,
   Alert,
   Box,
   Button,
   CircularProgress,
   Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  IconButton,
-  Paper,
   Stack,
   Table,
   TableBody,
   TableCell,
-  TableContainer,
-  TableHead,
-  TablePagination,
   TableRow,
-  TableSortLabel,
   TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
 import {
-  Close as CloseIcon,
   ExpandMore as ExpandMoreIcon,
   Visibility as VisibilityIcon,
+  NotificationsNone as NotificationsNoneIcon,
 } from '@mui/icons-material';
 import moment from 'moment-timezone';
 
@@ -41,29 +32,17 @@ import { F } from '../components/filters/filterFields';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import { MODULE_GROUPS } from '../components/layout/moduleGroups';
-
-moment.tz.setDefault('America/Guatemala');
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from '../components/table/AppTablePagination';
+import SortableTableHead from '../components/table/SortableTableHead';
+import AppTableContainer from '../components/table/AppTableContainer';
+import RowActions from '../components/table/RowActions';
+import { formatDateTime } from '../utils/dateFormat';
+import AppDialog from '../components/dialogs/AppDialog';
 
 const safeStr = (v) => (v == null ? '' : String(v)).trim();
 
 const MAX_VISIBLE_SCHOOL_NAMES = 2;
-
-const formatDateTime = (dateString) => {
-  if (!dateString) {
-      return '';
-  }
-  try {
-    return new Date(dateString).toLocaleString('es-ES', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return String(dateString);
-  }
-};
 
 const getRoleLabel = (role) => {
   const normalizedRole = safeStr(role).toLowerCase();
@@ -133,6 +112,17 @@ const renderRecipientsCount = (count) => {
   return count;
 };
 
+// Columnas de la tabla
+const COLUMNS = [
+  { id: 'createdAt', label: 'Enviada', sortable: true },
+  { id: 'title', label: 'Título', sortable: true },
+  { id: 'mensaje', label: 'Mensaje' },
+  { id: 'audiencia', label: 'Audiencia' },
+  { id: 'destinatarios', label: 'Destinatarios', align: 'center' },
+  { id: 'enviada_por', label: 'Enviada por' },
+  { id: 'acciones', label: 'Acciones', align: 'right' },
+];
+
 const NotificationHistoryPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -140,8 +130,9 @@ const NotificationHistoryPage = () => {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
 
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(25);
+  // Paginación y orden (en el servidor)
+  const table = useTableState({ defaultOrderBy: 'createdAt', defaultOrder: 'desc' });
+  const { page, rowsPerPage, orderBy: sortBy, order: sortDirection } = table;
 
   const pageFilters = useFilters({
     fields: [
@@ -149,11 +140,9 @@ const NotificationHistoryPage = () => {
       F.search('q', { placeholder: 'Título o mensaje' }),
       F.dateRange('dates'),
     ],
-    onApplied: () => setPage(0),
+    onApplied: table.resetPage,
   });
   const { cycle: selectedCicloEscolar, q, dates } = pageFilters.applied;
-  const [sortBy, setSortBy] = useState('createdAt');
-  const [sortDirection, setSortDirection] = useState('desc');
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -209,13 +198,6 @@ const NotificationHistoryPage = () => {
   useEffect(() => {
     fetchRows();
   }, [fetchRows]);
-
-  const handleRequestSort = (property) => {
-    const isAsc = sortBy === property && sortDirection === 'asc';
-    setSortDirection(isAsc ? 'desc' : 'asc');
-    setSortBy(property);
-    setPage(0);
-  };
 
   const filteredRecipientGroups = useMemo(() => {
     const groups = Array.isArray(detail?.recipientGroups) ? detail.recipientGroups : [];
@@ -288,35 +270,9 @@ const NotificationHistoryPage = () => {
       <FilterBar {...pageFilters.barProps} loading={loading} />
 
       <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
-        <TableContainer>
+        <AppTableContainer>
           <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 800 }} sortDirection={sortBy === 'createdAt' ? sortDirection : false}>
-                  <TableSortLabel
-                    active={sortBy === 'createdAt'}
-                    direction={sortBy === 'createdAt' ? sortDirection : 'desc'}
-                    onClick={() => handleRequestSort('createdAt')}
-                  >
-                    Enviada
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 800 }} sortDirection={sortBy === 'title' ? sortDirection : false}>
-                  <TableSortLabel
-                    active={sortBy === 'title'}
-                    direction={sortBy === 'title' ? sortDirection : 'asc'}
-                    onClick={() => handleRequestSort('title')}
-                  >
-                    Título
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell sx={{ fontWeight: 800 }}>Mensaje</TableCell>
-                <TableCell sx={{ fontWeight: 800 }}>Audiencia</TableCell>
-                <TableCell sx={{ fontWeight: 800 }} align="center">Destinatarios</TableCell>
-                <TableCell sx={{ fontWeight: 800 }}>Enviada por</TableCell>
-                <TableCell sx={{ fontWeight: 800 }} align="right">Acciones</TableCell>
-              </TableRow>
-            </TableHead>
+            <SortableTableHead columns={COLUMNS} cellSx={{ fontWeight: 800 }} {...table.sortProps} />
 
             <TableBody>
               {loading ? (
@@ -356,227 +312,192 @@ const NotificationHistoryPage = () => {
                     <TableCell align="center">{renderRecipientsCount(r.recipientsCount)}</TableCell>
                     <TableCell>{safeStr(r.sender?.name) || '—'}</TableCell>
                     <TableCell align="right">
-                      <Tooltip title="Ver detalle">
-                        <span>
-                          <IconButton
-                            onClick={() => openDetail(r.uuid)}
-                            size="small"
-                            aria-label="Ver detalle"
-                            sx={{
-                              color: 'primary.main',
-                              backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                              transition: 'all 200ms ease-in-out',
-                              '&:hover': {
-                                backgroundColor: 'rgba(25, 118, 210, 0.16)',
-                                color: 'primary.dark',
-                                transform: 'scale(1.1)',
-                              },
-                            }}
-                          >
-                            <VisibilityIcon fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
+                      <RowActions
+                        actions={[
+                          { key: 'view', kind: 'view', label: 'Ver detalle', icon: <VisibilityIcon fontSize="small" />, onClick: () => openDetail(r.uuid) },
+                        ]}
+                      />
                     </TableCell>
                   </TableRow>
                 ))
               )}
             </TableBody>
           </Table>
-        </TableContainer>
+        </AppTableContainer>
 
-        <TablePagination
-          component="div"
-          count={total}
-          page={page}
-          onPageChange={(_, newPage) => setPage(newPage)}
-          rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={(e) => {
-            setRowsPerPage(Number.parseInt(e.target.value, 10));
-            setPage(0);
-          }}
-          rowsPerPageOptions={[10, 25, 50, 100]}
-        />
+        <AppTablePagination count={total} {...table.paginationProps} />
       </Paper>
 
-      <Dialog open={detailOpen} onClose={closeDetail} fullWidth maxWidth="md">
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box sx={{ pr: 2, minWidth: 0 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-              <Typography variant="h6" sx={{ fontWeight: 800 }} noWrap>
-                {safeStr(detail?.title) || 'Notificación'}
-              </Typography>
-              {detail?.isScheduled && <ScheduledOriginChip />}
-            </Box>
-            <Typography variant="body2" color="text.secondary">
-              Enviada: {formatDateTime(detail?.sentAt) || '—'}
-              {safeStr(detail?.sender?.name) ? ` · Por: ${safeStr(detail.sender.name)}` : ''}
-              {detail?.cicloEscolar ? ` · ${getCicloEscolarOptionLabel(detail.cicloEscolar)}` : ''}
-            </Typography>
+      <AppDialog
+        open={detailOpen}
+        onClose={closeDetail}
+        title={safeStr(detail?.title) || 'Notificación'}
+        subtitle={[
+          `Enviada: ${formatDateTime(detail?.sentAt)}`,
+          safeStr(detail?.sender?.name) ? `Por: ${safeStr(detail.sender.name)}` : '',
+          detail?.cicloEscolar ? getCicloEscolarOptionLabel(detail.cicloEscolar) : '',
+        ].filter(Boolean).join(' · ')}
+        icon={<NotificationsNoneIcon />}
+        size="md"
+        readOnly
+      >
+        {detail?.isScheduled && (
+          <Box sx={{ mb: 2 }}>
+            <ScheduledOriginChip />
           </Box>
-          <IconButton onClick={closeDetail} aria-label="Cerrar">
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
-
-        <DialogContent dividers>
-          {detailLoading ? (
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4 }}>
-              <CircularProgress />
+        )}
+        {detailLoading ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : detailError ? (
+          <Alert severity="error">{detailError}</Alert>
+        ) : (
+          <>
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1, color: '#1976d2', fontWeight: 800 }}>
+                Audiencia
+              </Typography>
+              {renderAudience(detail?.audience)}
             </Box>
-          ) : detailError ? (
-            <Alert severity="error">{detailError}</Alert>
-          ) : (
-            <>
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ mb: 1, color: '#1976d2', fontWeight: 800 }}>
-                  Audiencia
-                </Typography>
-                {renderAudience(detail?.audience)}
-              </Box>
 
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ mb: 1, color: '#1976d2', fontWeight: 800 }}>
-                  Mensaje
-                </Typography>
-                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                  {safeStr(detail?.message) || '—'}
-                </Typography>
-              </Box>
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1, color: '#1976d2', fontWeight: 800 }}>
+                Mensaje
+              </Typography>
+              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                {safeStr(detail?.message) || '—'}
+              </Typography>
+            </Box>
 
-              <Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 1 }}>
-                  <Typography variant="subtitle2" sx={{ color: '#1976d2', fontWeight: 800 }}>
-                    Destinatarios{detail?.hasRecipients ? ` (${detail.recipientsCount})` : ''}
-                  </Typography>
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 1 }}>
+                <Typography variant="subtitle2" sx={{ color: '#1976d2', fontWeight: 800 }}>
+                  Destinatarios{detail?.hasRecipients ? ` (${detail.recipientsCount})` : ''}
+                </Typography>
 
-                  {detail?.hasRecipients && (
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      color="primary"
-                      onClick={() => setRecipientsOpen((value) => !value)}
-                      endIcon={
-                        <ExpandMoreIcon
-                          sx={{
-                            transform: recipientsOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                            transition: 'transform 200ms',
-                          }}
-                        />
-                      }
-                      sx={{
-                        textTransform: 'none',
-                        fontWeight: 700,
+                {detail?.hasRecipients && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="primary"
+                    onClick={() => setRecipientsOpen((value) => !value)}
+                    endIcon={
+                      <ExpandMoreIcon
+                        sx={{
+                          transform: recipientsOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                          transition: 'transform 200ms',
+                        }}
+                      />
+                    }
+                    sx={{
+                      textTransform: 'none',
+                      fontWeight: 700,
+                      backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                      borderColor: 'rgba(25, 118, 210, 0.24)',
+                      '&:hover': {
                         backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                        borderColor: 'rgba(25, 118, 210, 0.24)',
-                        '&:hover': {
-                          backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                          borderColor: 'primary.main',
-                        },
-                        whiteSpace: 'nowrap',
-                      }}
-                      aria-label={recipientsOpen ? 'Ocultar destinatarios' : 'Mostrar destinatarios'}
-                    >
-                      {recipientsOpen ? 'Ocultar' : 'Mostrar'}
-                    </Button>
-                  )}
-                </Box>
-
-                {!detail?.hasRecipients && (
-                  <Alert severity="info">
-                    Este envío es anterior al registro de destinatarios; solo se conoce la audiencia.
-                  </Alert>
-                )}
-
-                {detail?.hasRecipients && recipientsOpen && (
-                  <>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      label="Buscar destinatario"
-                      value={recipientSearch}
-                      onChange={(e) => setRecipientSearch(e.target.value)}
-                      placeholder="Nombre, correo, rol o colegio"
-                      sx={{ mb: 1.5 }}
-                    />
-
-                    <Box
-                      sx={{
-                        maxHeight: 360,
-                        overflowY: 'auto',
-                        pr: 1,
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        borderRadius: 2,
-                        p: 1.5,
-                        backgroundColor: 'background.paper',
-                      }}
-                    >
-                      {filteredRecipientGroups.length > 0 ? (
-                        <Stack spacing={2}>
-                          {filteredRecipientGroups.map((group) => (
-                            <Box key={String(group.schoolId || group.schoolName)}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, mb: 1 }}>
-                                <Chip
-                                  label={group.schoolName || 'Sin colegio'}
-                                  size="small"
-                                  color="primary"
-                                  variant="outlined"
-                                  sx={{ fontWeight: 700 }}
-                                />
-                                <Typography variant="caption" color="text.secondary">
-                                  {group.users.length} usuario{group.users.length === 1 ? '' : 's'}
-                                </Typography>
-                              </Box>
-
-                              <Stack spacing={1}>
-                                {group.users.map((recipient) => (
-                                  <Box
-                                    key={recipient.id}
-                                    sx={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: 1,
-                                      p: 1.25,
-                                      border: '1px solid',
-                                      borderColor: 'divider',
-                                      borderRadius: 2,
-                                      flexWrap: 'wrap',
-                                    }}
-                                  >
-                                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                                      {getRecipientLabel(recipient)}
-                                    </Typography>
-                                    <Chip
-                                      size="small"
-                                      label={getRoleLabel(recipient.role)}
-                                      variant="filled"
-                                      color="default"
-                                      sx={{ fontWeight: 700 }}
-                                    />
-                                  </Box>
-                                ))}
-                              </Stack>
-                            </Box>
-                          ))}
-                        </Stack>
-                      ) : (
-                        <Typography variant="body2" color="text.secondary">
-                          No hay destinatarios que coincidan con la búsqueda.
-                        </Typography>
-                      )}
-                    </Box>
-                  </>
+                        borderColor: 'primary.main',
+                      },
+                      whiteSpace: 'nowrap',
+                    }}
+                    aria-label={recipientsOpen ? 'Ocultar destinatarios' : 'Mostrar destinatarios'}
+                  >
+                    {recipientsOpen ? 'Ocultar' : 'Mostrar'}
+                  </Button>
                 )}
               </Box>
-            </>
-          )}
-        </DialogContent>
 
-        <DialogActions>
-          <Button onClick={closeDetail}>Cerrar</Button>
-        </DialogActions>
-      </Dialog>
+              {!detail?.hasRecipients && (
+                <Alert severity="info">
+                  Este envío es anterior al registro de destinatarios; solo se conoce la audiencia.
+                </Alert>
+              )}
+
+              {detail?.hasRecipients && recipientsOpen && (
+                <>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Buscar destinatario"
+                    value={recipientSearch}
+                    onChange={(e) => setRecipientSearch(e.target.value)}
+                    placeholder="Nombre, correo, rol o colegio"
+                    sx={{ mb: 1.5 }}
+                  />
+
+                  <Box
+                    sx={{
+                      maxHeight: 360,
+                      overflowY: 'auto',
+                      pr: 1,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: 2,
+                      p: 1.5,
+                      backgroundColor: 'background.paper',
+                    }}
+                  >
+                    {filteredRecipientGroups.length > 0 ? (
+                      <Stack spacing={2}>
+                        {filteredRecipientGroups.map((group) => (
+                          <Box key={String(group.schoolId || group.schoolName)}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, mb: 1 }}>
+                              <Chip
+                                label={group.schoolName || 'Sin colegio'}
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                                sx={{ fontWeight: 700 }}
+                              />
+                              <Typography variant="caption" color="text.secondary">
+                                {group.users.length} usuario{group.users.length === 1 ? '' : 's'}
+                              </Typography>
+                            </Box>
+
+                            <Stack spacing={1}>
+                              {group.users.map((recipient) => (
+                                <Box
+                                  key={recipient.id}
+                                  sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 1,
+                                    p: 1.25,
+                                    border: '1px solid',
+                                    borderColor: 'divider',
+                                    borderRadius: 2,
+                                    flexWrap: 'wrap',
+                                  }}
+                                >
+                                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                    {getRecipientLabel(recipient)}
+                                  </Typography>
+                                  <Chip
+                                    size="small"
+                                    label={getRoleLabel(recipient.role)}
+                                    variant="filled"
+                                    color="default"
+                                    sx={{ fontWeight: 700 }}
+                                  />
+                                </Box>
+                              ))}
+                            </Stack>
+                          </Box>
+                        ))}
+                      </Stack>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        No hay destinatarios que coincidan con la búsqueda.
+                      </Typography>
+                    )}
+                  </Box>
+                </>
+              )}
+            </Box>
+          </>
+        )}
+      </AppDialog>
     </PageContainer>
   );
 };

@@ -2,7 +2,9 @@
 // Estado y payload del formulario familiar compartido por la inscripción
 // pública y la reinscripción con sesión.
 
-export const ROUTE_TYPES = ['Completa', 'Media PM', 'Media AM'];
+import { ROUTE_TYPES } from '../constants/options';
+
+export { ROUTE_TYPES };
 export const MAX_STUDENTS = 4;
 
 const emptyStudent = () => ({ fullName: '', grade: '' });

@@ -55,7 +55,10 @@ const ClientSelector = ({
     label = 'Cliente',
     extraOptions = [],
     schoolsGroupLabel = null,
-    disabled = false
+    disabled = false,
+    name,
+    required = false,
+    error = false
 }) => {
     const options = [...extraOptions, ...buildClientOptions(schools, corporations, schoolsGroupLabel)];
 
@@ -74,7 +77,16 @@ const ClientSelector = ({
             isOptionEqualToValue={isSameClient}
             noOptionsText="Sin coincidencias"
             clearOnEscape
-            renderInput={(params) => <TextField {...params} label={label} helperText={helperText} />}
+            renderInput={(params) => (
+                <TextField
+                    {...params}
+                    label={label}
+                    helperText={helperText}
+                    name={name}
+                    required={required}
+                    error={error}
+                />
+            )}
         />
     );
 };

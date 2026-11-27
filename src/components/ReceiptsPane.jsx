@@ -1,10 +1,14 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import PropTypes from 'prop-types';
-import { Box, Typography, FormControl, InputLabel, Select, MenuItem, Button, IconButton, Chip, TextField, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+import { Box, Typography, FormControl, InputLabel, Select, MenuItem, Button, IconButton, Chip, TextField } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import RotateRightIcon from '@mui/icons-material/RotateRight';
 import moment from 'moment';
+import { formatDateTime, formatMonth } from '../utils/dateFormat';
+import { RECEIPT_STATUS } from '../constants/statuses';
+import AppDialog from './dialogs/AppDialog';
+import FileField from './form/FileField';
 
 // ReceiptsPane: reusable Boletas UI used by Registrar Pago and ManagePaymentsModal
 // Props:
@@ -19,20 +23,14 @@ import moment from 'moment';
 
 const getReceiptDisplayDate = (receipt) => receipt?.displayDate || receipt?.date || receipt?.createdAt || receipt?.uploadedAt || '';
 
-const formatReceiptDate = (value) => value ? moment.parseZone(value).format('DD/MM/YYYY HH:mm') : '';
+const formatReceiptDate = (value) => value ? formatDateTime(value, { keepZone: true }) : '';
 
 const isAdminUploadedReceipt = (receipt) => {
     const source = String(receipt?.uploadSource || receipt?.uploadedByRole || receipt?.source || '').toUpperCase();
     return source === 'ADMIN' || source === 'ADMINISTRADOR' || receipt?.uploadedByAdmin === true;
 };
 
-const RECEIPT_STATUS_META = {
-    PENDIENTE: { label: 'Pendiente', color: '#2196f3' },
-    REGISTRADA: { label: 'Registrada', color: '#4caf50' },
-    RECHAZADA: { label: 'Rechazada', color: '#9e9e9e' },
-};
-
-const getReceiptStatusMeta = (receipt) => RECEIPT_STATUS_META[receipt?.status] || RECEIPT_STATUS_META.PENDIENTE;
+const getReceiptStatusMeta = (receipt) => RECEIPT_STATUS[receipt?.status] || RECEIPT_STATUS.PENDIENTE;
 
 const ReceiptsPane = ({
     uploadedReceipts = [],
@@ -55,7 +53,6 @@ const ReceiptsPane = ({
     const [uploadDisplayDate, setUploadDisplayDate] = useState(() => moment().format('YYYY-MM-DDTHH:mm'));
     const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
     const [uploadPreviewFile, setUploadPreviewFile] = useState(null);
-    const fileInputRef = useRef(null);
     const [receiptRotation, setReceiptRotation] = useState(0);
     const [rejectDialogReceipt, setRejectDialogReceipt] = useState(null);
     const [rejectReason, setRejectReason] = useState('');
@@ -105,13 +102,9 @@ const ReceiptsPane = ({
         }
         setUploadPreviewFile(null);
         setUploadDialogOpen(false);
-        if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-        }
     };
 
-    const handleDialogFileChange = (event) => {
-        const file = event.target.files?.[0];
+    const handleDialogFileChange = (file) => {
         if (!file) {
             return;
         }
@@ -120,7 +113,6 @@ const ReceiptsPane = ({
             if (onReceiptError) {
                 onReceiptError('Solo se permite subir una imagen JPG o PNG.');
             }
-            event.target.value = '';
             return;
         }
 
@@ -157,65 +149,52 @@ const ReceiptsPane = ({
     return (
         <>
             {/* Upload dialog */}
-            <Dialog open={uploadDialogOpen} onClose={closeUploadDialog} maxWidth="xs" fullWidth PaperProps={{ sx: { m: { xs: 1, sm: 2 }, width: { xs: 'calc(100% - 16px)', sm: '100%' } } }}>
-                <DialogTitle>Subir boleta</DialogTitle>
-                <DialogContent dividers>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <Button
-                            variant="outlined"
-                            component="label"
-                            startIcon={<UploadFileIcon />}
-                            size="small"
-                        >
-                            <span>Seleccionar imagen</span>
-                            <input
-                                hidden
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/jpeg,image/png"
-                                onChange={handleDialogFileChange}
+            <AppDialog
+                open={uploadDialogOpen}
+                onClose={closeUploadDialog}
+                title="Subir boleta"
+                size="xs"
+                onSubmit={handleConfirmUpload}
+                submitLabel="Subir"
+                submitDisabled={!uploadPreviewFile || uploadReceiptLoading}
+            >
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <FileField
+                        accept="imagen"
+                        label="Elegir imagen"
+                        file={uploadPreviewFile?.file}
+                        onChange={handleDialogFileChange}
+                        maxSizeMb={5}
+                        hideSelection
+                    />
+
+                    {uploadPreviewFile?.previewUrl && (
+                        <Box sx={{ textAlign: 'center', border: '1px solid #e0e0e0', borderRadius: 1, p: 1 }}>
+                            <img
+                                src={uploadPreviewFile.previewUrl}
+                                alt="previsualización"
+                                style={{ maxWidth: '100%', maxHeight: 260, objectFit: 'contain', borderRadius: 4 }}
                             />
-                        </Button>
+                            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                                {uploadPreviewFile.file.name}
+                            </Typography>
+                        </Box>
+                    )}
 
-                        {uploadPreviewFile?.previewUrl && (
-                            <Box sx={{ textAlign: 'center', border: '1px solid #e0e0e0', borderRadius: 1, p: 1 }}>
-                                <img
-                                    src={uploadPreviewFile.previewUrl}
-                                    alt="previsualización"
-                                    style={{ maxWidth: '100%', maxHeight: 260, objectFit: 'contain', borderRadius: 4 }}
-                                />
-                                <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
-                                    {uploadPreviewFile.file.name}
-                                </Typography>
-                            </Box>
-                        )}
-
-                        <TextField
-                            size="small"
-                            type="datetime-local"
-                            label="Fecha de la boleta"
-                            value={uploadDisplayDate}
-                            onChange={(e) => setUploadDisplayDate(e.target.value)}
-                            slotProps={{
-                                htmlInput: { max: '9999-12-31T23:59' },
-                                inputLabel: { shrink: true },
-                            }}
-                            fullWidth
-                        />
-                    </Box>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={closeUploadDialog} disabled={uploadReceiptLoading}>Cancelar</Button>
-                    <Button
-                        variant="contained"
-                        onClick={handleConfirmUpload}
-                        disabled={!uploadPreviewFile || uploadReceiptLoading}
-                        startIcon={uploadReceiptLoading ? <CircularProgress size={16} /> : null}
-                    >
-                        Subir
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                    <TextField
+                        size="small"
+                        type="datetime-local"
+                        label="Fecha de la boleta"
+                        value={uploadDisplayDate}
+                        onChange={(e) => setUploadDisplayDate(e.target.value)}
+                        slotProps={{
+                            htmlInput: { max: '9999-12-31T23:59' },
+                            inputLabel: { shrink: true },
+                        }}
+                        fullWidth
+                    />
+                </Box>
+            </AppDialog>
             <Box sx={{ display: 'flex', alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between', mb: 1, gap: 1, flexDirection: { xs: 'column', sm: 'row' } }}>
                 <Typography variant="subtitle2">Boletas</Typography>
                 <Box sx={{ display: 'flex', alignItems: { xs: 'stretch', sm: 'center' }, gap: 1, flexWrap: 'wrap', width: { xs: '100%', sm: 'auto' } }}>
@@ -234,7 +213,7 @@ const ReceiptsPane = ({
                         <Select label="Mes" value={boletaMonth} onChange={(e) => setBoletaMonth(e.target.value)}>
                             <MenuItem value="">(Todos)</MenuItem>
                             {boletaMonthOptions.map(m => (
-                                <MenuItem key={m} value={m}>{moment(m + '-01').format('MMMM YYYY')}</MenuItem>
+                                <MenuItem key={m} value={m}>{formatMonth(m + '-01')}</MenuItem>
                             ))}
                         </Select>
                     </FormControl>
@@ -353,33 +332,27 @@ const ReceiptsPane = ({
             )}
 
             {/* Reject dialog */}
-            <Dialog open={!!rejectDialogReceipt} onClose={closeRejectDialog} maxWidth="xs" fullWidth>
-                <DialogTitle>Rechazar boleta</DialogTitle>
-                <DialogContent dividers>
-                    <TextField
-                        size="small"
-                        label="Motivo (opcional)"
-                        placeholder="Ej. foto borrosa, monto incorrecto"
-                        value={rejectReason}
-                        onChange={(e) => setRejectReason(e.target.value)}
-                        fullWidth
-                        multiline
-                        minRows={2}
-                    />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={closeRejectDialog} disabled={rejectLoading}>Cancelar</Button>
-                    <Button
-                        variant="contained"
-                        color="error"
-                        onClick={confirmReject}
-                        disabled={rejectLoading}
-                        startIcon={rejectLoading ? <CircularProgress size={16} /> : null}
-                    >
-                        Rechazar
-                    </Button>
-                </DialogActions>
-            </Dialog>
+            <AppDialog
+                open={!!rejectDialogReceipt}
+                onClose={closeRejectDialog}
+                title="Rechazar boleta"
+                size="xs"
+                onSubmit={confirmReject}
+                submitLabel="Rechazar"
+                submitting={rejectLoading}
+                tone="danger"
+            >
+                <TextField
+                    size="small"
+                    label="Motivo (opcional)"
+                    placeholder="Ej. foto borrosa, monto incorrecto"
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    fullWidth
+                    multiline
+                    minRows={2}
+                />
+            </AppDialog>
         </>
     );
 };

@@ -15,12 +15,7 @@ import {
     TableHead,
     TableRow,
     Paper,
-    Snackbar,
     Alert,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     TextField,
     Autocomplete,
     Chip,
@@ -39,6 +34,9 @@ import ScheduleThresholdsDialog from '../components/ScheduleThresholdsDialog';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import useClientScope from '../hooks/useClientScope';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
+import AppDialog from '../components/dialogs/AppDialog';
 
 const SchoolBusesPage = () => {
     const { hasPermission } = usePermissions();
@@ -81,7 +79,8 @@ const SchoolBusesPage = () => {
         transferableCount: 0
     });
     const [crewChangeIntent, setCrewChangeIntent] = useState({});
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
+    const confirm = useConfirm();
 
     const stateCicloEscolar = location.state?.cicloEscolar || stateSchool?.cicloEscolar || stateSchool?.CicloEscolar || null;
     const currentCicloEscolar = schoolData?.cicloEscolar || schoolData?.CicloEscolar || stateCicloEscolar;
@@ -144,10 +143,10 @@ const SchoolBusesPage = () => {
             }
         } catch (err) {
             console.error('Error fetching school data:', err);
-            setSnackbar({ open: true, message: 'Error al obtener datos del colegio', severity: 'error' });
+            notify.error('Error al obtener datos del colegio');
             setSchoolRouteNumbers([]);
         }
-    }, [auth.token, schoolId]);
+    }, [auth.token, schoolId, notify]);
 
     const fetchBuses = useCallback(async () => {
         if (!schoolId) {
@@ -182,10 +181,10 @@ const SchoolBusesPage = () => {
             setRouteMonitorAssignments(prev => ({ ...prev, ...routeMonitors }));
         } catch (err) {
             console.error('Error fetching buses:', err);
-            setSnackbar({ open: true, message: 'Error al obtener buses', severity: 'error' });
+            notify.error('Error al obtener buses');
             setBuses([]);
         }
-    }, [auth.token, schoolId]);
+    }, [auth.token, schoolId, notify]);
 
     const fetchSchoolSchedules = useCallback(async () => {
         if (!schoolId) {
@@ -371,9 +370,14 @@ const SchoolBusesPage = () => {
         }));
     };
 
-    const handleRoutePilotChange = (routeNumber, pilotId) => {
+    const handleRoutePilotChange = async (routeNumber, pilotId) => {
         if (!pilotId) {
-            const confirmed = window.confirm(`Confirma desasignar piloto de la Ruta ${routeNumber}.`);
+            const confirmed = await confirm({
+                title: 'Desasignar piloto',
+                message: `Se quitará el piloto de la Ruta ${routeNumber}. El cambio se aplica al guardar las asignaciones.`,
+                confirmLabel: 'Desasignar',
+                tone: 'danger',
+            });
             if (!confirmed) {
                 return;
             }
@@ -390,9 +394,14 @@ const SchoolBusesPage = () => {
         });
     };
 
-    const handleRouteMonitorChange = (routeNumber, monitorId) => {
+    const handleRouteMonitorChange = async (routeNumber, monitorId) => {
         if (!monitorId) {
-            const confirmed = window.confirm(`Confirma desasignar monitora de la Ruta ${routeNumber}.`);
+            const confirmed = await confirm({
+                title: 'Desasignar monitora',
+                message: `Se quitará la monitora de la Ruta ${routeNumber}. El cambio se aplica al guardar las asignaciones.`,
+                confirmLabel: 'Desasignar',
+                tone: 'danger',
+            });
             if (!confirmed) {
                 return;
             }
@@ -466,16 +475,12 @@ const SchoolBusesPage = () => {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
 
-            setSnackbar({ open: true, message: `Horarios de la Ruta ${scheduleModalRoute} guardados`, severity: 'success' });
+            notify.success(`Horarios de la Ruta ${scheduleModalRoute} guardados`);
             setScheduleModalRoute(null);
             await fetchRouteAssignments();
         } catch (err) {
             console.error('Error saving route schedules:', err);
-            setSnackbar({
-                open: true,
-                message: `Error al guardar horarios: ${err.response?.data?.message || err.message}`,
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error al guardar los horarios');
         } finally {
             setSavingSchedule(false);
         }
@@ -509,22 +514,14 @@ const SchoolBusesPage = () => {
                 headers: { Authorization: `Bearer ${auth.token}` }
             });
 
-            setSnackbar({
-                open: true,
-                message: response?.data?.message || (isPreparationMode ? 'Asignaciones de preparación guardadas' : 'Asignaciones guardadas exitosamente'),
-                severity: 'success'
-            });
+            notify.success(response?.data?.message || (isPreparationMode ? 'Asignaciones de preparación guardadas' : 'Asignaciones guardadas'));
 
             setCrewChangeIntent({});
             await Promise.all([fetchBuses(), fetchRouteAssignments()]);
 
         } catch (err) {
             console.error('Error saving assignments:', err);
-            setSnackbar({ 
-                open: true, 
-                message: `Error al guardar asignaciones: ${err.response?.data?.message || err.message}`, 
-                severity: 'error' 
-            });
+            notify.fromError(err, 'Error al guardar las asignaciones');
         } finally {
             setSaving(false);
         }
@@ -548,23 +545,17 @@ const SchoolBusesPage = () => {
             const skippedCount = Array.isArray(response.data?.skipped) ? response.data.skipped.length : 0;
             const skippedText = skippedCount > 0 ? ` (${skippedCount} rutas ya tenían asignación y se omitieron)` : '';
 
-            setSnackbar({
-                open: true,
-                message: transferredCount > 0
-                    ? `Se transfirieron ${transferredCount} asignaciones del ciclo anterior${skippedText}.`
-                    : (response.data?.message || 'No se transfirieron asignaciones.'),
-                severity: transferredCount > 0 ? 'success' : 'info'
-            });
+            if (transferredCount > 0) {
+                notify.success(`Se transfirieron ${transferredCount} asignaciones del ciclo anterior${skippedText}`);
+            } else {
+                notify.info(response.data?.message || 'No se transfirieron asignaciones');
+            }
 
             await Promise.all([fetchBuses(), fetchRouteAssignments()]);
             await fetchPreviousCycleAssignments();
         } catch (err) {
             console.error('Error transferring previous cycle bus assignments:', err);
-            setSnackbar({
-                open: true,
-                message: `Error al transferir asignaciones: ${err.response?.data?.message || err.message}`,
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error al transferir las asignaciones');
         } finally {
             setPreviousCycleTransfer(prev => ({ ...prev, transferring: false }));
         }
@@ -587,10 +578,10 @@ const SchoolBusesPage = () => {
             await Promise.all([fetchSchoolData(), fetchSchoolSchedules(), fetchBuses(), fetchPilots(), fetchMonitors(), fetchRouteAssignments()]);
             await fetchPreviousCycleAssignments();
             setCrewChangeIntent({});
-            setSnackbar({ open: true, message: 'Datos actualizados', severity: 'success' });
+            notify.success('Datos actualizados');
         } catch (err) {
             console.error('Error refreshing data:', err);
-            setSnackbar({ open: true, message: 'Error al actualizar datos', severity: 'error' });
+            notify.error('Error al actualizar datos');
         } finally {
             setLoading(false);
         }
@@ -955,76 +946,52 @@ const SchoolBusesPage = () => {
                 saving={savingSchedule}
             />
 
-            <Dialog
+            <AppDialog
                 open={transferPreviewOpen}
                 onClose={() => setTransferPreviewOpen(false)}
-                maxWidth="lg"
-                fullWidth
+                title="Transferir asignaciones del ciclo anterior"
+                size="lg"
+                onSubmit={handleTransferPreviousCycleAssignments}
+                submitLabel="Transferir"
+                submitDisabled={previousCycleTransferCount === 0}
+                submitting={previousCycleTransfer.transferring}
+                readOnly={!(hasPermission('buses-editar'))}
             >
-                <DialogTitle>Confirmar transferencia del ciclo anterior</DialogTitle>
-                <DialogContent>
-                    <Alert severity="info" sx={{ mb: 2 }}>
-                        Se aplicarán {previousCycleTransferCount} cambios desde el ciclo {previousCycleLabel}. {previousCycleSkippedCount > 0 ? `${previousCycleSkippedCount} rutas se omitirán porque ya tienen una placa asignada.` : ''}
-                    </Alert>
-
-                    <TableContainer component={Paper} variant="outlined">
-                        <Table size="small">
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell><strong>Ruta</strong></TableCell>
-                                    <TableCell><strong>Placa que quedará</strong></TableCell>
-                                    <TableCell><strong>Piloto que quedará</strong></TableCell>
-                                    <TableCell><strong>Monitora que quedará</strong></TableCell>
-                                    <TableCell><strong>Resultado</strong></TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {previousCycleTransfer.assignments.map((assignment) => (
-                                    <TableRow key={`${assignment.routeNumber}-${assignment.busId}`}>
-                                        <TableCell>Ruta {assignment.routeNumber}</TableCell>
-                                        <TableCell>{assignment.currentAssignment ? assignment.currentAssignment.plate : assignment.plate}</TableCell>
-                                        <TableCell>{formatTransferUserOutcome(assignment, 'pilot')}</TableCell>
-                                        <TableCell>{formatTransferUserOutcome(assignment, 'monitora')}</TableCell>
-                                        <TableCell>
-                                            <Chip
-                                                size="small"
-                                                label={getTransferStatusLabel(assignment)}
-                                                color={assignment.currentAssignment ? 'warning' : 'success'}
-                                            />
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setTransferPreviewOpen(false)} disabled={previousCycleTransfer.transferring}>
-                        Cancelar
-                    </Button>
-                    <PermissionGuard permission="buses-editar">
-                        <Button
-                            variant="contained"
-                            startIcon={previousCycleTransfer.transferring ? <CircularProgress size={16} color="inherit" /> : <ContentCopy />}
-                            onClick={handleTransferPreviousCycleAssignments}
-                            disabled={previousCycleTransfer.transferring || previousCycleTransferCount === 0}
-                        >
-                            {previousCycleTransfer.transferring ? 'Transfiriendo...' : 'Aceptar y transferir'}
-                        </Button>
-                    </PermissionGuard>
-                </DialogActions>
-            </Dialog>
-
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
-                    {snackbar.message}
+                <Alert severity="info" sx={{ mb: 2 }}>
+                    Se aplicarán {previousCycleTransferCount} cambios desde el ciclo {previousCycleLabel}. {previousCycleSkippedCount > 0 ? `${previousCycleSkippedCount} rutas se omitirán porque ya tienen una placa asignada.` : ''}
                 </Alert>
-            </Snackbar>
+
+                <TableContainer component={Paper} variant="outlined">
+                    <Table size="small">
+                        <TableHead>
+                            <TableRow>
+                                <TableCell><strong>Ruta</strong></TableCell>
+                                <TableCell><strong>Placa que quedará</strong></TableCell>
+                                <TableCell><strong>Piloto que quedará</strong></TableCell>
+                                <TableCell><strong>Monitora que quedará</strong></TableCell>
+                                <TableCell><strong>Resultado</strong></TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {previousCycleTransfer.assignments.map((assignment) => (
+                                <TableRow key={`${assignment.routeNumber}-${assignment.busId}`}>
+                                    <TableCell>Ruta {assignment.routeNumber}</TableCell>
+                                    <TableCell>{assignment.currentAssignment ? assignment.currentAssignment.plate : assignment.plate}</TableCell>
+                                    <TableCell>{formatTransferUserOutcome(assignment, 'pilot')}</TableCell>
+                                    <TableCell>{formatTransferUserOutcome(assignment, 'monitora')}</TableCell>
+                                    <TableCell>
+                                        <Chip
+                                            size="small"
+                                            label={getTransferStatusLabel(assignment)}
+                                            color={assignment.currentAssignment ? 'warning' : 'success'}
+                                        />
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            </AppDialog>
         </PageContainer>
     );
 };

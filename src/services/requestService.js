@@ -32,6 +32,16 @@ export const updateRequestStatus = async (id, data) => {
     return res.data;
 };
 
+export const createRequest = async (data) => {
+    const res = await api.post(API_URL, data);
+    return res.data;
+};
+
+export const updateRequestDueDate = async (id, dueDate) => {
+    const res = await api.patch(`${API_URL}/${id}/due-date`, { dueDate });
+    return res.data;
+};
+
 export const deleteRequest = async (id) => {
     const res = await api.delete(`${API_URL}/${id}`);
     return res.data;

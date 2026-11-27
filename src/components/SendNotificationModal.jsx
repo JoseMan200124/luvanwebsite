@@ -1,8 +1,8 @@
 // src/components/SendNotificationModal.jsx
 import React, { useEffect, useState } from 'react';
 import {
-    Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField,
-    Typography, Box, Alert, CircularProgress, Divider,
+    TextField,
+    Typography, Box, Alert, Divider,
 } from '@mui/material';
 import { Notifications as NotificationsIcon, Schedule as ScheduleIcon } from '@mui/icons-material';
 import AudienceTargetingPanel from './audience/AudienceTargetingPanel';
@@ -13,6 +13,7 @@ import {
 } from './scheduling/scheduleModel';
 import { sendManualNotification } from '../services/notificationService';
 import { createScheduledNotification, updateScheduledSend } from '../services/scheduledSendService';
+import AppDialog from './dialogs/AppDialog';
 
 const MAX_MESSAGE_LENGTH = 255;
 
@@ -101,96 +102,87 @@ const SendNotificationModal = ({ open, onClose, schools = [], cicloEscolarId = n
         }
     };
 
-    let submitLabel = 'Enviar Notificación';
+    let submitLabel = 'Enviar notificación';
     if (editing) {
         submitLabel = 'Guardar cambios';
     }
     else if (isScheduled) {
-        submitLabel = 'Programar Notificación';
+        submitLabel = 'Programar notificación';
     }
 
     return (
-        <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-            <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {editing ? <ScheduleIcon color="primary" /> : <NotificationsIcon color="primary" />}
-                {editing ? 'Editar Notificación Programada' : 'Enviar Notificación Push'}
-            </DialogTitle>
+        <AppDialog
+            open={open}
+            onClose={handleClose}
+            title={editing ? 'Editar notificación programada' : 'Enviar notificación push'}
+            icon={editing ? <ScheduleIcon /> : <NotificationsIcon />}
+            size="sm"
+            onSubmit={handleSubmit}
+            submitLabel={submitLabel}
+            submitting={loading}
+            submitDisabled={!audienceValidation.valid || !scheduleValidation.valid || totalUnique === 0 || !title.trim() || !message.trim()}
+            readOnly={Boolean(successMessage)}
+            dirty={!editing && !successMessage && Boolean(title.trim() || message.trim())}
+        >
+            {successMessage ? (
+                <Alert severity="success" sx={{ mt: 1 }}>{successMessage}</Alert>
+            ) : (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: 0.5 }}>
+                    <AudienceTargetingPanel
+                        schools={schools}
+                        value={audience}
+                        loadedAudience={editing?.audience || null}
+                        onChange={setAudience}
+                        cicloEscolarId={cicloEscolarId}
+                        onPreviewChange={setPreview}
+                    />
 
-            <DialogContent dividers>
-                {successMessage ? (
-                    <Alert severity="success" sx={{ mt: 1 }}>{successMessage}</Alert>
-                ) : (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: 0.5 }}>
-                        <AudienceTargetingPanel
-                            schools={schools}
-                            value={audience}
-                            loadedAudience={editing?.audience || null}
-                            onChange={setAudience}
-                            cicloEscolarId={cicloEscolarId}
-                            onPreviewChange={setPreview}
-                        />
+                    <Divider />
 
-                        <Divider />
+                    <Typography variant="subtitle2" color="text.secondary" sx={{ mb: -1 }}>
+                        4) Contenido de la notificación
+                    </Typography>
 
-                        <Typography variant="subtitle2" color="text.secondary" sx={{ mb: -1 }}>
-                            4) Contenido de la notificación
-                        </Typography>
+                    <TextField
+                        label="Título"
+                        value={title}
+                        onChange={(e) => { setTitle(e.target.value); setError(''); }}
+                        fullWidth
+                        size="small"
+                        required
+                        inputProps={{ maxLength: 100 }}
+                    />
 
-                        <TextField
-                            label="Título"
-                            value={title}
-                            onChange={(e) => { setTitle(e.target.value); setError(''); }}
-                            fullWidth
-                            size="small"
-                            required
-                            inputProps={{ maxLength: 100 }}
-                        />
+                    <TextField
+                        label="Mensaje"
+                        value={message}
+                        onChange={(e) => { setMessage(e.target.value); setError(''); }}
+                        fullWidth
+                        size="small"
+                        required
+                        multiline
+                        minRows={3}
+                        maxRows={6}
+                        inputProps={{ maxLength: MAX_MESSAGE_LENGTH }}
+                        helperText={
+                            <Typography
+                                component="span"
+                                variant="caption"
+                                color={remaining < 20 ? 'error' : 'text.secondary'}
+                            >
+                                {remaining} caracteres restantes
+                            </Typography>
+                        }
+                    />
 
-                        <TextField
-                            label="Mensaje"
-                            value={message}
-                            onChange={(e) => { setMessage(e.target.value); setError(''); }}
-                            fullWidth
-                            size="small"
-                            required
-                            multiline
-                            minRows={3}
-                            maxRows={6}
-                            inputProps={{ maxLength: MAX_MESSAGE_LENGTH }}
-                            helperText={
-                                <Typography
-                                    component="span"
-                                    variant="caption"
-                                    color={remaining < 20 ? 'error' : 'text.secondary'}
-                                >
-                                    {remaining} caracteres restantes
-                                </Typography>
-                            }
-                        />
+                    <Divider />
 
-                        <Divider />
+                    <ScheduleSection value={schedule} onChange={setSchedule} allowSendNow={!editing} />
 
-                        <ScheduleSection value={schedule} onChange={setSchedule} allowSendNow={!editing} />
-
-                        {error && <Alert severity="error">{error}</Alert>}
-                    </Box>
-                )}
-            </DialogContent>
-
-            <DialogActions sx={{ px: 3, py: 2 }}>
-                <Button onClick={handleClose} disabled={loading}>Cancelar</Button>
-                {!successMessage && (
-                    <Button
-                        onClick={handleSubmit}
-                        variant="contained"
-                        disabled={loading || !audienceValidation.valid || !scheduleValidation.valid || totalUnique === 0 || !title.trim() || !message.trim()}
-                        startIcon={loading ? <CircularProgress size={16} /> : (isScheduled ? <ScheduleIcon /> : <NotificationsIcon />)}
-                    >
-                        {loading ? 'Guardando...' : submitLabel}
-                    </Button>
-                )}
-            </DialogActions>
-        </Dialog>
+                    {error && <Alert severity="error">{error}</Alert>}
+                </Box>
+            )}
+        </AppDialog>
     );
 };
 

@@ -10,15 +10,12 @@ import {
     TableRow,
     TableCell,
     TableBody,
-    TablePagination,
     TableContainer,
     IconButton as MuiIconButton,
     Collapse,
     ToggleButtonGroup,
     ToggleButton,
     TextField,
-    useMediaQuery,
-    useTheme,
     Skeleton,
     Alert
 } from '@mui/material';
@@ -49,28 +46,16 @@ import {
     Build as BuildIcon,
     AssignmentReturn as AssignmentReturnIcon
 } from '@mui/icons-material';
-import moment from 'moment';
 import api from '../utils/axiosConfig';
+import useTableState from '../hooks/useTableState';
+import AppTablePagination from './table/AppTablePagination';
+import useIsMobile from '../hooks/useIsMobile';
+import { formatDateTime, formatDateShort } from '../utils/dateFormat';
+import { formatQ } from '../utils/currency';
 
 // ============================================================
 // Helpers
 // ============================================================
-
-const fmt = (v) => `Q${Number(v || 0).toFixed(2)}`;
-
-const formatDate = (d) => {
-    if (!d) {
-        return '—';
-    }
-    try { return moment.parseZone(d).format('DD/MM/YYYY HH:mm'); } catch (e) { return String(d); }
-};
-
-const formatDateShort = (d) => {
-    if (!d) {
-        return '—';
-    }
-    try { return moment.parseZone(d).format('DD/MM/YY'); } catch (e) { return String(d); }
-};
 
 const formatPeriodLabel = (period) => {
     if (!period) {
@@ -253,7 +238,7 @@ const EventBreakdownPanel = ({ event }) => {
                                 <Chip
                                     key={row.label}
                                     size="small"
-                                    label={`${row.label}: ${fmt(row.amount)}`}
+                                    label={`${row.label}: ${formatQ(row.amount || 0)}`}
                                     variant="outlined"
                                     sx={{ height: 22, '& .MuiChip-label': { fontSize: '0.7rem', px: 0.75 } }}
                                 />
@@ -276,15 +261,15 @@ const EventBreakdownPanel = ({ event }) => {
                                     {periods.map((p, idx) => (
                                         <TableRow key={`${p.period}-${idx}`}>
                                             <TableCell sx={{ fontSize: '0.75rem', py: 0.5 }}>{formatPeriodLabel(p.period) || '—'}</TableCell>
-                                            <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5, color: 'success.main' }}>{fmt(p.amountApplied)}</TableCell>
+                                            <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5, color: 'success.main' }}>{formatQ(p.amountApplied || 0)}</TableCell>
                                             <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5, color: p.discountApplied > 0 ? 'error.main' : undefined }}>
-                                                {p.discountApplied > 0 ? fmt(p.discountApplied) : '—'}
+                                                {p.discountApplied > 0 ? formatQ(p.discountApplied || 0) : '—'}
                                             </TableCell>
                                             <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5 }}>
-                                                {p.before && p.after ? `${fmt(p.before.amountDue)} → ${fmt(p.after.amountDue)}` : '—'}
+                                                {p.before && p.after ? `${formatQ(p.before.amountDue || 0)} → ${formatQ(p.after.amountDue || 0)}` : '—'}
                                             </TableCell>
                                             <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5 }}>
-                                                {p.penaltyBefore && p.penaltyAfter ? `${fmt(p.penaltyBefore.penaltyDue)} → ${fmt(p.penaltyAfter.penaltyDue)}` : '—'}
+                                                {p.penaltyBefore && p.penaltyAfter ? `${formatQ(p.penaltyBefore.penaltyDue || 0)} → ${formatQ(p.penaltyAfter.penaltyDue || 0)}` : '—'}
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -308,13 +293,13 @@ const EventBreakdownPanel = ({ event }) => {
                                         <TableRow key={`${p.period}-${idx}`}>
                                             <TableCell sx={{ fontSize: '0.75rem', py: 0.5 }}>{formatPeriodLabel(p.period) || '—'}</TableCell>
                                             <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5 }}>
-                                                {p.netBefore != null && p.netAfter != null ? `${fmt(p.netBefore)} → ${fmt(p.netAfter)}` : '—'}
+                                                {p.netBefore != null && p.netAfter != null ? `${formatQ(p.netBefore || 0)} → ${formatQ(p.netAfter || 0)}` : '—'}
                                             </TableCell>
                                             <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5 }}>
-                                                {p.dueBefore != null && p.dueAfter != null ? `${fmt(p.dueBefore)} → ${fmt(p.dueAfter)}` : '—'}
+                                                {p.dueBefore != null && p.dueAfter != null ? `${formatQ(p.dueBefore || 0)} → ${formatQ(p.dueAfter || 0)}` : '—'}
                                             </TableCell>
                                             <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5, color: p.creditDelta > 0 ? 'success.main' : undefined }}>
-                                                {p.creditDelta > 0 ? fmt(p.creditDelta) : '—'}
+                                                {p.creditDelta > 0 ? formatQ(p.creditDelta || 0) : '—'}
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -357,7 +342,7 @@ const BalanceChips = ({ event }) => {
                 <Chip
                     size="small"
                     icon={<SchoolIcon sx={{ fontSize: '0.85rem !important' }} />}
-                    label={`Inscripción: ${fmt(enrollmentShift.before)} → ${fmt(enrollmentShift.after)}`}
+                    label={`Inscripción: ${formatQ(enrollmentShift.before || 0)} → ${formatQ(enrollmentShift.after || 0)}`}
                     variant="outlined"
                     sx={{
                         height: 22,
@@ -371,7 +356,7 @@ const BalanceChips = ({ event }) => {
             {hasBalance && (
                 <Chip
                     size="small"
-                    label={`Balance: ${fmt(event.balanceBefore)} → ${fmt(event.balanceAfter)}`}
+                    label={`Balance: ${formatQ(event.balanceBefore || 0)} → ${formatQ(event.balanceAfter || 0)}`}
                     color={Number(event.balanceAfter) > Number(event.balanceBefore) ? 'warning' : 'success'}
                     variant="outlined"
                     sx={{ height: 22, '& .MuiChip-label': { fontSize: '0.7rem', px: 0.75 } }}
@@ -380,7 +365,7 @@ const BalanceChips = ({ event }) => {
             {hasPenalty && (
                 <Chip
                     size="small"
-                    label={`Mora: ${fmt(event.penaltyBefore)} → ${fmt(event.penaltyAfter)}`}
+                    label={`Mora: ${formatQ(event.penaltyBefore || 0)} → ${formatQ(event.penaltyAfter || 0)}`}
                     color={Number(event.penaltyAfter) > Number(event.penaltyBefore) ? 'error' : 'success'}
                     variant="outlined"
                     sx={{ height: 22, '& .MuiChip-label': { fontSize: '0.7rem', px: 0.75 } }}
@@ -389,7 +374,7 @@ const BalanceChips = ({ event }) => {
             {hasCredit && (
                 <Chip
                     size="small"
-                    label={`Crédito: ${fmt(event.creditBefore)} → ${fmt(event.creditAfter)}`}
+                    label={`Crédito: ${formatQ(event.creditBefore || 0)} → ${formatQ(event.creditAfter || 0)}`}
                     color={Number(event.creditAfter) > Number(event.creditBefore) ? 'success' : 'info'}
                     variant="outlined"
                     sx={{ height: 22, '& .MuiChip-label': { fontSize: '0.7rem', px: 0.75 } }}
@@ -453,20 +438,20 @@ const TimelineEventDesktop = ({ event, isLast }) => {
                         <Chip
                             size="small"
                             icon={<BlockIcon sx={{ fontSize: '0.8rem !important' }} />}
-                            label={event.supersededAt ? `Revertido ${formatDateShort(event.supersededAt)}` : 'Revertido'}
+                            label={event.supersededAt ? `Revertido ${formatDateShort(event.supersededAt, { keepZone: true })}` : 'Revertido'}
                             color="error"
                             variant="outlined"
                             sx={{ height: 20, '& .MuiChip-label': { fontSize: '0.68rem', px: 0.6, fontWeight: 700 } }}
                         />
                     )}
                     <Typography variant="caption" color="text.secondary">
-                        registrado {formatDate(event.occurredAt)}
+                        registrado {formatDateTime(event.occurredAt, { keepZone: true })}
                     </Typography>
                     {event.realPaymentDate && (
                         <Chip
                             size="small"
                             icon={<EventAvailableIcon sx={{ fontSize: '0.8rem !important' }} />}
-                            label={`Fecha de pago: ${formatDateShort(event.realPaymentDate)}`}
+                            label={`Fecha de pago: ${formatDateShort(event.realPaymentDate, { keepZone: true })}`}
                             variant="outlined"
                             sx={{ height: 20, '& .MuiChip-label': { fontSize: '0.68rem', px: 0.6 } }}
                         />
@@ -531,7 +516,7 @@ const TimelineEventMobile = ({ event }) => {
                             {event.title}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                            registrado {formatDate(event.occurredAt)}
+                            registrado {formatDateTime(event.occurredAt, { keepZone: true })}
                         </Typography>
                     </Box>
                 </Box>
@@ -540,7 +525,7 @@ const TimelineEventMobile = ({ event }) => {
                         <Chip
                             size="small"
                             icon={<BlockIcon sx={{ fontSize: '0.8rem !important' }} />}
-                            label={event.supersededAt ? `Revertido ${formatDateShort(event.supersededAt)}` : 'Revertido'}
+                            label={event.supersededAt ? `Revertido ${formatDateShort(event.supersededAt, { keepZone: true })}` : 'Revertido'}
                             color="error"
                             variant="outlined"
                             sx={{ height: 20, '& .MuiChip-label': { fontSize: '0.68rem', px: 0.6, fontWeight: 700 } }}
@@ -550,7 +535,7 @@ const TimelineEventMobile = ({ event }) => {
                         <Chip
                             size="small"
                             icon={<EventAvailableIcon sx={{ fontSize: '0.8rem !important' }} />}
-                            label={`Fecha de pago: ${formatDateShort(event.realPaymentDate)}`}
+                            label={`Fecha de pago: ${formatDateShort(event.realPaymentDate, { keepZone: true })}`}
                             variant="outlined"
                             sx={{ height: 20, '& .MuiChip-label': { fontSize: '0.68rem', px: 0.6 } }}
                         />
@@ -631,19 +616,19 @@ const PeriodBreakdownTable = ({ periods }) => {
                                                 </Typography>
                                             )}
                                         </TableCell>
-                                        <TableCell align="right" sx={{ fontSize: '0.8rem' }}>{fmt(p.originalAmount)}</TableCell>
-                                        <TableCell align="right" sx={{ fontSize: '0.8rem', color: 'error.main' }}>{fmt(p.discountApplied)}</TableCell>
-                                        <TableCell align="right" sx={{ fontSize: '0.8rem' }}>{fmt(p.netAmount)}</TableCell>
-                                        <TableCell align="right" sx={{ fontSize: '0.8rem', color: 'success.main' }}>{fmt(p.amountPaid)}</TableCell>
-                                        <TableCell align="right" sx={{ fontSize: '0.8rem', color: 'error.main' }}>{fmt(p.penaltyAmount)}</TableCell>
-                                        <TableCell align="right" sx={{ fontSize: '0.8rem', color: 'success.main' }}>{fmt(p.penaltyPaid)}</TableCell>
-                                        <TableCell align="right" sx={{ fontSize: '0.8rem', color: Number(p.penaltyDue) > 0 ? 'error.main' : undefined }}>{fmt(p.penaltyDue)}</TableCell>
+                                        <TableCell align="right" sx={{ fontSize: '0.8rem' }}>{formatQ(p.originalAmount || 0)}</TableCell>
+                                        <TableCell align="right" sx={{ fontSize: '0.8rem', color: 'error.main' }}>{formatQ(p.discountApplied || 0)}</TableCell>
+                                        <TableCell align="right" sx={{ fontSize: '0.8rem' }}>{formatQ(p.netAmount || 0)}</TableCell>
+                                        <TableCell align="right" sx={{ fontSize: '0.8rem', color: 'success.main' }}>{formatQ(p.amountPaid || 0)}</TableCell>
+                                        <TableCell align="right" sx={{ fontSize: '0.8rem', color: 'error.main' }}>{formatQ(p.penaltyAmount || 0)}</TableCell>
+                                        <TableCell align="right" sx={{ fontSize: '0.8rem', color: 'success.main' }}>{formatQ(p.penaltyPaid || 0)}</TableCell>
+                                        <TableCell align="right" sx={{ fontSize: '0.8rem', color: Number(p.penaltyDue) > 0 ? 'error.main' : undefined }}>{formatQ(p.penaltyDue || 0)}</TableCell>
                                         <TableCell align="right" sx={{
                                             fontSize: '0.8rem',
                                             fontWeight: 600,
                                             color: balance > 0 ? 'warning.dark' : 'success.dark'
                                         }}>
-                                            {fmt(balance)}
+                                            {formatQ(balance || 0)}
                                         </TableCell>
                                         <TableCell sx={{ py: 1.5 }}>
                                             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -673,13 +658,13 @@ const PeriodBreakdownTable = ({ periods }) => {
                 {periods.length > 0 && (
                     <Box sx={{ mt: 1, display: 'flex', gap: 2, flexWrap: 'wrap', p: 1, bgcolor: '#fafafa', borderRadius: 1 }}>
                         <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                            Total Facturado: <Box component="span" sx={{ color: 'text.primary' }}>{fmt(periods.reduce((s, p) => s + Number(p.originalAmount || 0), 0))}</Box>
+                            Total Facturado: <Box component="span" sx={{ color: 'text.primary' }}>{formatQ((periods.reduce((s, p) => s + Number(p.originalAmount || 0), 0)) || 0)}</Box>
                         </Typography>
                         <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                            Total Pagado: <Box component="span" sx={{ color: 'success.main' }}>{fmt(periods.reduce((s, p) => s + Number(p.amountPaid || 0), 0))}</Box>
+                            Total Pagado: <Box component="span" sx={{ color: 'success.main' }}>{formatQ((periods.reduce((s, p) => s + Number(p.amountPaid || 0), 0)) || 0)}</Box>
                         </Typography>
                         <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                            Total Mora: <Box component="span" sx={{ color: 'error.main' }}>{fmt(periods.reduce((s, p) => s + Number(p.penaltyDue || 0), 0))}</Box>
+                            Total Mora: <Box component="span" sx={{ color: 'error.main' }}>{formatQ((periods.reduce((s, p) => s + Number(p.penaltyDue || 0), 0)) || 0)}</Box>
                         </Typography>
                     </Box>
                 )}
@@ -693,14 +678,13 @@ const PeriodBreakdownTable = ({ periods }) => {
 // ============================================================
 
 const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [flowData, setFlowData] = useState(null);
-    const [flowPage, setFlowPage] = useState(0);
-    const [flowLimit, setFlowLimit] = useState(20);
+    const flowTable = useTableState();
+    const { page: flowPage, rowsPerPage: flowLimit, setPage: setFlowPage } = flowTable;
     const [flowTotal, setFlowTotal] = useState(0);
     const [sortOrder, setSortOrder] = useState('desc');
     const [dateFrom, setDateFrom] = useState('');
@@ -824,13 +808,13 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
                     <Box sx={{ flex: '1 1 130px', minWidth: 110, p: 1.5, bgcolor: '#fff', borderRadius: 1.5, border: '1px solid #e0e0e0' }}>
                         <Typography variant="caption" color="text.secondary">Tarifa Pendiente</Typography>
                         <Typography variant="body1" sx={{ fontWeight: 700, color: Number(payment?.balanceDue || 0) > 0 ? 'warning.dark' : 'success.dark' }}>
-                            {fmt(payment?.balanceDue || 0)}
+                            {formatQ((payment?.balanceDue || 0) || 0)}
                         </Typography>
                     </Box>
                     <Box sx={{ flex: '1 1 130px', minWidth: 110, p: 1.5, bgcolor: '#fff', borderRadius: 1.5, border: '1px solid #e0e0e0' }}>
                         <Typography variant="caption" color="text.secondary">Mora Pendiente</Typography>
                         <Typography variant="body1" sx={{ fontWeight: 700, color: Number(payment?.penaltyDue || 0) > 0 ? 'error.main' : 'success.dark' }}>
-                            {fmt(payment?.penaltyDue || 0)}
+                            {formatQ((payment?.penaltyDue || 0) || 0)}
                         </Typography>
                     </Box>
                     {/* Solo si la familia tiene cargo de inscripción para este ciclo */}
@@ -838,14 +822,14 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
                         <Box sx={{ flex: '1 1 130px', minWidth: 110, p: 1.5, bgcolor: '#fff', borderRadius: 1.5, border: '1px solid #e0e0e0' }}>
                             <Typography variant="caption" color="text.secondary">Inscripción Pendiente</Typography>
                             <Typography variant="body1" sx={{ fontWeight: 700, color: Number(enrollmentPayment.amountDue || 0) > 0 ? 'warning.dark' : 'success.dark' }}>
-                                {fmt(enrollmentPayment.amountDue || 0)}
+                                {formatQ(enrollmentPayment.amountDue || 0)}
                             </Typography>
                         </Box>
                     )}
                     <Box sx={{ flex: '1 1 130px', minWidth: 110, p: 1.5, bgcolor: '#fff', borderRadius: 1.5, border: '1px solid #e0e0e0' }}>
                         <Typography variant="caption" color="text.secondary">Crédito Disponible</Typography>
                         <Typography variant="body1" sx={{ fontWeight: 700, color: Number(payment?.creditBalance || 0) > 0 ? 'info.main' : 'text.disabled' }}>
-                            {fmt(payment?.creditBalance || 0)}
+                            {formatQ((payment?.creditBalance || 0) || 0)}
                         </Typography>
                     </Box>
                 </Box>
@@ -854,12 +838,12 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
                     <Box sx={{ mt: 1, display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
                         {Number(summary.totalExonerated || 0) > 0 && (
                             <Typography variant="caption" color="text.secondary">
-                                Exonerado: {fmt(summary.totalExonerated)}
+                                Exonerado: {formatQ(summary.totalExonerated || 0)}
                             </Typography>
                         )}
                         {Number(summary.totalExtraDiscount || 0) > 0 && (
                             <Typography variant="caption" color="text.secondary">
-                                Descuentos Extra: {fmt(summary.totalExtraDiscount)}
+                                Descuentos Extra: {formatQ(summary.totalExtraDiscount || 0)}
                             </Typography>
                         )}
                     </Box>
@@ -986,18 +970,10 @@ const PaymentFlowTimeline = ({ paymentId, userId, familyLastName }) => {
             {/* Paginación del timeline */}
             {flowTotal > flowLimit && (
                 <Box sx={{ display: 'flex', justifyContent: 'flex-start', mt: 1 }}>
-                    <TablePagination
-                        component="div"
+                    <AppTablePagination
                         count={flowTotal}
-                        page={flowPage}
-                        onPageChange={(e, newPage) => setFlowPage(newPage)}
-                        rowsPerPage={flowLimit}
-                        onRowsPerPageChange={(e) => {
-                            setFlowLimit(Number.parseInt(e.target.value, 10));
-                            setFlowPage(0);
-                        }}
-                        rowsPerPageOptions={[10, 20, 50]}
-                        labelRowsPerPage="Eventos"
+                        {...flowTable.paginationProps}
+                        labelRowsPerPage="Eventos por página"
                         sx={{
                             '& .MuiTablePagination-toolbar': { justifyContent: 'flex-start', paddingLeft: 0, flexWrap: 'wrap' },
                             '& .MuiTablePagination-spacer': { display: 'none' }

@@ -1,11 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import {
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Button,
     FormControl,
     InputLabel,
     Select,
@@ -33,6 +28,8 @@ import {
 } from '@mui/icons-material';
 import api from '../utils/axiosConfig';
 import usePermissions from '../hooks/usePermissions';
+import { SERVICE_STATUS } from '../constants/statuses';
+import AppDialog from './dialogs/AppDialog';
 
 // Cada estado del servicio lo aplica su propia ruta de /service-status.
 const LLAVE_POR_ESTADO = {
@@ -45,7 +42,7 @@ const LLAVE_POR_ESTADO = {
 // Definición de estados con sus propiedades
 const SERVICE_STATES = {
     ACTIVE: {
-        label: 'Activo',
+        label: SERVICE_STATUS.ACTIVE.label,
         icon: CheckCircle,
         color: 'success',
         description: 'Servicio activo normal. Se genera cobro mensual y acumula mora.',
@@ -54,7 +51,7 @@ const SERVICE_STATES = {
         accumulatesPenalty: true
     },
     PAUSED: {
-        label: 'Pausado',
+        label: SERVICE_STATUS.PAUSED.label,
         icon: Pause,
         color: 'warning',
         description: 'Pausado temporal (ej: vacaciones). No se cobra, no acumula mora. Usuario puede hacer login.',
@@ -63,7 +60,7 @@ const SERVICE_STATES = {
         accumulatesPenalty: false
     },
     SUSPENDED: {
-        label: 'Suspendido',
+        label: SERVICE_STATUS.SUSPENDED.label,
         icon: Block,
         color: 'error',
         description: 'Suspendido por mora severa o por no haber firmado contrato. Se genera cobro mensual y acumula mora. Usuario puede hacer login pero solo puede subir boletas de pago o firmar contrato.',
@@ -72,7 +69,7 @@ const SERVICE_STATES = {
         accumulatesPenalty: true
     },
     INACTIVE: {
-        label: 'Inactivo',
+        label: SERVICE_STATUS.INACTIVE.label,
         icon: RemoveCircle,
         color: 'default',
         description: 'No usa el servicio. Usuario NO puede hacer login. No se genera cobro ni mora.',
@@ -81,7 +78,7 @@ const SERVICE_STATES = {
         accumulatesPenalty: false
     },
     PENDING_START: {
-        label: 'Pendiente de inicio',
+        label: SERVICE_STATUS.PENDING_START.label,
         icon: HourglassEmpty,
         color: 'info',
         description: 'Inscrita en un colegio que aún no está en operaciones. No se cobra ni acumula mora. Al iniciar operaciones pasa sola a Activo (o a Suspendido si no firmó contrato). Puede activarse antes a mano.',
@@ -353,207 +350,184 @@ const UserServiceStatusModal = ({ open, onClose, user, schoolId, cicloEscolarId 
     }
 
     return (
-        <Dialog 
-            open={open} 
+        <AppDialog
+            open={open}
             onClose={handleClose}
-            maxWidth="md"
-            fullWidth
+            title="Gestionar estado del servicio"
+            icon={<Info />}
+            size="md"
+            onSubmit={handleSubmit}
+            submitLabel={submitLabel}
+            submitting={loading}
+            submitDisabled={!canSubmit}
         >
-            <DialogTitle>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Info color="primary" />
-                    <Typography variant="h6">
-                        Gestionar Estado del Servicio
+            {/* Información de la familia */}
+            <Paper elevation={0} sx={{ p: 2, mb: 3, bgcolor: 'grey.50' }}>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                    {userType === 'COLABORADOR' ? 'Colaborador' : 'Familia'}
+                </Typography>
+                <Typography variant="h6" gutterBottom>
+                    {user?.name || 'Sin nombre'}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                    Email: {user?.email || 'No disponible'}
+                </Typography>
+            </Paper>
+
+            {/* Estado actual */}
+            {loadingStatus ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+                    <CircularProgress size={30} />
+                </Box>
+            ) : currentStatus && (
+                <Box sx={{ mb: 3 }}>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        Estado Actual
+                    </Typography>
+                    <Chip
+                        icon={getStatusIcon(currentStatus)}
+                        label={SERVICE_STATES[currentStatus]?.label || currentStatus}
+                        color={getStatusColor(currentStatus)}
+                        sx={{ mb: 1 }}
+                    />
+                    <Typography variant="body2" color="text.secondary">
+                        {SERVICE_STATES[currentStatus]?.description}
                     </Typography>
                 </Box>
-            </DialogTitle>
+            )}
 
-            <DialogContent>
-                {/* Información de la familia */}
-                <Paper elevation={0} sx={{ p: 2, mb: 3, bgcolor: 'grey.50' }}>
+            <Divider sx={{ my: 3 }} />
+
+            {userType === 'FAMILY' && puedeEditarPolitica && (
+                <Box sx={{ mb: 3 }}>
                     <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                        {userType === 'COLABORADOR' ? 'Colaborador' : 'Familia'}
+                        Política manual para cambios automáticos a estado Suspendido
                     </Typography>
-                    <Typography variant="h6" gutterBottom>
-                        {user?.name || 'Sin nombre'}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                        Email: {user?.email || 'No disponible'}
-                    </Typography>
-                </Paper>
-
-                {/* Estado actual */}
-                {loadingStatus ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
-                        <CircularProgress size={30} />
-                    </Box>
-                ) : currentStatus && (
-                    <Box sx={{ mb: 3 }}>
-                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                            Estado Actual
-                        </Typography>
-                        <Chip
-                            icon={getStatusIcon(currentStatus)}
-                            label={SERVICE_STATES[currentStatus]?.label || currentStatus}
-                            color={getStatusColor(currentStatus)}
-                            sx={{ mb: 1 }}
-                        />
-                        <Typography variant="body2" color="text.secondary">
-                            {SERVICE_STATES[currentStatus]?.description}
-                        </Typography>
-                    </Box>
-                )}
-
-                <Divider sx={{ my: 3 }} />
-
-                {userType === 'FAMILY' && puedeEditarPolitica && (
-                    <Box sx={{ mb: 3 }}>
-                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                            Política manual para cambios automáticos a estado Suspendido
-                        </Typography>
-                        <Paper elevation={0} sx={{ p: 2, bgcolor: 'grey.50', border: theme => `1px solid ${theme.palette.divider}` }}>
-                            <FormControlLabel
-                                control={(
-                                    <Checkbox
-                                        checked={ignoreMissingContractForAutoSuspension}
-                                        onChange={(e) => setIgnoreMissingContractForAutoSuspension(e.target.checked)}
-                                        disabled={loading || loadingStatus}
-                                    />
-                                )}
-                                label="Ignorar falta de contrato firmado"
-                            />
-                            <FormControlLabel
-                                control={(
-                                    <Checkbox
-                                        checked={ignoreMoraForAutoSuspension}
-                                        onChange={(e) => setIgnoreMoraForAutoSuspension(e.target.checked)}
-                                        disabled={loading || loadingStatus}
-                                    />
-                                )}
-                                label="Ignorar mora"
-                            />
-                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                                Esta configuración le indica al sistema cómo manejar los cambios automáticos al estado Suspendido.
-                            </Typography>
-                        </Paper>
-                    </Box>
-                )}
-
-                {/* Selección de nuevo estado */}
-                <FormControl fullWidth sx={{ mb: 3 }}>
-                    <InputLabel>Nuevo Estado</InputLabel>
-                    <Select
-                        value={selectedStatus}
-                        onChange={(e) => setSelectedStatus(e.target.value)}
-                        label="Nuevo Estado"
-                        disabled={loading || loadingStatus || allowedStates.length === 0}
-                    >
-                        {allowedStates.map((state) => (
-                            <MenuItem key={state} value={state}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    {getStatusIcon(state)}
-                                    <span>{SERVICE_STATES[state]?.label || state}</span>
-                                </Box>
-                            </MenuItem>
-                        ))}
-                    </Select>
-                </FormControl>
-
-                {/* Descripción del estado seleccionado */}
-                {selectedStatus && (
-                    <Alert 
-                        severity="info" 
-                        sx={{ mb: 3 }}
-                        icon={getStatusIcon(selectedStatus)}
-                    >
-                        <Typography variant="body2" gutterBottom>
-                            <strong>{SERVICE_STATES[selectedStatus]?.label}</strong>
-                        </Typography>
-                        <Typography variant="caption" component="div" sx={{ mb: 1 }}>
-                            {SERVICE_STATES[selectedStatus]?.description}
-                        </Typography>
-                        <Box sx={{ mt: 1 }}>
-                            <Typography variant="caption" component="div">
-                                ✓ Login: {SERVICE_STATES[selectedStatus]?.canLogin ? 'Permitido' : 'Bloqueado'}
-                            </Typography>
-                            {userType === 'FAMILY' && (
-                                <>
-                                    <Typography variant="caption" component="div">
-                                        ✓ Cobro mensual: {SERVICE_STATES[selectedStatus]?.generatesBilling ? 'Sí' : 'No'}
-                                    </Typography>
-                                    <Typography variant="caption" component="div">
-                                        ✓ Acumula mora: {SERVICE_STATES[selectedStatus]?.accumulatesPenalty ? 'Sí' : 'No'}
-                                    </Typography>
-                                </>
+                    <Paper elevation={0} sx={{ p: 2, bgcolor: 'grey.50', border: theme => `1px solid ${theme.palette.divider}` }}>
+                        <FormControlLabel
+                            control={(
+                                <Checkbox
+                                    checked={ignoreMissingContractForAutoSuspension}
+                                    onChange={(e) => setIgnoreMissingContractForAutoSuspension(e.target.checked)}
+                                    disabled={loading || loadingStatus}
+                                />
                             )}
-                        </Box>
-                    </Alert>
-                )}
-
-                {/* Selector de fecha opcional para PAUSED */}
-                {selectedStatus === 'PAUSED' && (
-                    <Box sx={{ mb: 3 }}>
-                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                            Fecha opcional de reanudación
+                            label="Ignorar falta de contrato firmado"
+                        />
+                        <FormControlLabel
+                            control={(
+                                <Checkbox
+                                    checked={ignoreMoraForAutoSuspension}
+                                    onChange={(e) => setIgnoreMoraForAutoSuspension(e.target.checked)}
+                                    disabled={loading || loadingStatus}
+                                />
+                            )}
+                            label="Ignorar mora"
+                        />
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                            Esta configuración le indica al sistema cómo manejar los cambios automáticos al estado Suspendido.
                         </Typography>
-                        <LocalizationProvider dateAdapter={AdapterMoment}>
-                            <DatePicker
-                                value={resumeDate}
-                                onChange={(newVal) => setResumeDate(newVal)}
-                                slotProps={{ textField: { fullWidth: true, helperText: 'Opcional — si se deja vacío, la reactivación será manual' } }}
-                                format="YYYY-MM-DD"
-                            />
-                        </LocalizationProvider>
-                    </Box>
-                )}
+                    </Paper>
+                </Box>
+            )}
 
-                {/* Razón del cambio */}
-                <TextField
-                    fullWidth
-                    label="Razón del cambio"
-                    multiline
-                    rows={3}
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder="Ej: Familia solicitó pausa por vacaciones del 15 al 30 de marzo"
-                    disabled={loading}
-                    required
-                    helperText="El cambio será efectivo desde hoy"
+            {/* Selección de nuevo estado */}
+            <FormControl fullWidth sx={{ mb: 3 }}>
+                <InputLabel>Nuevo Estado</InputLabel>
+                <Select
+                    value={selectedStatus}
+                    onChange={(e) => setSelectedStatus(e.target.value)}
+                    label="Nuevo Estado"
+                    disabled={loading || loadingStatus || allowedStates.length === 0}
+                >
+                    {allowedStates.map((state) => (
+                        <MenuItem key={state} value={state}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                {getStatusIcon(state)}
+                                <span>{SERVICE_STATES[state]?.label || state}</span>
+                            </Box>
+                        </MenuItem>
+                    ))}
+                </Select>
+            </FormControl>
+
+            {/* Descripción del estado seleccionado */}
+            {selectedStatus && (
+                <Alert 
+                    severity="info" 
                     sx={{ mb: 3 }}
-                />
-
-                {/* Error */}
-                {error && (
-                    <Alert severity="error" sx={{ mt: 2 }}>
-                        {error}
-                    </Alert>
-                )}
-
-                {/* Advertencia si no hay transiciones disponibles */}
-                {currentStatus && allowedStates.length === 0 && (
-                    <Alert severity="warning">
-                        No hay transiciones de estado disponibles desde el estado actual.
-                    </Alert>
-                )}
-            </DialogContent>
-
-            <DialogActions sx={{ px: 3, pb: 2 }}>
-                <Button 
-                    onClick={handleClose}
-                    disabled={loading}
+                    icon={getStatusIcon(selectedStatus)}
                 >
-                    Cancelar
-                </Button>
-                <Button
-                    onClick={handleSubmit}
-                    variant="contained"
-                    disabled={!canSubmit}
-                    startIcon={loading && <CircularProgress size={20} />}
-                >
-                    {submitLabel}
-                </Button>
-            </DialogActions>
-        </Dialog>
+                    <Typography variant="body2" gutterBottom>
+                        <strong>{SERVICE_STATES[selectedStatus]?.label}</strong>
+                    </Typography>
+                    <Typography variant="caption" component="div" sx={{ mb: 1 }}>
+                        {SERVICE_STATES[selectedStatus]?.description}
+                    </Typography>
+                    <Box sx={{ mt: 1 }}>
+                        <Typography variant="caption" component="div">
+                            ✓ Login: {SERVICE_STATES[selectedStatus]?.canLogin ? 'Permitido' : 'Bloqueado'}
+                        </Typography>
+                        {userType === 'FAMILY' && (
+                            <>
+                                <Typography variant="caption" component="div">
+                                    ✓ Cobro mensual: {SERVICE_STATES[selectedStatus]?.generatesBilling ? 'Sí' : 'No'}
+                                </Typography>
+                                <Typography variant="caption" component="div">
+                                    ✓ Acumula mora: {SERVICE_STATES[selectedStatus]?.accumulatesPenalty ? 'Sí' : 'No'}
+                                </Typography>
+                            </>
+                        )}
+                    </Box>
+                </Alert>
+            )}
+
+            {/* Selector de fecha opcional para PAUSED */}
+            {selectedStatus === 'PAUSED' && (
+                <Box sx={{ mb: 3 }}>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        Fecha opcional de reanudación
+                    </Typography>
+                    <LocalizationProvider dateAdapter={AdapterMoment}>
+                        <DatePicker
+                            value={resumeDate}
+                            onChange={(newVal) => setResumeDate(newVal)}
+                            slotProps={{ textField: { fullWidth: true, helperText: 'Opcional — si se deja vacío, la reactivación será manual' } }}
+                            format="YYYY-MM-DD"
+                        />
+                    </LocalizationProvider>
+                </Box>
+            )}
+
+            {/* Razón del cambio */}
+            <TextField
+                fullWidth
+                label="Razón del cambio"
+                multiline
+                rows={3}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Ej: Familia solicitó pausa por vacaciones del 15 al 30 de marzo"
+                disabled={loading}
+                required
+                helperText="El cambio será efectivo desde hoy"
+                sx={{ mb: 3 }}
+            />
+
+            {/* Error */}
+            {error && (
+                <Alert severity="error" sx={{ mt: 2 }}>
+                    {error}
+                </Alert>
+            )}
+
+            {/* Advertencia si no hay transiciones disponibles */}
+            {currentStatus && allowedStates.length === 0 && (
+                <Alert severity="warning">
+                    No hay transiciones de estado disponibles desde el estado actual.
+                </Alert>
+            )}
+        </AppDialog>
     );
 };
 

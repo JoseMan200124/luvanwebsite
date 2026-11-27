@@ -8,10 +8,6 @@ import {
     CardContent,
     Button,
     CircularProgress,
-    Snackbar,
-    Alert,
-    useTheme,
-    useMediaQuery,
     FormControl,
     InputLabel,
     Select,
@@ -36,9 +32,11 @@ import moment from 'moment-timezone';
 import { getCicloEscolarFilterParams } from '../../utils/cicloEscolarFilterParams';
 import FilterBar from '../filters/FilterBar';
 import useFilters from '../../hooks/useFilters';
+import useNotify from '../../hooks/useNotify';
 import { F } from '../filters/filterFields';
-
-moment.tz.setDefault('America/Guatemala');
+import useIsMobile from '../../hooks/useIsMobile';
+import { formatNumber } from '../../utils/currency';
+import { formatDateTime } from '../../utils/dateFormat';
 
 const toNumber = (v) => {
     const n = Number(v);
@@ -120,8 +118,7 @@ const calcDynamicHeight = (rowsCount, { min = 280, max = 620, perRow = 34 } = {}
 };
 
 const UsageStatisticsTab = () => {
-    const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isMobile = useIsMobile();
 
     const [data, setData] = useState({
         schools: [],
@@ -131,6 +128,7 @@ const UsageStatisticsTab = () => {
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const notify = useNotify();
     const reportRef = useRef();
 
     // Controles TOP-N
@@ -156,11 +154,12 @@ const UsageStatisticsTab = () => {
             });
         } catch (err) {
             console.error('Error fetching report data', err);
-            setError('Error al obtener datos de reportes. Por favor, inténtalo de nuevo más tarde.');
+            setError(true);
+            notify.fromError(err, 'Error al obtener los datos de reportes');
         } finally {
             setLoading(false);
         }
-    }, [selectedCicloEscolar]);
+    }, [selectedCicloEscolar, notify]);
 
     useEffect(() => {
         fetchData();
@@ -239,7 +238,7 @@ const UsageStatisticsTab = () => {
         const dateInfo = document.createElement('p');
         dateInfo.style.textAlign = 'center';
         dateInfo.style.marginBottom = '20px';
-        dateInfo.textContent = `Generado el: ${now.format('DD/MM/YYYY HH:mm')} (hora Guatemala)`;
+        dateInfo.textContent = `Generado el: ${formatDateTime(now)} (hora Guatemala)`;
 
         tempDiv.appendChild(heading);
         tempDiv.appendChild(dateInfo);
@@ -316,11 +315,7 @@ const UsageStatisticsTab = () => {
                     <CircularProgress />
                 </div>
             ) : error ? (
-                <Snackbar open={Boolean(error)} autoHideDuration={6000} onClose={() => setError(null)}>
-                    <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>
-                        {error}
-                    </Alert>
-                </Snackbar>
+                null
             ) : (
                 <div ref={reportRef} style={{ backgroundColor: '#fff', padding: '16px', overflowX: 'auto' }}>
                     <Grid container spacing={4}>
@@ -345,7 +340,7 @@ const UsageStatisticsTab = () => {
                                                 <CartesianGrid strokeDasharray="3 3" />
                                                 <XAxis
                                                     type="number"
-                                                    tickFormatter={(v) => toNumber(v).toLocaleString()}
+                                                    tickFormatter={(v) => formatNumber(toNumber(v))}
                                                 />
                                                 <YAxis
                                                     type="category"

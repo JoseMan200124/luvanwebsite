@@ -1,10 +1,11 @@
 // src/components/paradas/DescargaObligatoriaDialog.jsx
 // No se puede cerrar hasta descargar la copia procesada (diseño, "Procesar").
 import React, { useEffect, useState } from 'react';
-import { Alert, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material';
-import { CloudDownload } from '@mui/icons-material';
+import { Alert, Button, CircularProgress, Typography } from '@mui/material';
+import { CloudDownload, TaskAlt } from '@mui/icons-material';
 import paradasService, { mensajeError } from '../../services/paradasService';
 import { descargarExcel } from './excelPuntoGuardado';
+import AppDialog from '../dialogs/AppDialog';
 
 export default function DescargaObligatoriaDialog({ open, schoolId, resultado, onTerminar }) {
     const [descargado, setDescargado] = useState(false);
@@ -26,24 +27,30 @@ export default function DescargaObligatoriaDialog({ open, schoolId, resultado, o
     };
 
     return (
-        <Dialog open={open} disableEscapeKeyDown onClose={() => {}} maxWidth="sm" fullWidth>
-            <DialogTitle>Paradas procesadas</DialogTitle>
-            <DialogContent dividers>
-                {resultado && (
-                    <Typography gutterBottom>
-                        Se actualizaron {resultado.estudiantesProcesados} estudiante(s){resultado.sinParadas ? ` (${resultado.sinParadas} quedaron sin paradas)` : ''}.
-                    </Typography>
-                )}
-                <Typography gutterBottom>Descarga la copia de lo procesado antes de cerrar. Es tu respaldo de lo que quedó en la plataforma.</Typography>
-                {error && <Alert severity="error">{error}</Alert>}
-                {descargado && <Alert severity="success">Copia descargada.</Alert>}
-            </DialogContent>
-            <DialogActions>
-                <Button variant={descargado ? 'outlined' : 'contained'} startIcon={descargando ? <CircularProgress size={16} /> : <CloudDownload />} disabled={descargando} onClick={descargar}>
-                    {descargado ? 'Descargar otra vez' : 'Descargar copia procesada'}
-                </Button>
-                <Button variant="contained" disabled={!descargado} onClick={onTerminar}>Terminar</Button>
-            </DialogActions>
-        </Dialog>
+        <AppDialog
+            open={open}
+            onClose={() => {}}
+            title="Paradas procesadas"
+            icon={<TaskAlt />}
+            size="sm"
+            hideClose
+            actions={(
+                <>
+                    <Button variant={descargado ? 'outlined' : 'contained'} startIcon={descargando ? <CircularProgress size={16} /> : <CloudDownload />} disabled={descargando} onClick={descargar}>
+                        {descargado ? 'Descargar otra vez' : 'Descargar copia procesada'}
+                    </Button>
+                    <Button variant="contained" disabled={!descargado} onClick={onTerminar}>Terminar</Button>
+                </>
+            )}
+        >
+            {resultado && (
+                <Typography gutterBottom>
+                    Se actualizaron {resultado.estudiantesProcesados} estudiante(s){resultado.sinParadas ? ` (${resultado.sinParadas} quedaron sin paradas)` : ''}.
+                </Typography>
+            )}
+            <Typography gutterBottom>Descarga la copia de lo procesado antes de cerrar. Es tu respaldo de lo que quedó en la plataforma.</Typography>
+            {error && <Alert severity="error">{error}</Alert>}
+            {descargado && <Alert severity="success">Copia descargada.</Alert>}
+        </AppDialog>
     );
 }

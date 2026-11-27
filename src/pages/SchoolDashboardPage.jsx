@@ -8,8 +8,6 @@ import {
     CardContent,
     Button,
     CircularProgress,
-    Snackbar,
-    Alert,
     Grid,
     Divider,
     List,
@@ -57,6 +55,7 @@ import { getCicloEscolarYear } from '../services/cicloEscolarService';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import useClientScope from '../hooks/useClientScope';
+import useNotify from '../hooks/useNotify';
 
 const SummaryCard = styled(Card)`
     ${tw`h-full`}
@@ -101,7 +100,7 @@ const SchoolDashboardPage = () => {
         total: 0
     });
     const [loading, setLoading] = useState(false);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
     
     // Estado para el modal de estudiantes por ruta
     const [modalOpen, setModalOpen] = useState(false);
@@ -161,13 +160,9 @@ const SchoolDashboardPage = () => {
             setSchoolData(response.data.school);
         } catch (err) {
             console.error('Error fetching school data:', err);
-            setSnackbar({ 
-                open: true, 
-                message: 'Error al obtener datos del colegio', 
-                severity: 'error' 
-            });
+            notify.error('Error al obtener datos del colegio');
         }
-    }, [auth.token, schoolId]);
+    }, [auth.token, schoolId, notify]);
 
     const fetchRouteOccupancy = useCallback(async () => {
         if (!schoolId) {
@@ -465,7 +460,7 @@ const SchoolDashboardPage = () => {
             });
         } catch (err) {
             console.error('Error fetching occupancy for all days:', err);
-            setSnackbar({ open: true, message: 'Error al generar PDF de todos los días', severity: 'error' });
+            notify.error('Error al generar PDF de todos los días');
         }
     };
 
@@ -1080,20 +1075,6 @@ const SchoolDashboardPage = () => {
                 cicloEscolarId={currentCicloEscolarId}
             />
 
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert
-                    onClose={() => setSnackbar({ ...snackbar, open: false })}
-                    severity={snackbar.severity}
-                    sx={{ width: '100%' }}
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </PageContainer>
     );
 };

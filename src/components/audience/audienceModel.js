@@ -3,6 +3,8 @@
 // Contrato de audiencia compartido por el modal de circulares y el de push.
 // Debe mantenerse alineado con luvanbackend/services/audienceTargetingBuilder.js.
 
+import { SERVICE_STATUS, PAYMENT_STATUS, toStatusOptions } from '../../constants/statuses';
+
 export const ROLE_OPTIONS = [
     { value: 'parents',     label: 'Padres' },
     { value: 'monitoras',   label: 'Monitoras' },
@@ -11,26 +13,11 @@ export const ROLE_OPTIONS = [
     { value: 'auxiliars',   label: 'Auxiliares' },
 ];
 
-export const ROUTE_TYPE_OPTIONS = [
-    { value: 'Completa', label: 'Completa' },
-    { value: 'Media AM', label: 'Media AM' },
-    { value: 'Media PM', label: 'Media PM' },
-];
+export { ROUTE_TYPE_OPTIONS } from '../../constants/options';
 
-export const SERVICE_STATUS_OPTIONS = [
-    { value: 'ACTIVE',    label: 'Activo' },
-    { value: 'PAUSED',    label: 'Pausado' },
-    { value: 'SUSPENDED', label: 'Suspendido' },
-    { value: 'PENDING_START', label: 'Pendiente de inicio' },
-];
+export const SERVICE_STATUS_OPTIONS = toStatusOptions(SERVICE_STATUS, ['ACTIVE', 'PAUSED', 'SUSPENDED', 'PENDING_START']);
 
-export const PAYMENT_STATUS_OPTIONS = [
-    { value: 'CONFIRMADO', label: 'Pagado' },
-    { value: 'ADELANTADO', label: 'Adelantado' },
-    { value: 'PENDIENTE',  label: 'Pendiente' },
-    { value: 'MORA',       label: 'En Mora' },
-    { value: 'PARCIAL',    label: 'Pago Parcial' },
-];
+export const PAYMENT_STATUS_OPTIONS = toStatusOptions(PAYMENT_STATUS, ['CONFIRMADO', 'ADELANTADO', 'PENDIENTE', 'MORA', 'PARCIAL']);
 
 const EMPTY_PADRE_FILTERS = {
     routeTypes: [],

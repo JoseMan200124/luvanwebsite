@@ -8,7 +8,6 @@ import {
     CardContent,
     Button,
     CircularProgress,
-    Snackbar,
     Alert,
     FormControl,
     InputLabel,
@@ -17,10 +16,6 @@ import {
     Grid,
     IconButton,
     Tooltip,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     DialogContentText,
     Table,
     TableHead,
@@ -38,6 +33,7 @@ import {
     Divider,
     Popover,
     Radio,
+    RadioGroup,
     Stack
 } from '@mui/material';
 import { 
@@ -49,11 +45,14 @@ import {
     Visibility,
     Add,
     ExpandMore,
-    DeleteSweep as DeleteSweepIcon
+    DeleteSweep as DeleteSweepIcon,
+    CleaningServices as CleaningServicesIcon,
+    Assignment as AssignmentIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
+import { shiftIsoDateByYears } from '../utils/shiftIsoDateByYears';
 import styled from 'styled-components';
 import tw from 'twin.macro';
 import PageContainer from '../components/layout/PageContainer';
@@ -62,8 +61,9 @@ import useRegisterPageRefresh from '../hooks/useRegisterPageRefresh';
 import SubmissionPreview from './SubmissionPreview';
 import EnrollmentFeeTiersEditor from '../components/EnrollmentFeeTiersEditor';
 import ExcelJS from 'exceljs';
-import moment from 'moment';
+import BulkUploadDialog, { DefaultResult } from '../components/dialogs/BulkUploadDialog';
 import PermissionGuard from '../components/PermissionGuard';
+import usePermissions from '../hooks/usePermissions';
 import { DEFAULT_SCHEDULE_CODES, ensureSchedules } from '../utils/scheduleConfig';
 import EditSchedulesModal from '../components/modals/EditSchedulesModal';
 import CircularMasivaModal from '../components/CircularMasivaModal';
@@ -76,6 +76,14 @@ import {
     getSelectedCicloEscolarId,
     setSelectedCicloEscolarId as persistSelectedCicloEscolarId,
 } from '../utils/schoolContext';
+import useNotify from '../hooks/useNotify';
+import useConfirm from '../hooks/useConfirm';
+import { formatClock, formatDateTime } from '../utils/dateFormat';
+import { formatQ } from '../utils/currency';
+import { SCHOOL_OPERATION_STATUS, SCHOOL_ENROLLMENT_STATUS, getStatusMeta } from '../constants/statuses';
+import AppDialog from '../components/dialogs/AppDialog';
+import SimilarSchoolDialog from '../components/SimilarSchoolDialog';
+import { invalidateCatalog } from '../services/catalogStore';
 
 const SchoolCard = styled(Card)`
     ${tw`cursor-pointer transition-all duration-300`}
@@ -142,21 +150,6 @@ const StyledAccordionSummary = styled(AccordionSummary)`
     }
 `;
 
-const operationStatusMeta = {
-    ACTIVE: { label: 'Operando', color: 'success' },
-    INACTIVE: { label: 'Sin operación', color: 'default' }
-};
-
-const enrollmentStatusMeta = {
-    OPEN: { label: 'Inscripciones abiertas', color: 'primary' },
-    CLOSED: { label: 'Inscripciones cerradas', color: 'default' }
-};
-
-const getStatusMeta = (map, value) => {
-    const normalized = String(value || '').trim().toUpperCase();
-    return map[normalized] || { label: normalized || 'Sin estado', color: 'default' };
-};
-
 // Opción seleccionable en formato tarjeta (título, etiqueta opcional y viñetas de detalle).
 const ChoiceCard = ({ selected, onSelect, title, tag, details = [] }) => (
     <Box
@@ -216,7 +209,9 @@ const CicloEscolarSelectionPage = () => {
     const [selectedCicloEscolarId, setSelectedCicloEscolarId] = useState(() => getSelectedCicloEscolarId() || '');
     const [cyclesLoading, setCyclesLoading] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+    const notify = useNotify();
+    const confirm = useConfirm();
+    const { hasPermission } = usePermissions();
     const [operationalConflict, setOperationalConflict] = useState(null);
     const [billingConflict, setBillingConflict] = useState(null);
     const [billingDecision, setBillingDecision] = useState({ action: 'SET_NEXT_MONTH_START', customStartDate: '', confirmText: '' });
@@ -225,25 +220,25 @@ const CicloEscolarSelectionPage = () => {
     const [paymentsExclusionPromptOpen, setPaymentsExclusionPromptOpen] = useState(false);
     const paymentsExclusionConfirmedRef = useRef(false);
     const [paymentsReactivationChoice, setPaymentsReactivationChoice] = useState({ chargeEnrollment: null, billingStart: null, clearPenalty: false });
-    const [opStatusConfirm, setOpStatusConfirm] = useState({ open: false, pendingValue: null, schoolName: '', confirmText: '' });
     
     // Estados para diálogos y acciones
     const [selectedSchool, setSelectedSchool] = useState(null);
+    const [editGroupCycles, setEditGroupCycles] = useState([]);
+    const [renameScope, setRenameScope] = useState('THIS_CYCLE');
     const [openEditDialog, setOpenEditDialog] = useState(false);
     const [savingSchool, setSavingSchool] = useState(false);
     const [prefillSchools, setPrefillSchools] = useState([]);
     const [prefillSchoolsLoading, setPrefillSchoolsLoading] = useState(false);
     const [selectedPrefillSchoolId, setSelectedPrefillSchoolId] = useState('');
+    const [similarPrompt, setSimilarPrompt] = useState(null); // { candidates, fromSave }
     const [draftEnrollmentTiers, setDraftEnrollmentTiers] = useState([]);
+    const [tiersEditorKey, setTiersEditorKey] = useState(0);
     const [openEditSchedulesModal, setOpenEditSchedulesModal] = useState(false);
     const [openSubmissionDialog, setOpenSubmissionDialog] = useState(false);
     const [submissions, setSubmissions] = useState([]);
     const [submissionDetail, setSubmissionDetail] = useState(null);
-    // Bulk upload states
-    const [openBulkDialog, setOpenBulkDialog] = useState(false);
-    const [bulkFile, setBulkFile] = useState(null);
-    const [bulkResults, setBulkResults] = useState(null);
-    const [bulkLoading, setBulkLoading] = useState(false);
+    // Carga masiva
+    const [bulkOpen, setBulkOpen] = useState(false);
     
     // Estados para edición de colegio
     const [schoolSchedules, setSchoolSchedules] = useState([]);
@@ -257,6 +252,20 @@ const CicloEscolarSelectionPage = () => {
     // School year bounds for the UI edit dialog
     const [schoolYearStart, setSchoolYearStart] = useState('');
     const [schoolYearEnd, setSchoolYearEnd] = useState('');
+    // Valores con que se abrió el formulario de colegio: cerrar con cambios pide confirmación.
+    const schoolInitialRef = useRef('');
+    // Último nombre consultado en similar-names y último colegio elegido en el prellenado: descartan respuestas tardías.
+    const similarQueryRef = useRef(null);
+    const prefillLoadRef = useRef(null);
+    const prefillRequestRef = useRef(null);
+    const schoolFormSnapshot = JSON.stringify([selectedSchool, schoolExtraFields, schoolYearStart, schoolYearEnd]);
+    useEffect(() => {
+        if (openEditDialog) {
+            schoolInitialRef.current = schoolFormSnapshot;
+        }
+        // Solo al abrir: la foto inicial no debe seguir a los cambios del formulario.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [openEditDialog]);
     
     // Quick modal para limpieza (período actual fijo)
     const [openQuickClear, setOpenQuickClear] = useState(false);
@@ -414,8 +423,13 @@ const CicloEscolarSelectionPage = () => {
         return aligned;
     };
 
-    const resetCreateSchoolDraft = (sourceSchool = null) => {
+    const resetCreateSchoolDraft = (sourceSchool = null, sourceTiers = []) => {
         const source = sourceSchool || {};
+        // Prellenar = continuar el MISMO colegio en el ciclo elegido: fechas y tramos se mueven al año del ciclo nuevo.
+        const targetYear = Number(ciclosEscolares.find((ciclo) => String(ciclo.id) === String(selectedCicloEscolarId))?.anio) || 0;
+        const sourceYear = Number(source.cicloEscolar?.anio) || 0;
+        const yearShift = sourceSchool && targetYear && sourceYear ? targetYear - sourceYear : 0;
+        const shift = (fecha) => shiftIsoDateByYears(String(fecha || '').slice(0, 10), yearShift);
         const routeNumbers = parseArrayField(source.routeNumbers).map(String);
         const schedules = sourceSchool
             ? ensureFourSchedules(parseArrayField(source.schedules)).map((schedule) => ({ ...schedule, _originalCode: null }))
@@ -423,6 +437,8 @@ const CicloEscolarSelectionPage = () => {
 
         setSelectedSchool(sourceSchool ? {
             ...buildEmptySchoolDraft(),
+            continuesSchoolId: source.id,
+            confirmNewSchool: false,
             name: source.name || '',
             address: source.address || '',
             city: source.city || '',
@@ -448,10 +464,16 @@ const CicloEscolarSelectionPage = () => {
         setSchoolExtraFields(parseArrayField(source.extraEnrollmentFields));
         setSchoolRouteNumbers(routeNumbers);
         setSchoolRouteSchedules(sourceSchool ? normalizeRouteSchedulesFromSchool(source, routeNumbers) : []);
-        setSchoolYearStart(source.schoolYearStart || '');
-        setSchoolYearEnd(source.schoolYearEnd || '');
+        setSchoolYearStart(shift(source.schoolYearStart));
+        setSchoolYearEnd(shift(source.schoolYearEnd));
         setNewGradeName('');
-        setDraftEnrollmentTiers([]);
+        setDraftEnrollmentTiers(sourceTiers.map((tier) => ({
+            untilDate: shift(tier.untilDate),
+            discountType: tier.discountType,
+            discountValue: tier.discountValue
+        })));
+        // El editor de tramos lee los tramos del borrador solo al montarse: se vuelve a montar con los copiados.
+        setTiersEditorKey((key) => key + 1);
     };
 
     const fetchCiclosEscolares = useCallback(async () => {
@@ -478,13 +500,14 @@ const CicloEscolarSelectionPage = () => {
             }
         } catch (error) {
             console.error('Error fetching ciclos escolares:', error);
-            setSnackbar({ open: true, message: 'Error al obtener los ciclos escolares', severity: 'error' });
+            notify.error('Error al obtener los ciclos escolares');
         } finally {
             setCyclesLoading(false);
         }
-    }, []);
+    }, [notify]);
 
     const fetchSchoolsByYear = useCallback(async () => {
+        invalidateCatalog('schools');
         setLoading(true);
         try {
             const params = {
@@ -538,47 +561,41 @@ const CicloEscolarSelectionPage = () => {
             setSchools(processedSchools);
         } catch (err) {
             console.error('Error fetching schools:', err);
-            setSnackbar({ 
-                open: true, 
-                message: 'Error al obtener los colegios', 
-                severity: 'error' 
-            });
+            notify.error('Error al obtener los colegios');
         } finally {
             setLoading(false);
         }
-    }, [auth.token, selectedCicloEscolarId]);
+    }, [auth.token, selectedCicloEscolarId, notify]);
 
     const fetchPrefillSchools = useCallback(async () => {
         if (!auth.token) {
-            return;
+            return [];
         }
 
         setPrefillSchoolsLoading(true);
         try {
-            const response = await api.get('/schools', {
-                headers: {
-                    Authorization: `Bearer ${auth.token}`,
-                },
-                params: {
-                    includeArchived: true,
-                    includeAllCycles: true,
-                    useHighestSchoolCycle: true
-                }
-            });
-
-            const rawSchools = Array.isArray(response.data.schools) ? response.data.schools : [];
-            setPrefillSchools(rawSchools.filter((school) => school?.id));
+            const [listado, fuentes] = await Promise.all([
+                api.get('/schools', {
+                    headers: { Authorization: `Bearer ${auth.token}` },
+                    params: { includeArchived: true, includeAllCycles: true }
+                }),
+                api.get('/schools/continuation-sources', { params: { cicloEscolarId: selectedCicloEscolarId } })
+            ]);
+            // Una fila por colegio: la de su ciclo anterior más cercano al ciclo elegido. Los colegios que ya existen
+            // en este ciclo no aparecen.
+            const fuenteIds = new Set((fuentes.data?.schoolIds || []).map(String));
+            const rawSchools = Array.isArray(listado.data.schools) ? listado.data.schools : [];
+            const fuentesDelCiclo = rawSchools.filter((school) => fuenteIds.has(String(school.id)));
+            setPrefillSchools(fuentesDelCiclo);
+            return fuentesDelCiclo;
         } catch (err) {
             console.error('Error fetching prefill schools:', err);
-            setSnackbar({
-                open: true,
-                message: 'Error al obtener colegios para prellenar',
-                severity: 'error'
-            });
+            notify.error('Error al obtener colegios para prellenar');
+            return [];
         } finally {
             setPrefillSchoolsLoading(false);
         }
-    }, [auth.token]);
+    }, [auth.token, selectedCicloEscolarId, notify]);
 
     // Register page-level refresh handler for global refresh control
     useRegisterPageRefresh(async () => {
@@ -632,19 +649,11 @@ const CicloEscolarSelectionPage = () => {
         const link = `${baseUrl}/schools/enroll/${schoolId}`;
         navigator.clipboard.writeText(link)
             .then(() => {
-                setSnackbar({
-                    open: true,
-                    message: 'Enlace copiado al portapapeles',
-                    severity: 'success',
-                });
+                notify.success('Enlace copiado al portapapeles');
             })
             .catch((err) => {
                 console.error('Error copiando enlace:', err);
-                setSnackbar({
-                    open: true,
-                    message: 'No se pudo copiar el enlace',
-                    severity: 'error'
-                });
+                notify.error('No se pudo copiar el enlace');
             });
     };
 
@@ -672,8 +681,14 @@ const CicloEscolarSelectionPage = () => {
             wasPaymentsEnabled: school.paymentsEnabled !== false,
             paymentsToggleLocked: !!school.paymentsToggleLocked,
             operationStatus: school.operationStatus || 'ACTIVE',
-            enrollmentStatus: school.enrollmentStatus || 'OPEN'
+            enrollmentStatus: school.enrollmentStatus || 'OPEN',
+            originalName: school.name
         });
+        setRenameScope('THIS_CYCLE');
+        setEditGroupCycles([]);
+        api.get(`/schools/${school.id}/group-cycles`)
+            .then(({ data }) => setEditGroupCycles(Array.isArray(data?.cycles) ? data.cycles : []))
+            .catch((err) => console.error('Error cargando los ciclos del colegio:', err));
 
         let parsedSchedules = [];
         if (Array.isArray(school.schedules)) {
@@ -801,20 +816,12 @@ const CicloEscolarSelectionPage = () => {
                 headers: { Authorization: `Bearer ${auth.token}` },
             });
             setDeleteDialog(null);
-            setSnackbar({
-                open: true,
-                message: 'Colegio eliminado exitosamente',
-                severity: 'success'
-            });
+            notify.success('Colegio eliminado');
             fetchSchoolsByYear(); // Recargar la lista
         } catch (err) {
             console.error('Error al eliminar colegio:', err);
             setDeleteDialog(null);
-            setSnackbar({
-                open: true,
-                message: err?.response?.data?.message || 'Error al eliminar colegio',
-                severity: 'error'
-            });
+            notify.fromError(err, 'Error al eliminar colegio');
         } finally {
             setDeletingSchool(false);
         }
@@ -849,86 +856,132 @@ const CicloEscolarSelectionPage = () => {
             setOpenSubmissionDialog(true);
         } catch (error) {
             console.error('Error al obtener inscripciones:', error);
-            setSnackbar({
-                open: true,
-                message: 'Error al obtener formularios de este colegio',
-                severity: 'error'
-            });
+            notify.error('Error al obtener formularios de este colegio');
         } finally {
             setLoading(false);
         }
     };
-    // Bulk upload handlers
-    const handleOpenBulkUpload = () => {
-        setBulkFile(null);
-        setBulkResults(null);
-        setOpenBulkDialog(true);
+    // Plantilla de la carga masiva de colegios (exceljs: conserva los formatos de número y texto de cada columna).
+    const buildSchoolsTemplate = () => {
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Plantilla Colegios');
+        worksheet.columns = [
+            { header: 'Nombre', key: 'name', width: 30 },
+            { header: 'Dirección', key: 'address', width: 40 },
+            { header: 'Ciudad', key: 'city', width: 20 },
+            { header: 'Persona de Contacto', key: 'contactPerson', width: 25 },
+            { header: 'Correo de Contacto', key: 'contactEmail', width: 30 },
+            { header: 'Teléfono de Contacto', key: 'contactPhone', width: 20 },
+            { header: 'Enlace Whatsapp', key: 'whatsapp', width: 20 },
+            // Dynamic schedule columns
+            ...DEFAULT_SCHEDULE_CODES.map(code => ({
+                header: `Horario ${code}`, key: `schedule${code}`, width: 14, style: { numFmt: '@' }
+            })),
+            { header: 'Grados', key: 'grades', width: 30 },
+            { header: 'Tarifa Completa', key: 'transportFeeComplete', width: 18, style: { numFmt: '0.00' } },
+            { header: 'Tarifa Media', key: 'transportFeeHalf', width: 18, style: { numFmt: '0.00' } },
+            { header: 'Dia de Pago', key: 'duePaymentDay', width: 12, style: { numFmt: '0' } },
+            { header: 'Banco', key: 'bankName', width: 20 },
+            { header: 'Cuenta Bancaria', key: 'bankAccount', width: 25 },
+            { header: 'Numeros Ruta', key: 'routeNumbers', width: 25, style: { numFmt: '@' } },
+            { header: 'Penalidad Diaria', key: 'dailyPenalty', width: 16, style: { numFmt: '0.00' } },
+            { header: 'Inicio Ciclo', key: 'schoolYearStart', width: 14, style: { numFmt: '@' } },
+            { header: 'Fin Ciclo', key: 'schoolYearEnd', width: 14, style: { numFmt: '@' } }
+        ];
+
+        const templateYear = Number.parseInt(selectedCycleYear, 10) || new Date().getFullYear();
+
+        // Example row to guide users
+        worksheet.addRow({
+            name: 'Colegio Ejemplo',
+            address: 'Calle 123',
+            city: 'Ciudad',
+            contactPerson: 'Nombre',
+            contactEmail: 'contacto@colegio.com',
+            contactPhone: '12345678',
+            whatsapp: '',
+            ...Object.fromEntries(DEFAULT_SCHEDULE_CODES.map((code, i) => [
+                `schedule${code}`, ['07:00', '12:00', '13:00', '15:00'][i] || 'N/A'
+            ])),
+            grades: 'Kinder,1ero,2do',
+            transportFeeComplete: 0.00,
+            transportFeeHalf: 0.00,
+            duePaymentDay: 1,
+            bankName: '',
+            bankAccount: '',
+            routeNumbers: '12,15',
+            dailyPenalty: 10.00,
+            schoolYearStart: `01-03-${templateYear}`,
+            schoolYearEnd: `28-02-${templateYear + 1}`
+        });
+
+        worksheet.getRow(1).font = { bold: true };
+        return workbook;
     };
-    const handleCloseBulkDialog = () => {
-        setOpenBulkDialog(false);
-    };
-    const handleFileChange = (e) => {
-        const file = e.target.files?.[0];
-        setBulkFile(file || null);
-        setBulkResults(null);
-    };
-    const submitBulkUpload = async () => {
-        if (!bulkFile) {
-            return;
-        }
-        setBulkLoading(true);
-        setBulkResults(null);
+
+    // Limpieza de mora del período actual del colegio que se está editando.
+    const handleQuickClear = async () => {
         try {
-            const formData = new FormData();
-            formData.append('file', bulkFile);
-            if (selectedCicloEscolarId) {
-                formData.append('cicloEscolarId', selectedCicloEscolarId);
-            }
-            const resp = await api.post('/schools/bulk-upload', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                    Authorization: `Bearer ${auth.token}`
-                }
+            setQuickClearing(true);
+            const period = `${currentYear}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+            await api.post('/payments/penalties/clear', {
+                schoolId: selectedSchool.id,
+                cicloEscolarId: selectedCicloEscolarId || null,
+                period,
+                reason: quickClearReason
             });
-            setBulkResults(resp.data || null);
-            // Refresh list after upload
+            setQuickClearing(false);
+            setOpenQuickClear(false);
+            notify.success('Limpieza de mora realizada');
             fetchSchoolsByYear();
-            setSnackbar({ open: true, message: 'Carga masiva procesada', severity: 'success' });
         } catch (err) {
-            console.error('Error al subir colegios masivamente:', err);
-            setSnackbar({ open: true, message: 'Error al procesar la carga masiva', severity: 'error' });
-        } finally {
-            setBulkLoading(false);
+            console.error(err);
+            setQuickClearing(false);
+            notify.error('Error al realizar limpieza de mora');
         }
     };
-    const handleUploadBulk = () => submitBulkUpload();
 
     // Add school handler (reuse existing edit dialog)
     const handleAddSchool = () => {
         setSelectedPrefillSchoolId('');
         resetCreateSchoolDraft();
-        fetchPrefillSchools();
+        prefillLoadRef.current = fetchPrefillSchools();
         setOpenEditDialog(true);
     };
 
-    const handlePrefillSchoolChange = (event) => {
-        const nextSchoolId = event.target.value;
-        setSelectedPrefillSchoolId(nextSchoolId);
+    // Aplica un colegio de otro ciclo como origen de la continuación (prellenado + tramos con fechas movidas).
+    const applyContinuationSource = async (sourceSchool) => {
+        let sourceTiers = [];
+        try {
+            const { data } = await api.get(`/schools/${sourceSchool.id}/enrollment-fee-config`);
+            sourceTiers = Array.isArray(data?.tiers) ? data.tiers : [];
+        } catch (err) {
+            console.error('Error cargando los tramos del colegio de origen:', err);
+            notify.warning('No se pudieron copiar los tramos de inscripción del colegio de origen; agrégalos si aplican.');
+        }
+        if (String(prefillRequestRef.current) !== String(sourceSchool.id)) {
+            return;
+        }
+        resetCreateSchoolDraft(sourceSchool, sourceTiers);
+    };
 
+    const handlePrefillSchoolChange = async (event) => {
+        const nextSchoolId = event.target.value;
+        prefillRequestRef.current = nextSchoolId;
+        setSelectedPrefillSchoolId(nextSchoolId);
         if (!nextSchoolId) {
             resetCreateSchoolDraft();
             return;
         }
-
         const sourceSchool = prefillSchools.find((school) => String(school.id) === String(nextSchoolId));
-        if (!sourceSchool) {
-            return;
+        if (sourceSchool) {
+            await applyContinuationSource(sourceSchool);
         }
-
-        resetCreateSchoolDraft(sourceSchool);
     };
 
     const handleCloseEditDialog = () => {
+        similarQueryRef.current = null;
+        prefillRequestRef.current = null;
         setOpenEditDialog(false);
         setOpenEditSchedulesModal(false);
         setOperationalConflict(null);
@@ -1024,20 +1077,80 @@ const CicloEscolarSelectionPage = () => {
     const popoverId = openPopover ? 'grades-popover' : undefined;
 
     // Funciones para manejar cambios en el formulario de edición
+    // Cambiar el estado de operación pide escribir CONFIRMAR.
+    const confirmOperationStatus = async (pendingValue) => {
+        const activating = pendingValue === 'ACTIVE';
+        const schoolName = selectedSchool?.name || 'este colegio';
+        const ok = await confirm({
+            title: activating ? 'Activar operación' : 'Desactivar operación',
+            message: `Se ${activating ? 'pondrá en operación' : 'sacará de operación'} a ${schoolName}.${activating ? ' Si otro ciclo del mismo colegio ya está operando, el cambio será bloqueado.' : ''}`,
+            confirmLabel: activating ? 'Activar' : 'Desactivar',
+            tone: activating ? 'default' : 'danger',
+            requireText: 'CONFIRMAR',
+        });
+        if (ok) {
+            setSelectedSchool(prev => ({ ...prev, operationStatus: pendingValue }));
+        }
+    };
+
     const handleInputChange = (e) => {
         if (e.target.name === 'operationStatus') {
-            setOpStatusConfirm({
-                open: true,
-                pendingValue: e.target.value,
-                schoolName: selectedSchool?.name || 'este colegio',
-                confirmText: ''
-            });
+            confirmOperationStatus(e.target.value);
             return;
         }
         setSelectedSchool((prev) => ({
             ...prev,
             [e.target.name]: e.target.value,
+            ...(e.target.name === 'name' ? { confirmNewSchool: false } : {}),
         }));
+    };
+
+    // Al salir del campo Nombre (solo al crear y sin prellenado) se consultan colegios con nombre parecido.
+    const handleNameBlur = async () => {
+        if (selectedSchool?.id || selectedSchool?.continuesSchoolId || selectedSchool?.confirmNewSchool) {
+            return;
+        }
+        const nombre = String(selectedSchool?.name || '').trim();
+        if (!nombre) {
+            return;
+        }
+        similarQueryRef.current = nombre;
+        try {
+            const { data } = await api.get('/schools/similar-names', { params: { name: nombre, cicloEscolarId: selectedCicloEscolarId } });
+            const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
+            // Respuesta tardía: el formulario se cerró o el nombre cambió mientras se consultaba.
+            if (similarQueryRef.current === nombre && candidates.length > 0) {
+                // Si el usuario pulsó Guardar sin salir antes del campo, el 409 del guardado ya abrió el diálogo con
+                // fromSave: true; esta respuesta (que puede llegar después) no lo pisa, o "No, es un colegio nuevo"
+                // dejaría de guardar.
+                setSimilarPrompt((prev) => prev ?? { candidates, fromSave: false });
+            }
+        } catch (err) {
+            console.error('Error consultando colegios con nombre parecido:', err);
+        }
+    };
+
+    const handleSimilarContinue = async (candidate) => {
+        setSimilarPrompt(null);
+        // Si la lista del prellenado todavía se está cargando, se espera a que termine en vez de dar el colegio por inexistente.
+        const fuentes = prefillSchools.length > 0 ? prefillSchools : await prefillLoadRef.current;
+        const source = (fuentes || []).find((school) => String(school.id) === String(candidate.schoolId));
+        if (!source) {
+            notify.warning('No se encontró ese colegio en el prellenado. Elígelo en "Prellenar con colegio existente".');
+            return;
+        }
+        prefillRequestRef.current = String(source.id);
+        setSelectedPrefillSchoolId(String(source.id));
+        await applyContinuationSource(source);
+    };
+
+    const handleSimilarNewSchool = () => {
+        const fromSave = similarPrompt?.fromSave === true;
+        setSimilarPrompt(null);
+        setSelectedSchool((prev) => ({ ...prev, confirmNewSchool: true }));
+        if (fromSave) {
+            handleSave({ confirmNewSchool: true });
+        }
     };
 
     const DAY_OPTIONS = [
@@ -1053,24 +1166,6 @@ const CicloEscolarSelectionPage = () => {
         acc[d.key] = d.label;
         return acc;
     }, {});
-
-    const formatTimeTo12h = (hhmm) => {
-        if (!hhmm || typeof hhmm !== 'string') {
-            return hhmm;
-        }
-        const m = hhmm.match(/^(\d{1,2}):(\d{2})$/);
-        if (!m) {
-            return hhmm;
-        }
-        const h24 = Number(m[1]);
-        const min = m[2];
-        if (Number.isNaN(h24) || h24 < 0 || h24 > 23) {
-            return hhmm;
-        }
-        const suffix = h24 >= 12 ? 'PM' : 'AM';
-        const h12 = ((h24 + 11) % 12) + 1;
-        return `${h12}:${min} ${suffix}`;
-    };
 
     const isAllDaysSelected = (days) => {
         if (!Array.isArray(days) || days.length === 0) {
@@ -1200,38 +1295,30 @@ const CicloEscolarSelectionPage = () => {
             Number(selectedSchool.transportFeeComplete) < 0 ||
             Number(selectedSchool.transportFeeHalf) < 0
         ) {
-            setSnackbar({
-                open: true,
-                message: 'Las cuotas de transporte no pueden ser negativas.',
-                severity: 'error'
-            });
+            notify.error('Las cuotas de transporte no pueden ser negativas');
             return;
         }
         if (
             Number(selectedSchool.duePaymentDay) < 1 ||
             Number(selectedSchool.duePaymentDay) > 31
         ) {
-            setSnackbar({
-                open: true,
-                message: 'El día de pago debe estar entre 1 y 31.',
-                severity: 'error'
-            });
+            notify.error('El día de pago debe estar entre 1 y 31');
             return;
         }
         // Validate daily penalty
         if (Number(selectedSchool.dailyPenalty) < 0) {
-            setSnackbar({ open: true, message: 'La mora diaria no puede ser negativa.', severity: 'error' });
+            notify.error('La mora diaria no puede ser negativa');
             return;
         }
         if (Number(selectedSchool.enrollmentFeeAmount) < 0) {
-            setSnackbar({ open: true, message: 'El monto de inscripción no puede ser negativo.', severity: 'error' });
+            notify.error('El monto de inscripción no puede ser negativo');
             return;
         }
         // Validate draft enrollment fee tiers (new school, saved after creation)
         if (!selectedSchool.id) {
             const invalidTier = draftEnrollmentTiers.find((row) => !row.untilDate || !row.discountType);
             if (invalidTier) {
-                setSnackbar({ open: true, message: 'Cada tramo de inscripción requiere fecha límite y tipo de descuento.', severity: 'error' });
+                notify.error('Cada tramo de inscripción requiere fecha límite y tipo de descuento');
                 return;
             }
         }
@@ -1240,7 +1327,7 @@ const CicloEscolarSelectionPage = () => {
         const schedulesWithCode = schoolSchedules.filter(s => s?.code);
         const invalidCode = schedulesWithCode.find(s => !/^[A-Z]{2,4}$/.test(s.code));
         if (invalidCode) {
-            setSnackbar({ open: true, message: `Código de horario inválido: "${invalidCode.code}". Use 2 a 4 letras mayúsculas (ej: AM, VE, NO).`, severity: 'error' });
+            notify.error(`Código de horario inválido: "${invalidCode.code}". Use 2 a 4 letras mayúsculas (ej: AM, VE, NO).`);
             return;
         }
         const codeCounts = {};
@@ -1249,7 +1336,7 @@ const CicloEscolarSelectionPage = () => {
         }
         const dupCode = Object.keys(codeCounts).find(c => codeCounts[c] > 1);
         if (dupCode) {
-            setSnackbar({ open: true, message: `Código de horario duplicado: "${dupCode}". Cada código debe ser único.`, severity: 'error' });
+            notify.error(`Código de horario duplicado: "${dupCode}". Cada código debe ser único.`);
             return;
         }
 
@@ -1267,12 +1354,8 @@ const CicloEscolarSelectionPage = () => {
                 if (occupancyByDayTime.has(k)) {
                     const existingCode = occupancyByDayTime.get(k);
                     const dayLabel = DAY_LABEL_BY_KEY[day] || day;
-                    const timeLabel = formatTimeTo12h(time);
-                    setSnackbar({
-                        open: true,
-                        message: `Conflicto de hora base: los horarios "${existingCode}" y "${s.code}" comparten ${timeLabel} en ${dayLabel}.`,
-                        severity: 'error'
-                    });
+                    const timeLabel = formatClock(time);
+                    notify.error(`Conflicto de hora base: los horarios "${existingCode}" y "${s.code}" comparten ${timeLabel} en ${dayLabel}.`);
                     return;
                 }
                 occupancyByDayTime.set(k, s.code);
@@ -1358,12 +1441,20 @@ const CicloEscolarSelectionPage = () => {
                         discountValue: row.discountType === 'FREE' ? 0 : Number(row.discountValue) || 0,
                     }))
                 }),
+                ...(selectedSchool.id ? {} : {
+                    continuesSchoolId: selectedSchool.continuesSchoolId || undefined,
+                    confirmNewSchool: selectedSchool.confirmNewSchool === true ? true : undefined
+                }),
                 // school year bounds
                 schoolYearStart: schoolYearStart || null,
                 schoolYearEnd: schoolYearEnd || null,
                 cicloEscolarId: selectedCicloEscolarId || null,
                 operationStatus: selectedSchool.operationStatus || 'ACTIVE',
                 enrollmentStatus: selectedSchool.enrollmentStatus || 'OPEN',
+                ...(selectedSchool.id
+                    && String(selectedSchool.name || '').trim() !== String(selectedSchool.originalName || '').trim()
+                    ? { renameScope }
+                    : {}),
                 ...extraPayload
             };
 
@@ -1374,22 +1465,14 @@ const CicloEscolarSelectionPage = () => {
                     headers: { Authorization: `Bearer ${auth.token}` },
                 });
                 
-                setSnackbar({
-                    open: true,
-                    message: 'Colegio actualizado exitosamente',
-                    severity: 'success'
-                });
+                notify.success('Colegio actualizado');
             } else {
                 // Create new school (enrollmentFeeTiers, if any, are persisted atomically by the backend)
                 await api.post('/schools', payload, {
                     headers: { Authorization: `Bearer ${auth.token}` },
                 });
 
-                setSnackbar({
-                    open: true,
-                    message: 'Colegio creado exitosamente',
-                    severity: 'success'
-                });
+                notify.success('Colegio creado');
             }
 
             paymentsExclusionConfirmedRef.current = false;
@@ -1400,19 +1483,11 @@ const CicloEscolarSelectionPage = () => {
             const responseData = err.response?.data;
             if (err.response?.status === 409 && responseData?.code === 'OPERATIONAL_SCHOOL_CONFLICT') {
                 setOperationalConflict(responseData);
-                setSnackbar({
-                    open: true,
-                    message: responseData.message || 'Ya existe un ciclo de este colegio en operación.',
-                    severity: 'warning'
-                });
+                notify.warning(responseData.message || 'Ya existe un ciclo de este colegio en operación.');
                 return;
             }
             if (err.response?.status === 409 && responseData?.code === 'SCHOOL_HAS_PAYMENT_MOVEMENTS') {
-                setSnackbar({
-                    open: true,
-                    message: responseData.message || 'Este colegio ya tiene movimientos de pago registrados. Contacta a soporte.',
-                    severity: 'warning'
-                });
+                notify.warning(responseData.message || 'Este colegio ya tiene movimientos de pago registrados. Contacta a soporte.');
                 return;
             }
             if (err.response?.status === 409 && responseData?.code === 'PAYMENTS_REACTIVATION_DECISION_REQUIRED') {
@@ -1432,18 +1507,22 @@ const CicloEscolarSelectionPage = () => {
                     customStartDate: responseData.suggestedNextMonthStart || '',
                     confirmText: ''
                 });
-                setSnackbar({
-                    open: true,
-                    message: responseData.message || 'Se requiere decidir desde qué fecha iniciará el cobro.',
-                    severity: 'warning'
-                });
+                notify.warning(responseData.message || 'Se requiere decidir desde qué fecha iniciará el cobro.');
                 return;
             }
-            setSnackbar({
-                open: true,
-                message: 'Error al guardar el colegio',
-                severity: 'error'
-            });
+            if (err.response?.status === 409 && responseData?.code === 'SCHOOL_DUPLICATE_IN_CYCLE') {
+                notify.warning(responseData.message || 'Ya existe un colegio con ese nombre en este ciclo.');
+                return;
+            }
+            if (err.response?.status === 409 && responseData?.code === 'SCHOOL_SIMILAR_NAME') {
+                setSimilarPrompt({ candidates: responseData.candidates || [], fromSave: true });
+                return;
+            }
+            if (['SCHOOL_NAME_LOCKED', 'SCHOOL_CONTINUATION_SOURCE_NOT_FOUND', 'SCHOOL_NAME_REQUIRED'].includes(responseData?.code)) {
+                notify.warning(responseData.message || 'No se pudo guardar el colegio.');
+                return;
+            }
+            notify.error('Error al guardar el colegio');
         } finally {
             setSavingSchool(false);
         }
@@ -1462,13 +1541,13 @@ const CicloEscolarSelectionPage = () => {
                 : billingConflict.currentSchoolYearStart;
 
         if (action !== 'KEEP_START_DATE' && !nextStartDate) {
-            setSnackbar({ open: true, message: 'Selecciona una fecha de inicio válida.', severity: 'warning' });
+            notify.warning('Selecciona una fecha de inicio válida');
             return;
         }
 
         const requiresConfirmation = action !== 'SET_NEXT_MONTH_START';
         if (requiresConfirmation && billingDecision.confirmText !== 'CONFIRMAR') {
-            setSnackbar({ open: true, message: 'Escribe CONFIRMAR para continuar con esta decisión.', severity: 'warning' });
+            notify.warning('Escribe CONFIRMAR para continuar con esta decisión');
             return;
         }
 
@@ -1511,8 +1590,8 @@ const CicloEscolarSelectionPage = () => {
     };
 
     const renderSchoolStatusChips = (school) => {
-        const operation = getStatusMeta(operationStatusMeta, school.operationStatus || 'ACTIVE');
-        const enrollment = getStatusMeta(enrollmentStatusMeta, school.enrollmentStatus || 'OPEN');
+        const operation = getStatusMeta(SCHOOL_OPERATION_STATUS, school.operationStatus || 'ACTIVE');
+        const enrollment = getStatusMeta(SCHOOL_ENROLLMENT_STATUS, school.enrollmentStatus || 'OPEN');
 
         return (
             <Box sx={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 0.75, mb: 2 }}>
@@ -1542,7 +1621,7 @@ const CicloEscolarSelectionPage = () => {
     };
 
     const headerActions = [
-        { key: 'bulk', label: 'Carga masiva', group: 'upload', permission: 'colegios-crear', onClick: handleOpenBulkUpload },
+        { key: 'bulk', label: 'Carga masiva', group: 'upload', permission: 'colegios-crear', onClick: () => setBulkOpen(true) },
         { key: 'circular', label: 'Enviar circular', group: 'send', permission: 'mail-enviar-circular', onClick: () => setOpenCircularModal(true) },
         { key: 'notification', label: 'Enviar notificación', group: 'send', permission: 'notificaciones-crear', onClick: () => setOpenSendNotifModal(true) },
         { key: 'levels', label: 'Niveles educativos', group: 'other', permission: 'niveles-listar', onClick: () => setOpenNivelesModal(true) },
@@ -1593,166 +1672,49 @@ const CicloEscolarSelectionPage = () => {
                 </CardContent>
             </Card>
 
-            {/* Bulk upload dialog copied/adapted from SchoolsManagementPage */}
-            <Dialog open={openBulkDialog} onClose={handleCloseBulkDialog} maxWidth="sm" fullWidth>
-                <DialogTitle>Carga Masiva de Colegios</DialogTitle>
-                <DialogContent>
-                    <Typography variant="body1" sx={{ mb: 1 }}>
-                        Subir un archivo Excel utilizando la plantilla.
-                        <br />
-                        <br />
-                        Para los horarios, escribir tiempos en formato <code>HH:MM</code> (ej. <code>13:00</code>). <br /> <br />
-                        Las fechas de Inicio Ciclo / Fin Ciclo deben ir en formato <code>dd-mm-aaaa</code>.
-                    </Typography>
-                    <Button
-                        variant="outlined"
-                        color="success"
-                        onClick={async () => {
-                            try {
-                                const workbook = new ExcelJS.Workbook();
-                                const worksheet = workbook.addWorksheet('Plantilla Colegios');
-                                worksheet.columns = [
-                                    { header: 'Nombre', key: 'name', width: 30 },
-                                    { header: 'Dirección', key: 'address', width: 40 },
-                                    { header: 'Ciudad', key: 'city', width: 20 },
-                                    { header: 'Persona de Contacto', key: 'contactPerson', width: 25 },
-                                    { header: 'Correo de Contacto', key: 'contactEmail', width: 30 },
-                                    { header: 'Teléfono de Contacto', key: 'contactPhone', width: 20 },
-                                    { header: 'Enlace Whatsapp', key: 'whatsapp', width: 20 },
-                                    // Dynamic schedule columns
-                                    ...DEFAULT_SCHEDULE_CODES.map(code => ({
-                                        header: `Horario ${code}`, key: `schedule${code}`, width: 14, style: { numFmt: '@' }
-                                    })),
-                                    { header: 'Grados', key: 'grades', width: 30 },
-                                    { header: 'Tarifa Completa', key: 'transportFeeComplete', width: 18, style: { numFmt: '0.00' } },
-                                    { header: 'Tarifa Media', key: 'transportFeeHalf', width: 18, style: { numFmt: '0.00' } },
-                                    { header: 'Dia de Pago', key: 'duePaymentDay', width: 12, style: { numFmt: '0' } },
-                                    { header: 'Banco', key: 'bankName', width: 20 },
-                                    { header: 'Cuenta Bancaria', key: 'bankAccount', width: 25 },
-                                    { header: 'Numeros Ruta', key: 'routeNumbers', width: 25, style: { numFmt: '@' } },
-                                    { header: 'Penalidad Diaria', key: 'dailyPenalty', width: 16, style: { numFmt: '0.00' } },
-                                    { header: 'Inicio Ciclo', key: 'schoolYearStart', width: 14, style: { numFmt: '@' } },
-                                    { header: 'Fin Ciclo', key: 'schoolYearEnd', width: 14, style: { numFmt: '@' } }
-                                ];
-
-                                const templateYear = Number.parseInt(selectedCycleYear, 10) || new Date().getFullYear();
-
-                                // Example row to guide users
-                                worksheet.addRow({
-                                    name: 'Colegio Ejemplo',
-                                    address: 'Calle 123',
-                                    city: 'Ciudad',
-                                    contactPerson: 'Nombre',
-                                    contactEmail: 'contacto@colegio.com',
-                                    contactPhone: '12345678',
-                                    whatsapp: '',
-                                    // Dynamic schedule example values
-                                    ...Object.fromEntries(DEFAULT_SCHEDULE_CODES.map((code, i) => [
-                                        `schedule${code}`, ['07:00', '12:00', '13:00', '15:00'][i] || 'N/A'
-                                    ])),
-                                    grades: 'Kinder,1ero,2do',
-                                    transportFeeComplete: 0.00,
-                                    transportFeeHalf: 0.00,
-                                    duePaymentDay: 1,
-                                    bankName: '',
-                                    bankAccount: '',
-                                    routeNumbers: '12,15',
-                                    dailyPenalty: 10.00,
-                                    schoolYearStart: `01-03-${templateYear}`,
-                                    schoolYearEnd: `28-02-${templateYear + 1}`
-                                });
-
-                                worksheet.getRow(1).font = { bold: true };
-
-                                const buffer = await workbook.xlsx.writeBuffer();
-                                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                                const url = window.URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = `Plantilla_Colegios_${moment().format('YYYYMMDD')}.xlsx`;
-                                a.click();
-                                window.URL.revokeObjectURL(url);
-                            } catch (err) {
-                                console.error('Error generando plantilla:', err);
-                            }
-                        }}
-                        sx={{ mr: 2 }}
-                    >
-                        Descargar Plantilla
-                    </Button>
-                    <Button variant="outlined" component="label" startIcon={<Add />}>
-                        Seleccionar Archivo
-                        <input
-                            type="file"
-                            hidden
-                            onChange={handleFileChange}
-                            accept=".xlsx, .xls, .csv"
-                        />
-                    </Button>
-                    {bulkFile && (
-                        <Typography variant="body2" sx={{ mt: 1 }}>
-                            {bulkFile.name}
-                        </Typography>
-                    )}
-                    {bulkLoading && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
-                            <CircularProgress size={24} />
-                            <Typography variant="body2" sx={{ ml: 2 }}>
-                                Procesando archivo...
-                            </Typography>
-                        </Box>
-                    )}
-                    {bulkResults && (
-                        <Box sx={{ mt: 2 }}>
-                            <Alert severity="info">
-                                <Typography>
-                                    <strong>Colegios creados:</strong> {bulkResults.successCount || 0}
-                                </Typography>
-                                <Typography>
-                                    <strong>Duplicados ignorados:</strong> {bulkResults.duplicateCount || 0}
-                                </Typography>
-                                <Typography>
-                                    <strong>Errores:</strong> {bulkResults.errorsCount || 0}
-                                </Typography>
-                                {bulkResults.duplicateRows && bulkResults.duplicateRows.length > 0 && (
-                                    <>
-                                        <Typography sx={{ mt: 1 }}>
-                                            <strong>Duplicados:</strong>
-                                        </Typography>
-                                        <ul>
-                                            {bulkResults.duplicateRows.map((duplicate) => (
-                                                <li key={`duplicate-${duplicate.row}`}>
-                                                    Fila {duplicate.row}: {duplicate.name || 'Sin nombre'} - {duplicate.reason}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </>
-                                )}
-                                {bulkResults.errorsList && bulkResults.errorsList.length > 0 && (
-                                    <ul>
-                                        {bulkResults.errorsList.map((err) => (
-                                            <li key={`error-${err.row}`}>
-                                                Fila {err.row}: {err.errorMessage}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </Alert>
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseBulkDialog}>Cerrar</Button>
-                    <Button
-                        onClick={handleUploadBulk}
-                        variant="contained"
-                        color="primary"
-                        disabled={!bulkFile || bulkLoading}
-                    >
-                        Subir
-                    </Button>
-                </DialogActions>
-            </Dialog>
+            <BulkUploadDialog
+                open={bulkOpen}
+                onClose={() => setBulkOpen(false)}
+                title="Carga masiva de colegios"
+                description={[
+                    'Sube un archivo Excel usando la plantilla.',
+                    <>Los horarios van en formato <code>HH:MM</code> (ej. <code>13:00</code>).</>,
+                    <>Las fechas de Inicio Ciclo / Fin Ciclo van en formato <code>dd-mm-aaaa</code>.</>,
+                ]}
+                templateObject="colegios"
+                buildTemplate={buildSchoolsTemplate}
+                upload={async (file) => {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    if (selectedCicloEscolarId) {
+                        formData.append('cicloEscolarId', selectedCicloEscolarId);
+                    }
+                    const response = await api.post('/schools/bulk-upload', formData, {
+                        headers: { 'Content-Type': 'multipart/form-data' },
+                    });
+                    return response.data || {};
+                }}
+                onUploaded={() => fetchSchoolsByYear()}
+                renderResult={(result) => (
+                    <>
+                        <DefaultResult result={result} successLabel="Colegios creados" />
+                        {result.duplicateRows?.length > 0 ? (
+                            <Box sx={{ mt: 1.5 }}>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Duplicados ignorados</Typography>
+                                <Box component="ul" sx={{ pl: 3, my: 0.5 }}>
+                                    {result.duplicateRows.map((duplicate) => (
+                                        <li key={`duplicate-${duplicate.row}`}>
+                                            <Typography variant="body2">
+                                                Fila {duplicate.row}: {duplicate.name || 'Sin nombre'} - {duplicate.reason}
+                                            </Typography>
+                                        </li>
+                                    ))}
+                                </Box>
+                            </Box>
+                        ) : null}
+                    </>
+                )}
+            />
 
             {/* Lista de Colegios */}
             <Card>
@@ -1940,1262 +1902,1163 @@ const CicloEscolarSelectionPage = () => {
             </Card>
 
             {/* Diálogo de edición de colegio */}
-            <Dialog 
-                open={openEditDialog} 
-                onClose={handleCloseEditDialog} 
-                maxWidth="md" 
-                fullWidth
+            <AppDialog
+                open={openEditDialog}
+                onClose={handleCloseEditDialog}
+                title={selectedSchool?.id ? 'Editar colegio' : 'Nuevo colegio'}
+                icon={<SchoolIcon />}
+                size="md"
+                onSubmit={() => handleSave()}
+                submitLabel={selectedSchool?.id ? 'Guardar cambios' : 'Crear colegio'}
+                submitting={savingSchool}
+                readOnly={!hasPermission(selectedSchool?.id ? 'colegios-editar' : 'colegios-crear')}
+                dirty={schoolFormSnapshot !== schoolInitialRef.current}
+                contentSx={{ px: 3, py: 2 }}
             >
-                <DialogTitle>
-                    {selectedSchool?.id ? 'Editar Colegio' : 'Añadir Nuevo Colegio'}
-                </DialogTitle>
-                <DialogContent sx={{ px: 3, py: 2 }}>
-                    {!selectedSchool?.id && (
-                        <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: 'grey.50' }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                <FormControl fullWidth size="small">
-                                    <InputLabel>Prellenar con colegio existente</InputLabel>
+                {!selectedSchool?.id && (
+                    <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: 'grey.50' }}>
+                        <Alert severity="info" sx={{ mb: 2 }}>
+                            <Typography sx={{ fontWeight: 600 }}>
+                                ¿Es un colegio que ya existía en otro ciclo? Usa &quot;Prellenar con colegio existente&quot;.
+                            </Typography>
+                            <Typography variant="body2">
+                                Así el sistema sabe que es el <strong>mismo colegio</strong> en un ciclo nuevo y no uno distinto con nombre parecido. Al prellenar:
+                            </Typography>
+                            <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                                <li>El nombre queda igual (si necesita cambiar, se edita después de crearlo).</li>
+                                <li>Se copian contacto, tarifas, banco, mora, horarios, grados, rutas, campos extra y tramos de inscripción.</li>
+                                <li>Las fechas del año escolar y de los tramos se mueven al año del ciclo nuevo (puedes corregirlas antes de guardar).</li>
+                                <li>Se asigna automáticamente el mismo personal: supervisores, auxiliares, pilotos y monitoras.</li>
+                                <li>Nace &quot;Sin operación&quot; e inscripciones cerradas; se activa manualmente al arrancar el ciclo.</li>
+                            </Box>
+                        </Alert>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <FormControl fullWidth size="small">
+                                <InputLabel>Prellenar con colegio existente</InputLabel>
+                                <Select
+                                    value={selectedPrefillSchoolId}
+                                    label="Prellenar con colegio existente"
+                                    onChange={handlePrefillSchoolChange}
+                                    disabled={prefillSchoolsLoading}
+                                >
+                                    <MenuItem value="">
+                                        <em>Sin prellenar</em>
+                                    </MenuItem>
+                                    {prefillSchools.map((school) => {
+                                        const cicloLabel = getCicloEscolarOptionLabel(school?.cicloEscolar) || 'Ciclo actual';
+                                        return (
+                                            <MenuItem key={school.id} value={String(school.id)}>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, width: '100%' }}>
+                                                    <Typography>{school.name}</Typography>
+                                                    <Chip label={cicloLabel} size="small" variant="outlined" />
+                                                </Box>
+                                            </MenuItem>
+                                        );
+                                    })}
+                                </Select>
+                            </FormControl>
+                            {prefillSchoolsLoading && <CircularProgress size={22} />}
+                        </Box>
+                    </Paper>
+                )}
+
+                {/* Sección: Información Básica */}
+                <StyledAccordion 
+                    expanded={expandedPanels.basicInfo} 
+                    onChange={handleAccordionChange('basicInfo')}
+                    TransitionProps={{ unmountOnExit: false }}
+                >
+                    <StyledAccordionSummary expandIcon={<ExpandMore />}>
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                            📋 Información Básica
+                        </Typography>
+                    </StyledAccordionSummary>
+                    <AccordionDetails>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <TextField
+                                name="name"
+                                label="Nombre"
+                                type="text"
+                                fullWidth
+                                variant="outlined"
+                                value={selectedSchool ? selectedSchool.name : ''}
+                                onChange={handleInputChange}
+                                onBlur={handleNameBlur}
+                                disabled={Boolean(!selectedSchool?.id && selectedSchool?.continuesSchoolId)}
+                                helperText={!selectedSchool?.id && selectedSchool?.continuesSchoolId
+                                    ? 'Para cambiar el nombre, créalo y luego usa Editar.'
+                                    : undefined}
+                            />
+                            {selectedSchool?.id
+                                && editGroupCycles.length > 1
+                                && String(selectedSchool.name || '').trim() !== String(selectedSchool.originalName || '').trim() && (
+                                <FormControl component="fieldset">
+                                    <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                                        Este colegio existe en {editGroupCycles.length} ciclos. ¿Dónde se cambia el nombre?
+                                    </Typography>
+                                    <RadioGroup value={renameScope} onChange={(event) => setRenameScope(event.target.value)}>
+                                        <FormControlLabel
+                                            value="THIS_CYCLE"
+                                            control={<Radio size="small" />}
+                                            label={`Solo este ciclo (${selectedSchool.cicloEscolar?.anio ?? 'actual'})`}
+                                        />
+                                        <FormControlLabel
+                                            value="ALL_CYCLES"
+                                            control={<Radio size="small" />}
+                                            label={`Todos los ciclos de este colegio (${editGroupCycles.map((ciclo) => ciclo.anio).filter(Boolean).join(', ')})`}
+                                        />
+                                    </RadioGroup>
+                                </FormControl>
+                            )}
+                            <TextField
+                                name="city"
+                                label="Ciudad"
+                                type="text"
+                                fullWidth
+                                variant="outlined"
+                                value={selectedSchool ? selectedSchool.city : ''}
+                                onChange={handleInputChange}
+                            />
+                            <TextField
+                                name="address"
+                                label="Dirección"
+                                type="text"
+                                fullWidth
+                                variant="outlined"
+                                value={selectedSchool ? selectedSchool.address : ''}
+                                onChange={handleInputChange}
+                            />
+                            <TextField
+                                name="contactPerson"
+                                label="Persona de Contacto"
+                                type="text"
+                                fullWidth
+                                variant="outlined"
+                                value={selectedSchool ? selectedSchool.contactPerson : ''}
+                                onChange={handleInputChange}
+                            />
+                            <TextField
+                                name="contactPhone"
+                                label="Teléfono de Contacto"
+                                type="text"
+                                fullWidth
+                                variant="outlined"
+                                value={selectedSchool ? selectedSchool.contactPhone : ''}
+                                onChange={handleInputChange}
+                            />
+                            <TextField
+                                name="contactEmail"
+                                label="Email de Contacto"
+                                type="email"
+                                fullWidth
+                                variant="outlined"
+                                value={selectedSchool ? selectedSchool.contactEmail : ''}
+                                onChange={handleInputChange}
+                            />
+                            <TextField
+                                name="whatsappLink"
+                                label="Enlace de WhatsApp"
+                                type="text"
+                                fullWidth
+                                variant="outlined"
+                                value={selectedSchool ? selectedSchool.whatsappLink : ''}
+                                onChange={handleInputChange}
+                                placeholder="https://wa.me/123456789?text=Hola"
+                            />
+                            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Estado operativo</InputLabel>
                                     <Select
-                                        value={selectedPrefillSchoolId}
-                                        label="Prellenar con colegio existente"
-                                        onChange={handlePrefillSchoolChange}
-                                        disabled={prefillSchoolsLoading}
+                                        name="operationStatus"
+                                        value={selectedSchool?.operationStatus || 'ACTIVE'}
+                                        label="Estado operativo"
+                                        onChange={handleInputChange}
                                     >
-                                        <MenuItem value="">
-                                            <em>Sin prellenar</em>
-                                        </MenuItem>
-                                        {prefillSchools.map((school) => {
-                                            const cicloLabel = getCicloEscolarOptionLabel(school?.cicloEscolar) || 'Ciclo actual';
-                                            return (
-                                                <MenuItem key={school.id} value={String(school.id)}>
-                                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, width: '100%' }}>
-                                                        <Typography>{school.name}</Typography>
-                                                        <Chip label={cicloLabel} size="small" variant="outlined" />
-                                                    </Box>
-                                                </MenuItem>
-                                            );
-                                        })}
+                                        <MenuItem value="ACTIVE">Operando</MenuItem>
+                                        <MenuItem value="INACTIVE">Sin operación</MenuItem>
+                                    </Select>
+                                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, ml: 0.5 }}>
+                                        Se pedirá confirmación al cambiar este estado.
+                                    </Typography>
+                                </FormControl>
+                                <FormControl fullWidth>
+                                    <InputLabel>Estado de inscripción</InputLabel>
+                                    <Select
+                                        name="enrollmentStatus"
+                                        value={selectedSchool?.enrollmentStatus || 'OPEN'}
+                                        label="Estado de inscripción"
+                                        onChange={handleInputChange}
+                                    >
+                                        <MenuItem value="OPEN">Inscripciones abiertas</MenuItem>
+                                        <MenuItem value="CLOSED">Inscripciones cerradas</MenuItem>
                                     </Select>
                                 </FormControl>
-                                {prefillSchoolsLoading && <CircularProgress size={22} />}
                             </Box>
-                        </Paper>
-                    )}
+                            {selectedSchool?.isTrainingSchool && (
+                                <Alert severity="warning" variant="outlined">
+                                    Este es el colegio de capacitación. Sus registros se borran automáticamente cada
+                                    noche y el personal puede reiniciar su práctica desde la app.
+                                </Alert>
+                            )}
+                        </Box>
+                    </AccordionDetails>
+                </StyledAccordion>
 
-                    {/* Sección: Información Básica */}
-                    <StyledAccordion 
-                        expanded={expandedPanels.basicInfo} 
-                        onChange={handleAccordionChange('basicInfo')}
-                        TransitionProps={{ unmountOnExit: false }}
-                    >
-                        <StyledAccordionSummary expandIcon={<ExpandMore />}>
-                            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                                📋 Información Básica
-                            </Typography>
-                        </StyledAccordionSummary>
-                        <AccordionDetails>
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                <TextField
-                                    name="name"
-                                    label="Nombre"
-                                    type="text"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={selectedSchool ? selectedSchool.name : ''}
-                                    onChange={handleInputChange}
-                                />
-                                <TextField
-                                    name="city"
-                                    label="Ciudad"
-                                    type="text"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={selectedSchool ? selectedSchool.city : ''}
-                                    onChange={handleInputChange}
-                                />
-                                <TextField
-                                    name="address"
-                                    label="Dirección"
-                                    type="text"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={selectedSchool ? selectedSchool.address : ''}
-                                    onChange={handleInputChange}
-                                />
-                                <TextField
-                                    name="contactPerson"
-                                    label="Persona de Contacto"
-                                    type="text"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={selectedSchool ? selectedSchool.contactPerson : ''}
-                                    onChange={handleInputChange}
-                                />
-                                <TextField
-                                    name="contactPhone"
-                                    label="Teléfono de Contacto"
-                                    type="text"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={selectedSchool ? selectedSchool.contactPhone : ''}
-                                    onChange={handleInputChange}
-                                />
-                                <TextField
-                                    name="contactEmail"
-                                    label="Email de Contacto"
-                                    type="email"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={selectedSchool ? selectedSchool.contactEmail : ''}
-                                    onChange={handleInputChange}
-                                />
-                                <TextField
-                                    name="whatsappLink"
-                                    label="Enlace de WhatsApp"
-                                    type="text"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={selectedSchool ? selectedSchool.whatsappLink : ''}
-                                    onChange={handleInputChange}
-                                    placeholder="https://wa.me/123456789?text=Hola"
-                                />
-                                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-                                    <FormControl fullWidth>
-                                        <InputLabel>Estado operativo</InputLabel>
-                                        <Select
-                                            name="operationStatus"
-                                            value={selectedSchool?.operationStatus || 'ACTIVE'}
-                                            label="Estado operativo"
-                                            onChange={handleInputChange}
-                                        >
-                                            <MenuItem value="ACTIVE">Operando</MenuItem>
-                                            <MenuItem value="INACTIVE">Sin operación</MenuItem>
-                                        </Select>
-                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, ml: 0.5 }}>
-                                            Se pedirá confirmación al cambiar este estado.
-                                        </Typography>
-                                    </FormControl>
-                                    <FormControl fullWidth>
-                                        <InputLabel>Estado de inscripción</InputLabel>
-                                        <Select
-                                            name="enrollmentStatus"
-                                            value={selectedSchool?.enrollmentStatus || 'OPEN'}
-                                            label="Estado de inscripción"
-                                            onChange={handleInputChange}
-                                        >
-                                            <MenuItem value="OPEN">Inscripciones abiertas</MenuItem>
-                                            <MenuItem value="CLOSED">Inscripciones cerradas</MenuItem>
-                                        </Select>
-                                    </FormControl>
-                                </Box>
-                                {selectedSchool?.isTrainingSchool && (
-                                    <Alert severity="warning" variant="outlined">
-                                        Este es el colegio de capacitación. Sus registros se borran automáticamente cada
-                                        noche y el personal puede reiniciar su práctica desde la app.
-                                    </Alert>
-                                )}
-                            </Box>
-                        </AccordionDetails>
-                    </StyledAccordion>
-
-                    {/* Sección: Información Financiera */}
-                    <StyledAccordion 
-                        expanded={expandedPanels.financial} 
-                        onChange={handleAccordionChange('financial')}
-                        TransitionProps={{ unmountOnExit: false }}
-                    >
-                        <StyledAccordionSummary expandIcon={<ExpandMore />}>
-                            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                                💰 Información Financiera
-                            </Typography>
-                        </StyledAccordionSummary>
-                        <AccordionDetails>
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                <PermissionGuard permission="colegios-excluir-pagos">
-                                    <Box
-                                        sx={{
-                                            p: 2,
-                                            borderRadius: 2,
-                                            border: '1px solid',
-                                            borderColor: selectedSchool?.paymentsEnabled === false ? 'warning.main' : 'divider',
-                                            bgcolor: selectedSchool?.paymentsEnabled === false ? 'warning.50' : 'background.paper'
-                                        }}
-                                    >
-                                        <FormControlLabel
-                                            sx={{ alignItems: 'flex-start', m: 0 }}
-                                            control={
-                                                <Checkbox
-                                                    sx={{ pt: 0.5 }}
-                                                    checked={selectedSchool ? selectedSchool.paymentsEnabled === false : false}
-                                                    disabled={!selectedSchool || !!selectedSchool.paymentsToggleLocked}
-                                                    onChange={(e) => {
-                                                        paymentsExclusionConfirmedRef.current = false;
-                                                        setSelectedSchool(prev => ({ ...prev, paymentsEnabled: !e.target.checked }));
-                                                    }}
-                                                />
-                                            }
-                                            label={
-                                                <Box>
-                                                    <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                                                        Excluir del flujo de pagos
-                                                    </Typography>
-                                                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                                                        Para colegios que no pagan a través del sistema (por ejemplo, un convenio o un
-                                                        colegio que solo usa la parte operativa). Al excluirlo:
-                                                    </Typography>
-                                                    <Box
-                                                        component="ul"
-                                                        sx={{
-                                                            m: 0,
-                                                            mt: 0.5,
-                                                            pl: 2.5,
-                                                            color: 'text.secondary',
-                                                            typography: 'body2',
-                                                            // Un reset global de estilos quita las viñetas de las listas.
-                                                            listStyleType: 'disc',
-                                                            '& li': { display: 'list-item', listStyleType: 'disc', mb: 0.25 }
-                                                        }}
-                                                    >
-                                                        <li>No se generan cuotas mensuales, mora, cargo de inscripción ni débitos automáticos.</li>
-                                                        <li>Las familias dejan de suspenderse por mora, y las suspensiones automáticas por mora que ya tuvieran se levantan (las de contrato o manuales no cambian).</li>
-                                                        <li>El colegio no aparece en las estadísticas financieras.</li>
-                                                        <li>Se bloquea cualquier operación de pagos: registrar pagos, boletas, descuentos, períodos, etc.</li>
-                                                        <li>Los padres no ven la sección de pagos.</li>
-                                                    </Box>
-                                                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                                                        Todo lo demás sigue funcionando normal: rutas, buses, asistencia, circulares y contratos.
-                                                    </Typography>
-                                                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                                                        Solo se puede excluir un colegio que no tenga movimientos de dinero (pagos, abonos de
-                                                        inscripción ni crédito a favor). Si más adelante se vuelve a activar el flujo de pagos,
-                                                        el sistema pregunta cómo cobrar la inscripción y desde qué mes la mensualidad.
-                                                    </Typography>
-                                                </Box>
-                                            }
-                                        />
-                                        {selectedSchool?.paymentsToggleLocked && (
-                                            <Alert severity="info" sx={{ mt: 1.5 }}>
-                                                Este colegio ya tiene movimientos de pago registrados, por lo que no se puede excluir.
-                                                Contacta a soporte si necesitas hacerlo.
-                                            </Alert>
-                                        )}
-                                    </Box>
-                                </PermissionGuard>
-
-                                <Box sx={{ display: 'flex', gap: 2 }}>
-                                    <TextField
-                                        label="Inicio Ciclo del Colegio"
-                                        type="date"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={schoolYearStart || ''}
-                                        onChange={(e) => setSchoolYearStart(e.target.value)}
-                                        InputLabelProps={{ shrink: true }}
-                                    />
-                                    <TextField
-                                        label="Fin Ciclo del Colegio"
-                                        type="date"
-                                        fullWidth
-                                        variant="outlined"
-                                        value={schoolYearEnd || ''}
-                                        onChange={(e) => setSchoolYearEnd(e.target.value)}
-                                        InputLabelProps={{ shrink: true }}
-                                    />
-                                </Box>
-
-                                <TextField
-                                    name="transportFeeComplete"
-                                    label="Cuota de Transporte Completa (Q)"
-                                    type="number"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={selectedSchool ? selectedSchool.transportFeeComplete : ''}
-                                    onChange={handleInputChange}
-                                    inputProps={{ min: '0', step: '0.01' }}
-                                />
-                                <TextField
-                                    name="transportFeeHalf"
-                                    label="Cuota de Transporte Media (Q)"
-                                    type="number"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={selectedSchool ? selectedSchool.transportFeeHalf : ''}
-                                    onChange={handleInputChange}
-                                    inputProps={{ min: '0', step: '0.01' }}
-                                />
-                                <TextField
-                                    name="duePaymentDay"
-                                    label="Día de Pago (1-31)"
-                                    type="number"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={selectedSchool ? selectedSchool.duePaymentDay : ''}
-                                    onChange={handleInputChange}
-                                    inputProps={{ min: '1', max: '31' }}
-                                />
-                                <TextField
-                                    name="bankName"
-                                    label="Banco"
-                                    type="text"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={selectedSchool ? selectedSchool.bankName : ''}
-                                    onChange={handleInputChange}
-                                />
-                                <TextField
-                                    name="bankAccount"
-                                    label="Cuenta Bancaria"
-                                    type="text"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={selectedSchool ? selectedSchool.bankAccount : ''}
-                                    onChange={handleInputChange}
-                                />
-                                <TextField
-                                    name="enrollmentFeeAmount"
-                                    label="Inscripción por estudiante (Q)"
-                                    type="number"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={selectedSchool ? selectedSchool.enrollmentFeeAmount : 0}
-                                    onChange={handleInputChange}
-                                    inputProps={{ min: '0', step: '0.01' }}
-                                    helperText="Monto base de inscripción del ciclo, antes de aplicar los tramos de descuento por fecha."
-                                />
-
-                                <EnrollmentFeeTiersEditor
-                                    schoolId={selectedSchool?.id}
-                                    draftTiers={draftEnrollmentTiers}
-                                    onDraftTiersChange={setDraftEnrollmentTiers}
-                                />
-
-                                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                                    <TextField
-                                        name="dailyPenalty"
-                                        label="Mora diaria (Q)"
-                                        type="number"
-                                        variant="outlined"
-                                        value={selectedSchool ? selectedSchool.dailyPenalty : 0}
-                                        onChange={handleInputChange}
-                                        inputProps={{ min: '0', step: '0.01' }}
-                                        sx={{ width: 140 }}
-                                    />
+                {/* Sección: Información Financiera */}
+                <StyledAccordion 
+                    expanded={expandedPanels.financial} 
+                    onChange={handleAccordionChange('financial')}
+                    TransitionProps={{ unmountOnExit: false }}
+                >
+                    <StyledAccordionSummary expandIcon={<ExpandMore />}>
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                            💰 Información Financiera
+                        </Typography>
+                    </StyledAccordionSummary>
+                    <AccordionDetails>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <PermissionGuard permission="colegios-excluir-pagos">
+                                <Box
+                                    sx={{
+                                        p: 2,
+                                        borderRadius: 2,
+                                        border: '1px solid',
+                                        borderColor: selectedSchool?.paymentsEnabled === false ? 'warning.main' : 'divider',
+                                        bgcolor: selectedSchool?.paymentsEnabled === false ? 'warning.50' : 'background.paper'
+                                    }}
+                                >
                                     <FormControlLabel
+                                        sx={{ alignItems: 'flex-start', m: 0 }}
                                         control={
                                             <Checkbox
-                                                checked={selectedSchool ? !!selectedSchool.penaltyPaused : false}
-                                                onChange={(e) => setSelectedSchool(prev => ({ ...prev, penaltyPaused: e.target.checked }))}
+                                                sx={{ pt: 0.5 }}
+                                                checked={selectedSchool ? selectedSchool.paymentsEnabled === false : false}
+                                                disabled={!selectedSchool || !!selectedSchool.paymentsToggleLocked}
+                                                onChange={(e) => {
+                                                    paymentsExclusionConfirmedRef.current = false;
+                                                    setSelectedSchool(prev => ({ ...prev, paymentsEnabled: !e.target.checked }));
+                                                }}
                                             />
                                         }
-                                        label="Mora pausada"
+                                        label={
+                                            <Box>
+                                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                                    Excluir del flujo de pagos
+                                                </Typography>
+                                                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                                    Para colegios que no pagan a través del sistema (por ejemplo, un convenio o un
+                                                    colegio que solo usa la parte operativa). Al excluirlo:
+                                                </Typography>
+                                                <Box
+                                                    component="ul"
+                                                    sx={{
+                                                        m: 0,
+                                                        mt: 0.5,
+                                                        pl: 2.5,
+                                                        color: 'text.secondary',
+                                                        typography: 'body2',
+                                                        // Un reset global de estilos quita las viñetas de las listas.
+                                                        listStyleType: 'disc',
+                                                        '& li': { display: 'list-item', listStyleType: 'disc', mb: 0.25 }
+                                                    }}
+                                                >
+                                                    <li>No se generan cuotas mensuales, mora, cargo de inscripción ni débitos automáticos.</li>
+                                                    <li>Las familias dejan de suspenderse por mora, y las suspensiones automáticas por mora que ya tuvieran se levantan (las de contrato o manuales no cambian).</li>
+                                                    <li>El colegio no aparece en las estadísticas financieras.</li>
+                                                    <li>Se bloquea cualquier operación de pagos: registrar pagos, boletas, descuentos, períodos, etc.</li>
+                                                    <li>Los padres no ven la sección de pagos.</li>
+                                                </Box>
+                                                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                                    Todo lo demás sigue funcionando normal: rutas, buses, asistencia, circulares y contratos.
+                                                </Typography>
+                                                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                                    Solo se puede excluir un colegio que no tenga movimientos de dinero (pagos, abonos de
+                                                    inscripción ni crédito a favor). Si más adelante se vuelve a activar el flujo de pagos,
+                                                    el sistema pregunta cómo cobrar la inscripción y desde qué mes la mensualidad.
+                                                </Typography>
+                                            </Box>
+                                        }
                                     />
-                                    <Button
-                                        variant="contained"
-                                        color="warning"
-                                        startIcon={<DeleteSweepIcon />}
-                                        onClick={() => setOpenQuickClear(true)}
-                                        disabled={!selectedSchool}
-                                    >
-                                        LIMPIEZA DE MORA
-                                    </Button>
+                                    {selectedSchool?.paymentsToggleLocked && (
+                                        <Alert severity="info" sx={{ mt: 1.5 }}>
+                                            Este colegio ya tiene movimientos de pago registrados, por lo que no se puede excluir.
+                                            Contacta a soporte si necesitas hacerlo.
+                                        </Alert>
+                                    )}
                                 </Box>
-                            </Box>
-                        </AccordionDetails>
-                    </StyledAccordion>
+                            </PermissionGuard>
 
-                    {/* Dialog: Limpieza rápida (período actual, motivo solamente) */}
-                    <Dialog open={openQuickClear} onClose={() => setOpenQuickClear(false)} maxWidth="sm" fullWidth>
-                        <DialogTitle>Limpiar Mora — Período Actual ({currentPeriodDisplay})</DialogTitle>
-                        <DialogContent>
-                            <DialogContentText sx={{ mb: 2 }}>
-                                ⚠️ Esta acción limpiará la mora de todas las familias del colegio para el período actual ({currentPeriodDisplay}).
-                                Por favor, proporciona un motivo para el registro de esta limpieza:
-                            </DialogContentText>
+                            <Box sx={{ display: 'flex', gap: 2 }}>
+                                <TextField
+                                    label="Inicio Ciclo del Colegio"
+                                    type="date"
+                                    fullWidth
+                                    variant="outlined"
+                                    value={schoolYearStart || ''}
+                                    onChange={(e) => setSchoolYearStart(e.target.value)}
+                                    InputLabelProps={{ shrink: true }}
+                                />
+                                <TextField
+                                    label="Fin Ciclo del Colegio"
+                                    type="date"
+                                    fullWidth
+                                    variant="outlined"
+                                    value={schoolYearEnd || ''}
+                                    onChange={(e) => setSchoolYearEnd(e.target.value)}
+                                    InputLabelProps={{ shrink: true }}
+                                />
+                            </Box>
+
                             <TextField
-                                label="Período"
-                                type="text"
+                                name="transportFeeComplete"
+                                label="Cuota de Transporte Completa (Q)"
+                                type="number"
                                 fullWidth
-                                value={currentPeriodDisplay}
-                                InputProps={{ readOnly: true }}
-                                sx={{ mb: 2 }}
+                                variant="outlined"
+                                value={selectedSchool ? selectedSchool.transportFeeComplete : ''}
+                                onChange={handleInputChange}
+                                inputProps={{ min: '0', step: '0.01' }}
                             />
                             <TextField
-                                label="Motivo"
+                                name="transportFeeHalf"
+                                label="Cuota de Transporte Media (Q)"
+                                type="number"
+                                fullWidth
+                                variant="outlined"
+                                value={selectedSchool ? selectedSchool.transportFeeHalf : ''}
+                                onChange={handleInputChange}
+                                inputProps={{ min: '0', step: '0.01' }}
+                            />
+                            <TextField
+                                name="duePaymentDay"
+                                label="Día de Pago (1-31)"
+                                type="number"
+                                fullWidth
+                                variant="outlined"
+                                value={selectedSchool ? selectedSchool.duePaymentDay : ''}
+                                onChange={handleInputChange}
+                                inputProps={{ min: '1', max: '31' }}
+                            />
+                            <TextField
+                                name="bankName"
+                                label="Banco"
                                 type="text"
                                 fullWidth
-                                multiline
-                                minRows={2}
-                                value={quickClearReason}
-                                onChange={(e) => setQuickClearReason(e.target.value)}
+                                variant="outlined"
+                                value={selectedSchool ? selectedSchool.bankName : ''}
+                                onChange={handleInputChange}
                             />
-                        </DialogContent>
-                        <DialogActions>
-                            <Button onClick={() => setOpenQuickClear(false)}>Cancelar</Button>
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                disabled={!quickClearReason || !selectedSchool || quickClearing}
-                                onClick={async () => {
-                                    try {
-                                        setQuickClearing(true);
-                                        const period = `${currentYear}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-                                        await api.post('/payments/penalties/clear', {
-                                            schoolId: selectedSchool.id,
-                                            cicloEscolarId: selectedCicloEscolarId || null,
-                                            period,
-                                            reason: quickClearReason
-                                        });
-                                        setQuickClearing(false);
-                                        setOpenQuickClear(false);
-                                        setSnackbar({ open: true, message: 'Limpieza de mora realizada correctamente', severity: 'success' });
-                                        fetchSchoolsByYear();
-                                    } catch (err) {
-                                        console.error(err);
-                                        setQuickClearing(false);
-                                        setSnackbar({ open: true, message: 'Error al realizar limpieza de mora', severity: 'error' });
+                            <TextField
+                                name="bankAccount"
+                                label="Cuenta Bancaria"
+                                type="text"
+                                fullWidth
+                                variant="outlined"
+                                value={selectedSchool ? selectedSchool.bankAccount : ''}
+                                onChange={handleInputChange}
+                            />
+                            <TextField
+                                name="enrollmentFeeAmount"
+                                label="Inscripción por estudiante (Q)"
+                                type="number"
+                                fullWidth
+                                variant="outlined"
+                                value={selectedSchool ? selectedSchool.enrollmentFeeAmount : 0}
+                                onChange={handleInputChange}
+                                inputProps={{ min: '0', step: '0.01' }}
+                                helperText="Monto base de inscripción del ciclo, antes de aplicar los tramos de descuento por fecha."
+                            />
+
+                            <EnrollmentFeeTiersEditor
+                                key={`tiers-${tiersEditorKey}`}
+                                schoolId={selectedSchool?.id}
+                                draftTiers={draftEnrollmentTiers}
+                                onDraftTiersChange={setDraftEnrollmentTiers}
+                            />
+
+                            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                                <TextField
+                                    name="dailyPenalty"
+                                    label="Mora diaria (Q)"
+                                    type="number"
+                                    variant="outlined"
+                                    value={selectedSchool ? selectedSchool.dailyPenalty : 0}
+                                    onChange={handleInputChange}
+                                    inputProps={{ min: '0', step: '0.01' }}
+                                    sx={{ width: 140 }}
+                                />
+                                <FormControlLabel
+                                    control={
+                                        <Checkbox
+                                            checked={selectedSchool ? !!selectedSchool.penaltyPaused : false}
+                                            onChange={(e) => setSelectedSchool(prev => ({ ...prev, penaltyPaused: e.target.checked }))}
+                                        />
                                     }
-                                }}
-                            >
-                                Limpiar
-                            </Button>
-                        </DialogActions>
-                    </Dialog>
-
-                    {/* Sección: Horarios */}
-                    <StyledAccordion 
-                        expanded={expandedPanels.schedules} 
-                        onChange={handleAccordionChange('schedules')}
-                        TransitionProps={{ unmountOnExit: false }}
-                    >
-                        <StyledAccordionSummary expandIcon={<ExpandMore />}>
-                            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                                🕐 Horarios del Colegio
-                            </Typography>
-                        </StyledAccordionSummary>
-                        <AccordionDetails>
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                                    <Typography variant="body2" color="text.secondary">
-                                        Horarios configurados actualmente: {Array.isArray(schoolSchedules) ? schoolSchedules.length : 0}
-                                    </Typography>
-                                    <PermissionGuard permission="colegios-editar">
-                                        <Button
-                                            variant="contained"
-                                            startIcon={<Edit />}
-                                            onClick={handleOpenEditSchedulesModal}
-                                            disabled={!selectedSchool}
-                                        >
-                                            Editar Horarios del Colegio
-                                        </Button>
-                                    </PermissionGuard>
-                                </Box>
-                            </Box>
-                        </AccordionDetails>
-                    </StyledAccordion>
-
-                    {/* Sección: Grados y Niveles */}
-                    <StyledAccordion
-                        expanded={expandedPanels.grades}
-                        onChange={handleAccordionChange('grades')}
-                        TransitionProps={{ unmountOnExit: false }}
-                    >
-                        <StyledAccordionSummary expandIcon={<ExpandMore />}>
-                            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                                🎓 Grados y Niveles del Colegio
-                            </Typography>
-                        </StyledAccordionSummary>
-                        <AccordionDetails>
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                                    <TextField
-                                        label="Nombre del Grado"
-                                        variant="outlined"
-                                        value={newGradeName}
-                                        onChange={(e) => setNewGradeName(e.target.value)}
-                                        fullWidth
-                                    />
-                                    <Button
-                                        variant="outlined"
-                                        onClick={() => {
-                                            const raw = (newGradeName || '').toString();
-                                            const normalizeGradeName = (value) => {
-                                                const trimmed = (value || '').toString().trim();
-                                                if (!trimmed) {
-                                                    return '';
-                                                }
-                                                const collapsed = trimmed.replace(/\s+/g, ' ');
-                                                return collapsed.replace(/\s+([.,;:!?])$/, '$1');
-                                            };
-
-                                            const names = raw
-                                                .split(',')
-                                                .map(normalizeGradeName)
-                                                .filter(Boolean);
-                                            if (names.length === 0) {
-                                                return;
-                                            }
-
-                                            setSchoolGrades((prev) => {
-                                                const prevArr = Array.isArray(prev) ? prev : [];
-                                                const existing = new Set(
-                                                    prevArr
-                                                        .map((g) => normalizeGradeName(g?.name).toLowerCase())
-                                                        .filter(Boolean)
-                                                );
-
-                                                const next = [...prevArr];
-                                                for (const n of names) {
-                                                    const key = n.toLowerCase();
-                                                    if (existing.has(key)) {
-                                                        continue;
-                                                    }
-                                                    existing.add(key);
-                                                    next.push({ name: n });
-                                                }
-                                                return next;
-                                            });
-
-                                            setNewGradeName('');
-                                        }}
-                                        startIcon={<Add />}
-                                    >
-                                        Agregar
-                                    </Button>
-                                </Box>
-
-                                <Box>
-                                    <Typography variant="subtitle2" sx={{ mb: 1 }}>Grados registrados:</Typography>
-                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                                        {Array.isArray(schoolGrades) && schoolGrades.length > 0 ? (
-                                            schoolGrades.map((grade, idx) => (
-                                                <Chip
-                                                    key={idx}
-                                                    label={grade?.name || `Grado ${idx + 1}`}
-                                                    onDelete={() => handleRemoveGrade(idx)}
-                                                    sx={{ mr: 1, mb: 1 }}
-                                                />
-                                            ))
-                                        ) : (
-                                            <Typography variant="body2" color="text.secondary">No hay grados definidos.</Typography>
-                                        )}
-                                    </Box>
-                                </Box>
-
-                                <Divider sx={{ my: 1 }} />
-
-                                <Box>
-                                    <Typography variant="subtitle2" sx={{ mb: 1 }}>Niveles educativos:</Typography>
-                                    <SchoolLevelGradesEditor
-                                        grades={normalizedSchoolGradeNames}
-                                        value={schoolLevelGrades}
-                                        onChange={setSchoolLevelGrades}
-                                    />
-                                </Box>
-                            </Box>
-                        </AccordionDetails>
-                    </StyledAccordion>
-
-                    {/* Sección: Números de Ruta */}
-                    <StyledAccordion 
-                        expanded={expandedPanels.routes} 
-                        onChange={handleAccordionChange('routes')}
-                        TransitionProps={{ unmountOnExit: false }}
-                    >
-                        <StyledAccordionSummary expandIcon={<ExpandMore />}>
-                            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                                🚌 Números de Ruta del Colegio
-                            </Typography>
-                        </StyledAccordionSummary>
-                        <AccordionDetails>
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                {schoolRouteNumbers.map((rn, idx) => {
-                                    const entry = (schoolRouteSchedules || []).find(x => String(x.routeNumber) === String(rn)) || { routeNumber: String(rn), schedules: [] };
-                                    const selectedByCode = new Set((entry.schedules || []).map(s => s?.code).filter(Boolean));
-                                    const toggleSchedule = (code, schObj, checked) => {
-                                        setSchoolRouteSchedules(prev => {
-                                            const arr = Array.isArray(prev) ? [...prev] : [];
-                                            let i = arr.findIndex(x => String(x.routeNumber) === String(rn));
-                                            if (i === -1) { arr.push({ routeNumber: String(rn), schedules: [] }); i = arr.length - 1; }
-                                            const curr = Array.isArray(arr[i].schedules) ? [...arr[i].schedules] : [];
-                                            const idxByCode = curr.findIndex(s => s && s.code === code);
-                                            if (checked) {
-                                                const cleaned = { code: schObj.code, name: schObj.name || `HORARIO ${schObj.code}`, times: Array.isArray(schObj.times) && schObj.times[0] ? [String(schObj.times[0])] : [] };
-                                                if (idxByCode === -1) {
-                                                    curr.push(cleaned);
-                                                } else {
-                                                    curr[idxByCode] = cleaned;
-                                                }
-                                            } else {
-                                                if (idxByCode !== -1) {
-                                                    curr.splice(idxByCode, 1);
-                                                }
-                                            }
-                                            arr[i] = { routeNumber: String(rn), schedules: curr };
-                                            return arr;
-                                        });
-                                    };
-                                    return (
-                                        <Paper key={idx} sx={{ p: 2 }}>
-                                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2 }}>
-                                                <TextField
-                                                    fullWidth
-                                                    value={rn}
-                                                    onChange={(e) => handleChangeRouteNumber(idx, e.target.value)}
-                                                    label={`Número de Ruta #${idx + 1}`}
-                                                />
-                                                <IconButton size="small" color="error" onClick={() => handleRemoveRouteNumber(idx)}>
-                                                    <Delete />
-                                                </IconButton>
-                                            </Box>
-                                            <Typography variant="body2" sx={{ mb: 1 }}>Horarios asignados:</Typography>
-                                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                                                {(schoolSchedules || []).map((sch, si) => {
-                                                    const timeVal = Array.isArray(sch.times) && sch.times[0] && sch.times[0] !== 'N/A' ? sch.times[0] : '';
-                                                    const label = `${sch.code || sch.name || 'Horario'}${timeVal ? ` — ${timeVal}` : ''}`;
-                                                    const disabled = !timeVal;
-                                                    const checked = sch.code ? selectedByCode.has(sch.code) : false;
-                                                    return (
-                                                        <FormControlLabel
-                                                            key={`rn-${idx}-sch-${si}`}
-                                                            control={<Checkbox size="small" disabled={disabled} checked={checked} onChange={(e) => toggleSchedule(sch.code, sch, e.target.checked)} />}
-                                                            label={label}
-                                                        />
-                                                    );
-                                                })}
-                                            </Box>
-                                        </Paper>
-                                    );
-                                })}
-                                <Button variant="outlined" onClick={handleAddRouteNumber} startIcon={<Add />} sx={{ mt: 1 }}>
-                                    Agregar Número de Ruta
+                                    label="Mora pausada"
+                                />
+                                <Button
+                                    variant="contained"
+                                    color="warning"
+                                    startIcon={<DeleteSweepIcon />}
+                                    onClick={() => setOpenQuickClear(true)}
+                                    disabled={!selectedSchool}
+                                >
+                                    LIMPIEZA DE MORA
                                 </Button>
                             </Box>
-                        </AccordionDetails>
-                    </StyledAccordion>
+                        </Box>
+                    </AccordionDetails>
+                </StyledAccordion>
 
-                    {/* Sección: Campos Extra */}
-                    <StyledAccordion 
-                        expanded={expandedPanels.extraFields} 
-                        onChange={handleAccordionChange('extraFields')}
-                        TransitionProps={{ unmountOnExit: false }}
-                    >
-                        <StyledAccordionSummary expandIcon={<ExpandMore />}>
-                            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                                📝 Campos Extra de Inscripción
-                            </Typography>
-                        </StyledAccordionSummary>
-                        <AccordionDetails>
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                {schoolExtraFields.map((field, idx) => (
+                {/* Dialog: Limpieza rápida (período actual, motivo solamente) */}
+                <AppDialog
+                    open={openQuickClear}
+                    onClose={() => setOpenQuickClear(false)}
+                    title={`Limpiar mora — período actual (${currentPeriodDisplay})`}
+                    icon={<CleaningServicesIcon />}
+                    size="sm"
+                    onSubmit={handleQuickClear}
+                    submitLabel="Limpiar"
+                    submitting={quickClearing}
+                    submitDisabled={!quickClearReason || !selectedSchool}
+                >
+                        <DialogContentText sx={{ mb: 2 }}>
+                            ⚠️ Esta acción limpiará la mora de todas las familias del colegio para el período actual ({currentPeriodDisplay}).
+                            Por favor, proporciona un motivo para el registro de esta limpieza:
+                        </DialogContentText>
+                        <TextField
+                            label="Período"
+                            type="text"
+                            fullWidth
+                            value={currentPeriodDisplay}
+                            InputProps={{ readOnly: true }}
+                            sx={{ mb: 2 }}
+                        />
+                        <TextField
+                            label="Motivo"
+                            type="text"
+                            fullWidth
+                            multiline
+                            minRows={2}
+                            value={quickClearReason}
+                            onChange={(e) => setQuickClearReason(e.target.value)}
+                        />
+                </AppDialog>
+
+                {/* Sección: Horarios */}
+                <StyledAccordion 
+                    expanded={expandedPanels.schedules} 
+                    onChange={handleAccordionChange('schedules')}
+                    TransitionProps={{ unmountOnExit: false }}
+                >
+                    <StyledAccordionSummary expandIcon={<ExpandMore />}>
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                            🕐 Horarios del Colegio
+                        </Typography>
+                    </StyledAccordionSummary>
+                    <AccordionDetails>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                                <Typography variant="body2" color="text.secondary">
+                                    Horarios configurados actualmente: {Array.isArray(schoolSchedules) ? schoolSchedules.length : 0}
+                                </Typography>
+                                <PermissionGuard permission="colegios-editar">
+                                    <Button
+                                        variant="contained"
+                                        startIcon={<Edit />}
+                                        onClick={handleOpenEditSchedulesModal}
+                                        disabled={!selectedSchool}
+                                    >
+                                        Editar Horarios del Colegio
+                                    </Button>
+                                </PermissionGuard>
+                            </Box>
+                        </Box>
+                    </AccordionDetails>
+                </StyledAccordion>
+
+                {/* Sección: Grados y Niveles */}
+                <StyledAccordion
+                    expanded={expandedPanels.grades}
+                    onChange={handleAccordionChange('grades')}
+                    TransitionProps={{ unmountOnExit: false }}
+                >
+                    <StyledAccordionSummary expandIcon={<ExpandMore />}>
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                            🎓 Grados y Niveles del Colegio
+                        </Typography>
+                    </StyledAccordionSummary>
+                    <AccordionDetails>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                                <TextField
+                                    label="Nombre del Grado"
+                                    variant="outlined"
+                                    value={newGradeName}
+                                    onChange={(e) => setNewGradeName(e.target.value)}
+                                    fullWidth
+                                />
+                                <Button
+                                    variant="outlined"
+                                    onClick={() => {
+                                        const raw = (newGradeName || '').toString();
+                                        const normalizeGradeName = (value) => {
+                                            const trimmed = (value || '').toString().trim();
+                                            if (!trimmed) {
+                                                return '';
+                                            }
+                                            const collapsed = trimmed.replace(/\s+/g, ' ');
+                                            return collapsed.replace(/\s+([.,;:!?])$/, '$1');
+                                        };
+
+                                        const names = raw
+                                            .split(',')
+                                            .map(normalizeGradeName)
+                                            .filter(Boolean);
+                                        if (names.length === 0) {
+                                            return;
+                                        }
+
+                                        setSchoolGrades((prev) => {
+                                            const prevArr = Array.isArray(prev) ? prev : [];
+                                            const existing = new Set(
+                                                prevArr
+                                                    .map((g) => normalizeGradeName(g?.name).toLowerCase())
+                                                    .filter(Boolean)
+                                            );
+
+                                            const next = [...prevArr];
+                                            for (const n of names) {
+                                                const key = n.toLowerCase();
+                                                if (existing.has(key)) {
+                                                    continue;
+                                                }
+                                                existing.add(key);
+                                                next.push({ name: n });
+                                            }
+                                            return next;
+                                        });
+
+                                        setNewGradeName('');
+                                    }}
+                                    startIcon={<Add />}
+                                >
+                                    Agregar
+                                </Button>
+                            </Box>
+
+                            <Box>
+                                <Typography variant="subtitle2" sx={{ mb: 1 }}>Grados registrados:</Typography>
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                    {Array.isArray(schoolGrades) && schoolGrades.length > 0 ? (
+                                        schoolGrades.map((grade, idx) => (
+                                            <Chip
+                                                key={idx}
+                                                label={grade?.name || `Grado ${idx + 1}`}
+                                                onDelete={() => handleRemoveGrade(idx)}
+                                                sx={{ mr: 1, mb: 1 }}
+                                            />
+                                        ))
+                                    ) : (
+                                        <Typography variant="body2" color="text.secondary">No hay grados definidos.</Typography>
+                                    )}
+                                </Box>
+                            </Box>
+
+                            <Divider sx={{ my: 1 }} />
+
+                            <Box>
+                                <Typography variant="subtitle2" sx={{ mb: 1 }}>Niveles educativos:</Typography>
+                                <SchoolLevelGradesEditor
+                                    grades={normalizedSchoolGradeNames}
+                                    value={schoolLevelGrades}
+                                    onChange={setSchoolLevelGrades}
+                                />
+                            </Box>
+                        </Box>
+                    </AccordionDetails>
+                </StyledAccordion>
+
+                {/* Sección: Números de Ruta */}
+                <StyledAccordion 
+                    expanded={expandedPanels.routes} 
+                    onChange={handleAccordionChange('routes')}
+                    TransitionProps={{ unmountOnExit: false }}
+                >
+                    <StyledAccordionSummary expandIcon={<ExpandMore />}>
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                            🚌 Números de Ruta del Colegio
+                        </Typography>
+                    </StyledAccordionSummary>
+                    <AccordionDetails>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            {schoolRouteNumbers.map((rn, idx) => {
+                                const entry = (schoolRouteSchedules || []).find(x => String(x.routeNumber) === String(rn)) || { routeNumber: String(rn), schedules: [] };
+                                const selectedByCode = new Set((entry.schedules || []).map(s => s?.code).filter(Boolean));
+                                const toggleSchedule = (code, schObj, checked) => {
+                                    setSchoolRouteSchedules(prev => {
+                                        const arr = Array.isArray(prev) ? [...prev] : [];
+                                        let i = arr.findIndex(x => String(x.routeNumber) === String(rn));
+                                        if (i === -1) { arr.push({ routeNumber: String(rn), schedules: [] }); i = arr.length - 1; }
+                                        const curr = Array.isArray(arr[i].schedules) ? [...arr[i].schedules] : [];
+                                        const idxByCode = curr.findIndex(s => s && s.code === code);
+                                        if (checked) {
+                                            const cleaned = { code: schObj.code, name: schObj.name || `HORARIO ${schObj.code}`, times: Array.isArray(schObj.times) && schObj.times[0] ? [String(schObj.times[0])] : [] };
+                                            if (idxByCode === -1) {
+                                                curr.push(cleaned);
+                                            } else {
+                                                curr[idxByCode] = cleaned;
+                                            }
+                                        } else {
+                                            if (idxByCode !== -1) {
+                                                curr.splice(idxByCode, 1);
+                                            }
+                                        }
+                                        arr[i] = { routeNumber: String(rn), schedules: curr };
+                                        return arr;
+                                    });
+                                };
+                                return (
                                     <Paper key={idx} sx={{ p: 2 }}>
-                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                                            <Typography variant="subtitle1">
-                                                Campo #{idx + 1}
-                                            </Typography>
-                                            <IconButton
-                                                onClick={() => handleRemoveExtraField(idx)}
-                                                color="error"
-                                                size="small"
-                                            >
+                                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2 }}>
+                                            <TextField
+                                                fullWidth
+                                                value={rn}
+                                                onChange={(e) => handleChangeRouteNumber(idx, e.target.value)}
+                                                label={`Número de Ruta #${idx + 1}`}
+                                            />
+                                            <IconButton size="small" color="error" onClick={() => handleRemoveRouteNumber(idx)}>
                                                 <Delete />
                                             </IconButton>
                                         </Box>
-                                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                            <TextField
-                                                label="Nombre del Campo"
-                                                type="text"
-                                                fullWidth
-                                                value={field.fieldName || ''}
-                                                onChange={(e) => handleChangeExtraField(idx, 'fieldName', e.target.value)}
-                                            />
-                                            <FormControl fullWidth>
-                                                <InputLabel>Tipo</InputLabel>
-                                                <Select
-                                                    value={field.type || 'text'}
-                                                    onChange={(e) => handleChangeExtraField(idx, 'type', e.target.value)}
-                                                    label="Tipo"
-                                                >
-                                                    <MenuItem value="text">Texto</MenuItem>
-                                                    <MenuItem value="number">Número</MenuItem>
-                                                    <MenuItem value="date">Fecha</MenuItem>
-                                                    <MenuItem value="select">Select/Combo</MenuItem>
-                                                </Select>
-                                            </FormControl>
-                                            <FormControlLabel
-                                                control={
-                                                    <Checkbox
-                                                        checked={!!field.required}
-                                                        onChange={(e) => handleChangeExtraField(idx, 'required', e.target.checked)}
+                                        <Typography variant="body2" sx={{ mb: 1 }}>Horarios asignados:</Typography>
+                                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                            {(schoolSchedules || []).map((sch, si) => {
+                                                const timeVal = Array.isArray(sch.times) && sch.times[0] && sch.times[0] !== 'N/A' ? sch.times[0] : '';
+                                                const label = `${sch.code || sch.name || 'Horario'}${timeVal ? ` — ${timeVal}` : ''}`;
+                                                const disabled = !timeVal;
+                                                const checked = sch.code ? selectedByCode.has(sch.code) : false;
+                                                return (
+                                                    <FormControlLabel
+                                                        key={`rn-${idx}-sch-${si}`}
+                                                        control={<Checkbox size="small" disabled={disabled} checked={checked} onChange={(e) => toggleSchedule(sch.code, sch, e.target.checked)} />}
+                                                        label={label}
                                                     />
-                                                }
-                                                label="Requerido"
-                                            />
+                                                );
+                                            })}
                                         </Box>
                                     </Paper>
-                                ))}
-                                <Button
-                                    variant="outlined"
-                                    onClick={handleAddExtraField}
-                                    startIcon={<Add />}
-                                    sx={{ mt: 1 }}
-                                >
-                                    Agregar Campo Extra
-                                </Button>
-                            </Box>
-                        </AccordionDetails>
-                    </StyledAccordion>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseEditDialog}>Cancelar</Button>
-                    <PermissionGuard permission={selectedSchool?.id ? 'colegios-editar' : 'colegios-crear'}>
-                        <Button onClick={() => handleSave()} variant="contained" color="primary" disabled={savingSchool}>
-                            {savingSchool ? <CircularProgress size={20} color="inherit" /> : (selectedSchool?.id ? 'Guardar Cambios' : 'Crear Colegio')}
-                        </Button>
-                    </PermissionGuard>
-                </DialogActions>
-            </Dialog>
-
-            {/* Diálogo de confirmación para cambio de estado operativo */}
-            <Dialog
-                open={opStatusConfirm.open}
-                onClose={() => setOpStatusConfirm(s => ({ ...s, open: false, confirmText: '' }))}
-                maxWidth="xs"
-                fullWidth
-            >
-                <DialogTitle>
-                    {opStatusConfirm.pendingValue === 'ACTIVE' ? 'Activar operación' : 'Desactivar operación'}
-                </DialogTitle>
-                <DialogContent>
-                    <DialogContentText sx={{ mb: 2 }}>
-                        Estás a punto de {opStatusConfirm.pendingValue === 'ACTIVE' ? 'poner en operación' : 'sacar de operación'} a{' '}
-                        <strong>{opStatusConfirm.schoolName}</strong>.
-                        {opStatusConfirm.pendingValue === 'ACTIVE' && (
-                            <>
-                                {' '}Si otro ciclo del mismo colegio ya está operando, el cambio será bloqueado.
-                            </>
-                        )}
-                    </DialogContentText>
-                    <DialogContentText sx={{ mb: 1.5 }}>
-                        Para confirmar, escribe <strong>CONFIRMAR</strong> en el campo de abajo:
-                    </DialogContentText>
-                    <TextField
-                        autoFocus
-                        fullWidth
-                        size="small"
-                        placeholder="CONFIRMAR"
-                        value={opStatusConfirm.confirmText}
-                        onChange={(e) => setOpStatusConfirm(s => ({ ...s, confirmText: e.target.value }))}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && opStatusConfirm.confirmText === 'CONFIRMAR') {
-                                setSelectedSchool(prev => ({ ...prev, operationStatus: opStatusConfirm.pendingValue }));
-                                setOpStatusConfirm({ open: false, pendingValue: null, schoolName: '', confirmText: '' });
-                            }
-                        }}
-                        error={opStatusConfirm.confirmText.length > 0 && opStatusConfirm.confirmText !== 'CONFIRMAR'}
-                        helperText={
-                            opStatusConfirm.confirmText.length > 0 && opStatusConfirm.confirmText !== 'CONFIRMAR'
-                                ? 'Escribe exactamente CONFIRMAR'
-                                : ' '
-                        }
-                    />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setOpStatusConfirm(s => ({ ...s, open: false, confirmText: '' }))}>
-                        Cancelar
-                    </Button>
-                    <Button
-                        variant="contained"
-                        color={opStatusConfirm.pendingValue === 'ACTIVE' ? 'success' : 'warning'}
-                        disabled={opStatusConfirm.confirmText !== 'CONFIRMAR'}
-                        onClick={() => {
-                            setSelectedSchool(prev => ({ ...prev, operationStatus: opStatusConfirm.pendingValue }));
-                            setOpStatusConfirm({ open: false, pendingValue: null, schoolName: '', confirmText: '' });
-                        }}
-                    >
-                        {opStatusConfirm.pendingValue === 'ACTIVE' ? 'Activar' : 'Desactivar'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            <Dialog
-                open={!!deleteDialog}
-                onClose={deletingSchool ? undefined : () => setDeleteDialog(null)}
-                maxWidth="sm"
-                fullWidth
-            >
-                <DialogTitle>
-                    {deleteDialog?.impact?.schoolName ? `Eliminar ${deleteDialog.impact.schoolName}` : 'Eliminar colegio'}
-                </DialogTitle>
-                <DialogContent>
-                    {deleteDialog?.loading && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
-                            <CircularProgress size={24} />
-                            <Typography>Calculando qué se eliminaría…</Typography>
-                        </Box>
-                    )}
-                    {deleteDialog?.error && (
-                        <Alert severity="error">{deleteDialog.error}</Alert>
-                    )}
-                    {deleteDialog?.impact?.blockedByPayments && (
-                        <Alert severity="error">
-                            Este colegio no se puede eliminar porque ya tiene pagos recibidos
-                            ({deleteDialog.impact.moneyReceived.total} registros de pago). Eliminarlo dejaría esos
-                            pagos sin colegio y alteraría las estadísticas.
-                        </Alert>
-                    )}
-                    {deleteDialog?.impact && !deleteDialog.impact.blockedByPayments && (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                            <DialogContentText>
-                                Este colegio no tiene pagos recibidos. Al eliminarlo ocurrirá lo siguiente:
-                            </DialogContentText>
-                            <Typography variant="body2">
-                                • Familias que se eliminan: <strong>{deleteDialog.impact.families.removed}</strong>
-                                {' '}({deleteDialog.impact.students} alumnos)
-                            </Typography>
-                            {DELETE_IMPACT_STAFF.map(({ key, label }) => (
-                                <Typography key={key} variant="body2">
-                                    • {label} que se eliminan: <strong>{deleteDialog.impact.staff[key].removed}</strong>
-                                </Typography>
-                            ))}
-                            {deleteDialog.impact.staff.otros.removed > 0 && (
-                                <Typography variant="body2">
-                                    • Otros usuarios que se eliminan: <strong>{deleteDialog.impact.staff.otros.removed}</strong>
-                                </Typography>
-                            )}
-                            <Typography variant="body2">
-                                • Cobros pendientes que dejan de contar: <strong>{deleteDialog.impact.pendingCharges}</strong>
-                            </Typography>
-                            <Typography variant="body2">
-                                • Buses que quedan sin colegio: <strong>{deleteDialog.impact.buses}</strong>
-                            </Typography>
-                            {(() => {
-                                const kept = [
-                                    { label: 'familias', n: deleteDialog.impact.families.kept },
-                                    ...DELETE_IMPACT_STAFF.map(({ key, label }) => ({ label: label.toLowerCase(), n: deleteDialog.impact.staff[key].kept })),
-                                    { label: 'otros usuarios', n: deleteDialog.impact.staff.otros.kept }
-                                ].filter((item) => item.n > 0);
-                                if (kept.length === 0) {
-                                    return null;
-                                }
-                                return (
-                                    <Alert severity="info">
-                                        Conservan su cuenta ({kept.map((item) => `${item.n} ${item.label}`).join(', ')}) porque
-                                        tienen datos en otro ciclo o pagos recibidos, o porque son supervisores o auxiliares,
-                                        que nunca se eliminan con un colegio. Solo se les quita este colegio.
-                                    </Alert>
                                 );
-                            })()}
-                            <Alert severity="warning">
-                                Esta acción no se puede deshacer desde el sistema.
-                            </Alert>
+                            })}
+                            <Button variant="outlined" onClick={handleAddRouteNumber} startIcon={<Add />} sx={{ mt: 1 }}>
+                                Agregar Número de Ruta
+                            </Button>
                         </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setDeleteDialog(null)} disabled={deletingSchool}>
-                        {deleteDialog?.impact && !deleteDialog.impact.blockedByPayments ? 'Cancelar' : 'Cerrar'}
-                    </Button>
-                    {deleteDialog?.impact && !deleteDialog.impact.blockedByPayments && (
-                        <Button
-                            onClick={handleConfirmDeleteSchool}
-                            color="error"
-                            variant="contained"
-                            disabled={deletingSchool}
-                        >
-                            {deletingSchool ? 'Eliminando…' : 'Eliminar colegio'}
-                        </Button>
-                    )}
-                </DialogActions>
-            </Dialog>
+                    </AccordionDetails>
+                </StyledAccordion>
 
-            <Dialog
+                {/* Sección: Campos Extra */}
+                <StyledAccordion 
+                    expanded={expandedPanels.extraFields} 
+                    onChange={handleAccordionChange('extraFields')}
+                    TransitionProps={{ unmountOnExit: false }}
+                >
+                    <StyledAccordionSummary expandIcon={<ExpandMore />}>
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                            📝 Campos Extra de Inscripción
+                        </Typography>
+                    </StyledAccordionSummary>
+                    <AccordionDetails>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            {schoolExtraFields.map((field, idx) => (
+                                <Paper key={idx} sx={{ p: 2 }}>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                        <Typography variant="subtitle1">
+                                            Campo #{idx + 1}
+                                        </Typography>
+                                        <IconButton
+                                            onClick={() => handleRemoveExtraField(idx)}
+                                            color="error"
+                                            size="small"
+                                        >
+                                            <Delete />
+                                        </IconButton>
+                                    </Box>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                        <TextField
+                                            label="Nombre del Campo"
+                                            type="text"
+                                            fullWidth
+                                            value={field.fieldName || ''}
+                                            onChange={(e) => handleChangeExtraField(idx, 'fieldName', e.target.value)}
+                                        />
+                                        <FormControl fullWidth>
+                                            <InputLabel>Tipo</InputLabel>
+                                            <Select
+                                                value={field.type || 'text'}
+                                                onChange={(e) => handleChangeExtraField(idx, 'type', e.target.value)}
+                                                label="Tipo"
+                                            >
+                                                <MenuItem value="text">Texto</MenuItem>
+                                                <MenuItem value="number">Número</MenuItem>
+                                                <MenuItem value="date">Fecha</MenuItem>
+                                                <MenuItem value="select">Select/Combo</MenuItem>
+                                            </Select>
+                                        </FormControl>
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    checked={!!field.required}
+                                                    onChange={(e) => handleChangeExtraField(idx, 'required', e.target.checked)}
+                                                />
+                                            }
+                                            label="Requerido"
+                                        />
+                                    </Box>
+                                </Paper>
+                            ))}
+                            <Button
+                                variant="outlined"
+                                onClick={handleAddExtraField}
+                                startIcon={<Add />}
+                                sx={{ mt: 1 }}
+                            >
+                                Agregar Campo Extra
+                            </Button>
+                        </Box>
+                    </AccordionDetails>
+                </StyledAccordion>
+            </AppDialog>
+
+
+            <AppDialog
+                open={!!deleteDialog}
+                onClose={() => setDeleteDialog(null)}
+                title={deleteDialog?.impact?.schoolName ? `Eliminar ${deleteDialog.impact.schoolName}` : 'Eliminar colegio'}
+                size="sm"
+                onSubmit={handleConfirmDeleteSchool}
+                submitLabel="Eliminar colegio"
+                submitting={deletingSchool}
+                tone="danger"
+                readOnly={!(deleteDialog?.impact && !deleteDialog.impact.blockedByPayments)}
+            >
+                {deleteDialog?.loading && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
+                        <CircularProgress size={24} />
+                        <Typography>Calculando qué se eliminaría…</Typography>
+                    </Box>
+                )}
+                {deleteDialog?.error && (
+                    <Alert severity="error">{deleteDialog.error}</Alert>
+                )}
+                {deleteDialog?.impact?.blockedByPayments && (
+                    <Alert severity="error">
+                        Este colegio no se puede eliminar porque ya tiene pagos recibidos
+                        ({deleteDialog.impact.moneyReceived.total} registros de pago). Eliminarlo dejaría esos
+                        pagos sin colegio y alteraría las estadísticas.
+                    </Alert>
+                )}
+                {deleteDialog?.impact && !deleteDialog.impact.blockedByPayments && (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                        <DialogContentText>
+                            Este colegio no tiene pagos recibidos. Al eliminarlo ocurrirá lo siguiente:
+                        </DialogContentText>
+                        <Typography variant="body2">
+                            • Familias que se eliminan: <strong>{deleteDialog.impact.families.removed}</strong>
+                            {' '}({deleteDialog.impact.students} alumnos)
+                        </Typography>
+                        {DELETE_IMPACT_STAFF.map(({ key, label }) => (
+                            <Typography key={key} variant="body2">
+                                • {label} que se eliminan: <strong>{deleteDialog.impact.staff[key].removed}</strong>
+                            </Typography>
+                        ))}
+                        {deleteDialog.impact.staff.otros.removed > 0 && (
+                            <Typography variant="body2">
+                                • Otros usuarios que se eliminan: <strong>{deleteDialog.impact.staff.otros.removed}</strong>
+                            </Typography>
+                        )}
+                        <Typography variant="body2">
+                            • Cobros pendientes que dejan de contar: <strong>{deleteDialog.impact.pendingCharges}</strong>
+                        </Typography>
+                        <Typography variant="body2">
+                            • Buses que quedan sin colegio: <strong>{deleteDialog.impact.buses}</strong>
+                        </Typography>
+                        {(() => {
+                            const kept = [
+                                { label: 'familias', n: deleteDialog.impact.families.kept },
+                                ...DELETE_IMPACT_STAFF.map(({ key, label }) => ({ label: label.toLowerCase(), n: deleteDialog.impact.staff[key].kept })),
+                                { label: 'otros usuarios', n: deleteDialog.impact.staff.otros.kept }
+                            ].filter((item) => item.n > 0);
+                            if (kept.length === 0) {
+                                return null;
+                            }
+                            return (
+                                <Alert severity="info">
+                                    Conservan su cuenta ({kept.map((item) => `${item.n} ${item.label}`).join(', ')}) porque
+                                    tienen datos en otro ciclo o pagos recibidos, o porque son supervisores o auxiliares,
+                                    que nunca se eliminan con un colegio. Solo se les quita este colegio.
+                                </Alert>
+                            );
+                        })()}
+                        <Alert severity="warning">
+                            Esta acción no se puede deshacer desde el sistema.
+                        </Alert>
+                    </Box>
+                )}
+            </AppDialog>
+
+            <AppDialog
                 open={!!operationalConflict}
                 onClose={() => setOperationalConflict(null)}
-                maxWidth="sm"
-                fullWidth
-            >
-                <DialogTitle>Ya hay un colegio operando</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        {operationalConflict?.message || 'Desactiva manualmente el colegio que está operando antes de activar este ciclo.'}
-                    </DialogContentText>
-                    {Array.isArray(operationalConflict?.conflictingSchools) && operationalConflict.conflictingSchools.length > 0 && (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2 }}>
-                            {operationalConflict.conflictingSchools.map((school) => (
-                                <Alert key={school.id} severity="warning" variant="outlined">
-                                    <Typography variant="subtitle2">{school.name || `Colegio ${school.id}`}</Typography>
-                                    <Typography variant="body2" color="text.secondary">
-                                        {getCicloEscolarOptionLabel(school.cicloEscolar) || (school.cicloEscolarId ? `Ciclo ${school.cicloEscolarId}` : 'Sin ciclo escolar')}
-                                    </Typography>
-                                </Alert>
-                            ))}
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
+                title="Ya hay un colegio operando"
+                size="sm"
+                actions={(
                     <Button onClick={() => setOperationalConflict(null)} variant="contained">
                         Entendido
                     </Button>
-                </DialogActions>
-            </Dialog>
+                )}
+            >
+                <DialogContentText>
+                    {operationalConflict?.message || 'Desactiva manualmente el colegio que está operando antes de activar este ciclo.'}
+                </DialogContentText>
+                {Array.isArray(operationalConflict?.conflictingSchools) && operationalConflict.conflictingSchools.length > 0 && (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2 }}>
+                        {operationalConflict.conflictingSchools.map((school) => (
+                            <Alert key={school.id} severity="warning" variant="outlined">
+                                <Typography variant="subtitle2">{school.name || `Colegio ${school.id}`}</Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    {getCicloEscolarOptionLabel(school.cicloEscolar) || (school.cicloEscolarId ? `Ciclo ${school.cicloEscolarId}` : 'Sin ciclo escolar')}
+                                </Typography>
+                            </Alert>
+                        ))}
+                    </Box>
+                )}
+            </AppDialog>
 
-            <Dialog
+            <AppDialog
                 open={!!billingConflict}
                 onClose={() => setBillingConflict(null)}
-                maxWidth="sm"
-                fullWidth
+                title="Definir inicio de cobro"
+                size="sm"
+                onSubmit={handleApplyBillingDecision}
+                submitLabel="Aplicar decisión"
+                submitDisabled={(billingDecision.action === 'SET_CUSTOM_START_DATE' && !billingDecision.customStartDate) || (billingDecision.action !== 'SET_NEXT_MONTH_START' && billingDecision.confirmText !== 'CONFIRMAR')}
+                submitting={savingSchool}
             >
-                <DialogTitle>Definir inicio de cobro</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        {billingConflict?.message || 'El ciclo anterior ya tiene cargos en el período actual.'}
-                    </DialogContentText>
+                <DialogContentText>
+                    {billingConflict?.message || 'El ciclo anterior ya tiene cargos en el período actual.'}
+                </DialogContentText>
 
-                    {Array.isArray(billingConflict?.conflictingCycles) && billingConflict.conflictingCycles.length > 0 && (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2 }}>
-                            {billingConflict.conflictingCycles.map((school) => (
-                                <Alert key={`${school.id}-${school.period}`} severity="warning" variant="outlined">
-                                    <Typography variant="subtitle2">{school.name || `Colegio ${school.id}`}</Typography>
-                                    <Typography variant="body2" color="text.secondary">
-                                        {getCicloEscolarOptionLabel(school.cicloEscolar) || (school.cicloEscolarId ? `Ciclo ${school.cicloEscolarId}` : 'Sin ciclo escolar')}
-                                    </Typography>
-                                    <Typography variant="body2" color="text.secondary">
-                                        Período {school.period}: {school.periodCount || 0} cargos, Q{Number(school.totalNetAmount || 0).toFixed(2)}
-                                    </Typography>
-                                </Alert>
-                            ))}
-                        </Box>
-                    )}
-
-                    <FormControl fullWidth sx={{ mt: 2 }}>
-                        <InputLabel>Decisión</InputLabel>
-                        <Select
-                            value={billingDecision.action}
-                            label="Decisión"
-                            onChange={(event) => setBillingDecision((prev) => ({ ...prev, action: event.target.value, confirmText: '' }))}
-                        >
-                            <MenuItem value="SET_NEXT_MONTH_START">
-                                Iniciar cobro el próximo mes ({billingConflict?.suggestedNextMonthStart || 'fecha sugerida'})
-                            </MenuItem>
-                            <MenuItem value="KEEP_START_DATE">
-                                Mantener fecha actual y cobrar/prorratear {billingConflict?.currentPeriod || 'este período'}
-                            </MenuItem>
-                            <MenuItem value="SET_CUSTOM_START_DATE">Elegir otra fecha de inicio</MenuItem>
-                        </Select>
-                    </FormControl>
-
-                    {billingDecision.action === 'SET_CUSTOM_START_DATE' && (
-                        <TextField
-                            label="Nueva fecha de inicio"
-                            type="date"
-                            fullWidth
-                            sx={{ mt: 2 }}
-                            value={billingDecision.customStartDate || ''}
-                            onChange={(event) => setBillingDecision((prev) => ({ ...prev, customStartDate: event.target.value }))}
-                            InputLabelProps={{ shrink: true }}
-                        />
-                    )}
-
-                    {billingDecision.action !== 'SET_NEXT_MONTH_START' && (
-                        <Box sx={{ mt: 2 }}>
-                            <Alert severity="warning" sx={{ mb: 1.5 }}>
-                                Esta decisión puede generar cargo o prorrateo del período que ya fue cobrado en otro ciclo.
+                {Array.isArray(billingConflict?.conflictingCycles) && billingConflict.conflictingCycles.length > 0 && (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2 }}>
+                        {billingConflict.conflictingCycles.map((school) => (
+                            <Alert key={`${school.id}-${school.period}`} severity="warning" variant="outlined">
+                                <Typography variant="subtitle2">{school.name || `Colegio ${school.id}`}</Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    {getCicloEscolarOptionLabel(school.cicloEscolar) || (school.cicloEscolarId ? `Ciclo ${school.cicloEscolarId}` : 'Sin ciclo escolar')}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    Período {school.period}: {school.periodCount || 0} cargos, {formatQ(school.totalNetAmount || 0)}
+                                </Typography>
                             </Alert>
-                            <TextField
-                                fullWidth
-                                size="small"
-                                placeholder="CONFIRMAR"
-                                value={billingDecision.confirmText}
-                                onChange={(event) => setBillingDecision((prev) => ({ ...prev, confirmText: event.target.value }))}
-                                error={billingDecision.confirmText.length > 0 && billingDecision.confirmText !== 'CONFIRMAR'}
-                                helperText={
-                                    billingDecision.confirmText.length > 0 && billingDecision.confirmText !== 'CONFIRMAR'
-                                        ? 'Escribe exactamente CONFIRMAR'
-                                        : 'Escribe CONFIRMAR para continuar'
-                                }
-                            />
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setBillingConflict(null)}>Cancelar</Button>
-                    <Button
-                        variant="contained"
-                        onClick={handleApplyBillingDecision}
-                        disabled={
-                            savingSchool
-                            || (billingDecision.action === 'SET_CUSTOM_START_DATE' && !billingDecision.customStartDate)
-                            || (billingDecision.action !== 'SET_NEXT_MONTH_START' && billingDecision.confirmText !== 'CONFIRMAR')
-                        }
-                    >
-                        {savingSchool ? <CircularProgress size={20} color="inherit" /> : 'Aplicar decisión'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                        ))}
+                    </Box>
+                )}
 
-            <Dialog
+                <FormControl fullWidth sx={{ mt: 2 }}>
+                    <InputLabel>Decisión</InputLabel>
+                    <Select
+                        value={billingDecision.action}
+                        label="Decisión"
+                        onChange={(event) => setBillingDecision((prev) => ({ ...prev, action: event.target.value, confirmText: '' }))}
+                    >
+                        <MenuItem value="SET_NEXT_MONTH_START">
+                            Iniciar cobro el próximo mes ({billingConflict?.suggestedNextMonthStart || 'fecha sugerida'})
+                        </MenuItem>
+                        <MenuItem value="KEEP_START_DATE">
+                            Mantener fecha actual y cobrar/prorratear {billingConflict?.currentPeriod || 'este período'}
+                        </MenuItem>
+                        <MenuItem value="SET_CUSTOM_START_DATE">Elegir otra fecha de inicio</MenuItem>
+                    </Select>
+                </FormControl>
+
+                {billingDecision.action === 'SET_CUSTOM_START_DATE' && (
+                    <TextField
+                        label="Nueva fecha de inicio"
+                        type="date"
+                        fullWidth
+                        sx={{ mt: 2 }}
+                        value={billingDecision.customStartDate || ''}
+                        onChange={(event) => setBillingDecision((prev) => ({ ...prev, customStartDate: event.target.value }))}
+                        InputLabelProps={{ shrink: true }}
+                    />
+                )}
+
+                {billingDecision.action !== 'SET_NEXT_MONTH_START' && (
+                    <Box sx={{ mt: 2 }}>
+                        <Alert severity="warning" sx={{ mb: 1.5 }}>
+                            Esta decisión puede generar cargo o prorrateo del período que ya fue cobrado en otro ciclo.
+                        </Alert>
+                        <TextField
+                            fullWidth
+                            size="small"
+                            placeholder="CONFIRMAR"
+                            value={billingDecision.confirmText}
+                            onChange={(event) => setBillingDecision((prev) => ({ ...prev, confirmText: event.target.value }))}
+                            error={billingDecision.confirmText.length > 0 && billingDecision.confirmText !== 'CONFIRMAR'}
+                            helperText={
+                                billingDecision.confirmText.length > 0 && billingDecision.confirmText !== 'CONFIRMAR'
+                                    ? 'Escribe exactamente CONFIRMAR'
+                                    : 'Escribe CONFIRMAR para continuar'
+                            }
+                        />
+                    </Box>
+                )}
+            </AppDialog>
+
+            <AppDialog
                 open={paymentsExclusionPromptOpen}
                 onClose={() => setPaymentsExclusionPromptOpen(false)}
-                maxWidth="sm"
-                fullWidth
+                title="Excluir del flujo de pagos"
+                size="sm"
+                onSubmit={handleConfirmPaymentsExclusion}
+                submitLabel="Eliminar datos y excluir"
+                submitting={savingSchool}
+                tone="danger"
             >
-                <DialogTitle>Excluir del flujo de pagos</DialogTitle>
-                <DialogContent>
-                    <DialogContentText sx={{ mb: 1.5 }}>
-                        Al guardar, se eliminarán de forma permanente todos los datos de pagos de{' '}
-                        <strong>{selectedSchool?.name || 'este colegio'}</strong>. Esta acción no se puede deshacer.
-                    </DialogContentText>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Se eliminan:</Typography>
-                    <Box
-                        component="ul"
-                        sx={{
-                            m: 0, mt: 0.5, pl: 2.5, typography: 'body2', listStyleType: 'disc',
-                            '& li': { display: 'list-item', listStyleType: 'disc', mb: 0.25 }
-                        }}
-                    >
-                        <li>Los pagos de todas las familias del colegio y sus períodos mensuales.</li>
-                        <li>Las transacciones, el historial contable (ledger) y la línea de tiempo de cada pago.</li>
-                        <li>La mora acumulada y las limpiezas de mora registradas.</li>
-                        <li>Los cargos de inscripción.</li>
-                        <li>Los pagos extraordinarios.</li>
-                    </Box>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700, mt: 1.5 }}>Se conserva:</Typography>
-                    <Box
-                        component="ul"
-                        sx={{
-                            m: 0, mt: 0.5, pl: 2.5, typography: 'body2', listStyleType: 'disc',
-                            '& li': { display: 'list-item', listStyleType: 'disc', mb: 0.25 }
-                        }}
-                    >
-                        <li>Las boletas subidas por los padres (quedan sin vínculo a un pago).</li>
-                        <li>Rutas, buses, asistencia, circulares y contratos.</li>
-                    </Box>
-                    <Typography variant="body2" sx={{ mt: 1.5 }}>
-                        Además, las familias suspendidas automáticamente por mora se reactivarán (las suspendidas por
-                        falta de contrato o de forma manual no cambian).
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
-                        Solo es posible porque el colegio no tiene dinero registrado. Si más adelante se vuelve a incluir
-                        en el flujo de pagos, los datos eliminados no se recuperan.
-                    </Typography>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setPaymentsExclusionPromptOpen(false)}>Cancelar</Button>
-                    <Button variant="contained" color="error" onClick={handleConfirmPaymentsExclusion} disabled={savingSchool}>
-                        {savingSchool ? <CircularProgress size={20} color="inherit" /> : 'Eliminar datos y excluir'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                <DialogContentText sx={{ mb: 1.5 }}>
+                    Al guardar, se eliminarán de forma permanente todos los datos de pagos de{' '}
+                    <strong>{selectedSchool?.name || 'este colegio'}</strong>. Esta acción no se puede deshacer.
+                </DialogContentText>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Se eliminan:</Typography>
+                <Box
+                    component="ul"
+                    sx={{
+                        m: 0, mt: 0.5, pl: 2.5, typography: 'body2', listStyleType: 'disc',
+                        '& li': { display: 'list-item', listStyleType: 'disc', mb: 0.25 }
+                    }}
+                >
+                    <li>Los pagos de todas las familias del colegio y sus períodos mensuales.</li>
+                    <li>Las transacciones, el historial contable (ledger) y la línea de tiempo de cada pago.</li>
+                    <li>La mora acumulada y las limpiezas de mora registradas.</li>
+                    <li>Los cargos de inscripción.</li>
+                    <li>Los pagos extraordinarios.</li>
+                </Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, mt: 1.5 }}>Se conserva:</Typography>
+                <Box
+                    component="ul"
+                    sx={{
+                        m: 0, mt: 0.5, pl: 2.5, typography: 'body2', listStyleType: 'disc',
+                        '& li': { display: 'list-item', listStyleType: 'disc', mb: 0.25 }
+                    }}
+                >
+                    <li>Las boletas subidas por los padres (quedan sin vínculo a un pago).</li>
+                    <li>Rutas, buses, asistencia, circulares y contratos.</li>
+                </Box>
+                <Typography variant="body2" sx={{ mt: 1.5 }}>
+                    Además, las familias suspendidas automáticamente por mora se reactivarán (las suspendidas por
+                    falta de contrato o de forma manual no cambian).
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
+                    Solo es posible porque el colegio no tiene dinero registrado. Si más adelante se vuelve a incluir
+                    en el flujo de pagos, los datos eliminados no se recuperan.
+                </Typography>
+            </AppDialog>
 
-            <Dialog
+            <AppDialog
                 open={!!paymentsReactivationPrompt}
                 onClose={() => setPaymentsReactivationPrompt(null)}
-                maxWidth="sm"
-                fullWidth
+                title="Reactivar el flujo de pagos"
+                size="sm"
+                onSubmit={handleApplyPaymentsReactivation}
+                submitLabel="Reactivar pagos"
+                submitDisabled={typeof paymentsReactivationChoice.chargeEnrollment !== 'boolean' || !paymentsReactivationChoice.billingStart}
+                submitting={savingSchool}
             >
-                <DialogTitle>Reactivar el flujo de pagos</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        {paymentsReactivationPrompt?.schoolName || 'Este colegio'} ya está operando. Las familias que no tienen
-                        registro de pago lo recibirán ahora. Indica cómo cobrarles; no se genera ningún cobro de meses anteriores. 
-                        Esto aplica para las familias ya registradas en el sistema.
-                    </DialogContentText>
+                <DialogContentText>
+                    {paymentsReactivationPrompt?.schoolName || 'Este colegio'} ya está operando. Las familias que no tienen
+                    registro de pago lo recibirán ahora. Indica cómo cobrarles; no se genera ningún cobro de meses anteriores. 
+                    Esto aplica para las familias ya registradas en el sistema.
+                </DialogContentText>
 
-                    {Number(paymentsReactivationPrompt?.enrollmentFeeAmount) > 0 && (
-                        <Box sx={{ mt: 3 }}>
-                            <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
-                                1. ¿Cobrar la inscripción del ciclo?
-                            </Typography>
-                            <Stack spacing={1.5} role="radiogroup" aria-label="Cobro de inscripción">
-                                <ChoiceCard
-                                    selected={paymentsReactivationChoice.chargeEnrollment === true}
-                                    onSelect={() => setPaymentsReactivationChoice((prev) => ({ ...prev, chargeEnrollment: true }))}
-                                    title="Sí, cobrarla"
-                                    tag={`Q${Number(paymentsReactivationPrompt.enrollmentFeeAmount).toFixed(2)} por alumno`}
-                                    details={[
-                                        'Se aplica el descuento por fecha de inscripción.',
-                                        'Las familias recibirán una notificación del cargo.'
-                                    ]}
-                                />
-                                <ChoiceCard
-                                    selected={paymentsReactivationChoice.chargeEnrollment === false}
-                                    onSelect={() => setPaymentsReactivationChoice((prev) => ({ ...prev, chargeEnrollment: false }))}
-                                    title="No cobrarla"
-                                    details={[
-                                        'Queda registrada como exonerada (Q0).',
-                                        'No se volverá a cobrar después.'
-                                    ]}
-                                />
-                            </Stack>
-                        </Box>
-                    )}
-
+                {Number(paymentsReactivationPrompt?.enrollmentFeeAmount) > 0 && (
                     <Box sx={{ mt: 3 }}>
                         <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
-                            {Number(paymentsReactivationPrompt?.enrollmentFeeAmount) > 0 ? '2. ' : ''}¿Desde cuándo cobrar la mensualidad?
+                            1. ¿Cobrar la inscripción del ciclo?
                         </Typography>
-                        <Stack spacing={1.5} role="radiogroup" aria-label="Inicio del cobro de mensualidad">
+                        <Stack spacing={1.5} role="radiogroup" aria-label="Cobro de inscripción">
                             <ChoiceCard
-                                selected={paymentsReactivationChoice.billingStart === 'CURRENT_MONTH'}
-                                onSelect={() => setPaymentsReactivationChoice((prev) => ({ ...prev, billingStart: 'CURRENT_MONTH' }))}
-                                title="Desde el mes actual"
-                                tag={paymentsReactivationPrompt?.currentPeriod}
+                                selected={paymentsReactivationChoice.chargeEnrollment === true}
+                                onSelect={() => setPaymentsReactivationChoice((prev) => ({ ...prev, chargeEnrollment: true }))}
+                                title="Sí, cobrarla"
+                                tag={`${formatQ(paymentsReactivationPrompt.enrollmentFeeAmount)} por alumno`}
                                 details={[
-                                    'Se genera el cargo del mes actual.'
+                                    'Se aplica el descuento por fecha de inscripción.',
+                                    'Las familias recibirán una notificación del cargo.'
                                 ]}
                             />
                             <ChoiceCard
-                                selected={paymentsReactivationChoice.billingStart === 'NEXT_MONTH'}
-                                onSelect={() => setPaymentsReactivationChoice((prev) => ({ ...prev, billingStart: 'NEXT_MONTH', clearPenalty: false }))}
-                                title="Desde el próximo mes"
-                                tag={paymentsReactivationPrompt?.nextMonthStart}
+                                selected={paymentsReactivationChoice.chargeEnrollment === false}
+                                onSelect={() => setPaymentsReactivationChoice((prev) => ({ ...prev, chargeEnrollment: false }))}
+                                title="No cobrarla"
                                 details={[
-                                    'El mes actual no se cobra a las familias que ya están inscritas.',
-                                    'Las familias que se inscriban durante el mes actual sí tendrán el cargo del mes.'
+                                    'Queda registrada como exonerada (Q0).',
+                                    'No se volverá a cobrar después.'
                                 ]}
                             />
                         </Stack>
                     </Box>
+                )}
 
-                    {paymentsReactivationChoice.billingStart === 'CURRENT_MONTH' && (
-                        <Box
-                            onClick={() => setPaymentsReactivationChoice((prev) => ({ ...prev, clearPenalty: !prev.clearPenalty }))}
-                            sx={{
-                                mt: 2,
-                                p: 1.5,
-                                display: 'flex',
-                                alignItems: 'flex-start',
-                                gap: 1,
-                                borderRadius: 2,
-                                cursor: 'pointer',
-                                border: '1px dashed',
-                                borderColor: paymentsReactivationChoice.clearPenalty ? 'warning.main' : 'divider',
-                                bgcolor: paymentsReactivationChoice.clearPenalty ? 'warning.50' : 'transparent'
-                            }}
-                        >
-                            <Checkbox
-                                checked={paymentsReactivationChoice.clearPenalty}
-                                tabIndex={0}
-                                sx={{ p: 0.5 }}
-                                onClick={(event) => event.stopPropagation()}
-                                onChange={(event) => setPaymentsReactivationChoice((prev) => ({ ...prev, clearPenalty: event.target.checked }))}
-                                inputProps={{ 'aria-label': 'Limpiar la mora del mes actual' }}
-                            />
-                            <Box>
-                                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                                    Limpiar la mora del mes actual ({paymentsReactivationPrompt?.currentPeriod || ''})
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                                    Si ya pasó el vencimiento, las familias nacerían con mora de este mes. Al limpiarla, ese período no
-                                    vuelve a acumular mora.
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                                    Aplica a todas las familias del colegio en este mes, tengan o no mora todavía.
-                                </Typography>
-                            </Box>
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setPaymentsReactivationPrompt(null)}>Cancelar</Button>
-                    <Button
-                        variant="contained"
-                        onClick={handleApplyPaymentsReactivation}
-                        disabled={
-                            savingSchool
-                            || typeof paymentsReactivationChoice.chargeEnrollment !== 'boolean'
-                            || !paymentsReactivationChoice.billingStart
-                        }
+                <Box sx={{ mt: 3 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+                        {Number(paymentsReactivationPrompt?.enrollmentFeeAmount) > 0 ? '2. ' : ''}¿Desde cuándo cobrar la mensualidad?
+                    </Typography>
+                    <Stack spacing={1.5} role="radiogroup" aria-label="Inicio del cobro de mensualidad">
+                        <ChoiceCard
+                            selected={paymentsReactivationChoice.billingStart === 'CURRENT_MONTH'}
+                            onSelect={() => setPaymentsReactivationChoice((prev) => ({ ...prev, billingStart: 'CURRENT_MONTH' }))}
+                            title="Desde el mes actual"
+                            tag={paymentsReactivationPrompt?.currentPeriod}
+                            details={[
+                                'Se genera el cargo del mes actual.'
+                            ]}
+                        />
+                        <ChoiceCard
+                            selected={paymentsReactivationChoice.billingStart === 'NEXT_MONTH'}
+                            onSelect={() => setPaymentsReactivationChoice((prev) => ({ ...prev, billingStart: 'NEXT_MONTH', clearPenalty: false }))}
+                            title="Desde el próximo mes"
+                            tag={paymentsReactivationPrompt?.nextMonthStart}
+                            details={[
+                                'El mes actual no se cobra a las familias que ya están inscritas.',
+                                'Las familias que se inscriban durante el mes actual sí tendrán el cargo del mes.'
+                            ]}
+                        />
+                    </Stack>
+                </Box>
+
+                {paymentsReactivationChoice.billingStart === 'CURRENT_MONTH' && (
+                    <Box
+                        onClick={() => setPaymentsReactivationChoice((prev) => ({ ...prev, clearPenalty: !prev.clearPenalty }))}
+                        sx={{
+                            mt: 2,
+                            p: 1.5,
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: 1,
+                            borderRadius: 2,
+                            cursor: 'pointer',
+                            border: '1px dashed',
+                            borderColor: paymentsReactivationChoice.clearPenalty ? 'warning.main' : 'divider',
+                            bgcolor: paymentsReactivationChoice.clearPenalty ? 'warning.50' : 'transparent'
+                        }}
                     >
-                        {savingSchool ? <CircularProgress size={20} color="inherit" /> : 'Reactivar pagos'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                        <Checkbox
+                            checked={paymentsReactivationChoice.clearPenalty}
+                            tabIndex={0}
+                            sx={{ p: 0.5 }}
+                            onClick={(event) => event.stopPropagation()}
+                            onChange={(event) => setPaymentsReactivationChoice((prev) => ({ ...prev, clearPenalty: event.target.checked }))}
+                            inputProps={{ 'aria-label': 'Limpiar la mora del mes actual' }}
+                        />
+                        <Box>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                                Limpiar la mora del mes actual ({paymentsReactivationPrompt?.currentPeriod || ''})
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                Si ya pasó el vencimiento, las familias nacerían con mora de este mes. Al limpiarla, ese período no
+                                vuelve a acumular mora.
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                Aplica a todas las familias del colegio en este mes, tengan o no mora todavía.
+                            </Typography>
+                        </Box>
+                    </Box>
+                )}
+            </AppDialog>
+
+            <SimilarSchoolDialog
+                open={Boolean(similarPrompt)}
+                candidates={similarPrompt?.candidates || []}
+                onContinue={handleSimilarContinue}
+                onNewSchool={handleSimilarNewSchool}
+                onClose={() => setSimilarPrompt(null)}
+            />
 
             {/* Diálogo de formularios de inscripción */}
-            <Dialog 
-                open={openSubmissionDialog} 
-                onClose={handleCloseSubmissionDialog} 
-                maxWidth="md" 
-                fullWidth
+            <AppDialog
+                open={openSubmissionDialog}
+                onClose={handleCloseSubmissionDialog}
+                title={submissionDetail ? 'Detalle del formulario' : 'Formularios de inscripción'}
+                subtitle={selectedSchool && !submissionDetail ? selectedSchool.name : undefined}
+                icon={<AssignmentIcon />}
+                size="md"
+                readOnly
+                extraActions={submissionDetail ? (
+                    <Button onClick={() => setSubmissionDetail(null)}>
+                        Volver a la lista
+                    </Button>
+                ) : null}
             >
-                <DialogTitle>
-                    {submissionDetail ? "Detalle del Formulario" : "Formularios de Inscripción"}
-                    {selectedSchool && !submissionDetail && (
-                        <Typography variant="subtitle2" color="textSecondary">
-                            {selectedSchool.name}
-                        </Typography>
-                    )}
-                </DialogTitle>
-                <DialogContent>
-                    {submissionDetail ? (
-                        <SubmissionPreview submission={submissionDetail} />
-                    ) : (
-                        <>
-                            {submissions.length === 0 ? (
-                                <DialogContentText>
-                                    No hay formularios de inscripción para este colegio.
-                                </DialogContentText>
-                            ) : (
-                                <Box>
-                                    <Typography variant="subtitle1" sx={{ mb: 2 }}>
-                                        {submissions.length} formularios encontrados:
-                                    </Typography>
-                                    <Table size="small">
-                                        <TableHead>
-                                            <TableRow>
-                                                <TableCell>Fecha y Hora</TableCell>
-                                                <TableCell>Nombre</TableCell>
-                                                <TableCell>Correo</TableCell>
-                                                <TableCell>Acciones</TableCell>
+                {submissionDetail ? (
+                    <SubmissionPreview submission={submissionDetail} />
+                ) : (
+                    <>
+                        {submissions.length === 0 ? (
+                            <DialogContentText>
+                                No hay formularios de inscripción para este colegio.
+                            </DialogContentText>
+                        ) : (
+                            <Box>
+                                <Typography variant="subtitle1" sx={{ mb: 2 }}>
+                                    {submissions.length} formularios encontrados:
+                                </Typography>
+                                <Table size="small">
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell>Fecha y Hora</TableCell>
+                                            <TableCell>Nombre</TableCell>
+                                            <TableCell>Correo</TableCell>
+                                            <TableCell>Acciones</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {submissions.map((sub) => (
+                                            <TableRow key={sub.id}>
+                                                <TableCell>
+                                                    {formatDateTime(sub.createdAt)}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {sub.data.accountFullName || sub.data.fatherName || sub.data.motherName || '—'}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {sub.data.accountEmail || sub.data.fatherEmail || sub.data.motherEmail || '—'}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Button
+                                                        variant="outlined"
+                                                        size="small"
+                                                        onClick={() => setSubmissionDetail(sub)}
+                                                    >
+                                                        Ver Detalle
+                                                    </Button>
+                                                </TableCell>
                                             </TableRow>
-                                        </TableHead>
-                                        <TableBody>
-                                            {submissions.map((sub) => (
-                                                <TableRow key={sub.id}>
-                                                    <TableCell>
-                                                        {new Date(sub.createdAt).toLocaleString()}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {sub.data.accountFullName || sub.data.fatherName || sub.data.motherName || '—'}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {sub.data.accountEmail || sub.data.fatherEmail || sub.data.motherEmail || '—'}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Button
-                                                            variant="outlined"
-                                                            size="small"
-                                                            onClick={() => setSubmissionDetail(sub)}
-                                                        >
-                                                            Ver Detalle
-                                                        </Button>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </Box>
-                            )}
-                        </>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    {submissionDetail && (
-                        <Button onClick={() => setSubmissionDetail(null)}>
-                            Volver a la lista
-                        </Button>
-                    )}
-                    <Button onClick={handleCloseSubmissionDialog}>Cerrar</Button>
-                </DialogActions>
-            </Dialog>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </Box>
+                        )}
+                    </>
+                )}
+            </AppDialog>
 
             <EditSchedulesModal
                 open={openEditSchedulesModal}
                 onClose={handleCloseEditSchedulesModal}
                 school={selectedSchool ? { ...selectedSchool, schedules: schoolSchedules, routeSchedules: schoolRouteSchedules } : null}
                 onSuccess={handleEditSchedulesSuccess}
-                onNotify={(snackbarState) => setSnackbar(snackbarState)}
+                onNotify={(snackbarState) => (notify[snackbarState?.severity] || notify.info)(snackbarState?.message)}
             />
 
             {/* Popover para mostrar grados adicionales */}
@@ -3227,20 +3090,6 @@ const CicloEscolarSelectionPage = () => {
                 </Box>
             </Popover>
 
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={6000}
-                onClose={() => setSnackbar({ ...snackbar, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <Alert
-                    onClose={() => setSnackbar({ ...snackbar, open: false })}
-                    severity={snackbar.severity}
-                    sx={{ width: '100%' }}
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
 
             <SendNotificationModal
                 open={openSendNotifModal}
@@ -3255,7 +3104,7 @@ const CicloEscolarSelectionPage = () => {
                 schools={Array.isArray(schools) ? schools : []}
                 cicloEscolarId={selectedCicloEscolarId || null}
                 onSuccess={(message) => {
-                    setSnackbar({ open: true, message: message || 'Circular enviada exitosamente', severity: 'success' });
+                    notify.success(message || 'Circular enviada exitosamente');
                 }}
             />
 

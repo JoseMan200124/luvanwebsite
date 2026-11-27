@@ -15,10 +15,6 @@ import {
     MenuItem,
     FormControl,
     InputLabel,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
     Accordion,
     AccordionSummary,
     AccordionDetails,
@@ -38,6 +34,8 @@ import {
 } from '@mui/icons-material';
 import { AuthContext } from '../context/AuthProvider';
 import api from '../utils/axiosConfig';
+import useConfirm from '../hooks/useConfirm';
+import AppDialog from './dialogs/AppDialog';
 
 const NIVELES = [
     { value: 'ver', label: 'Ver' },
@@ -102,6 +100,7 @@ const FilaCatalogo = memo(function FilaCatalogo({ permiso, grupoKey, onAlternarV
  */
 const CatalogOrganizer = ({ onNotify }) => {
     const { auth } = useContext(AuthContext);
+    const confirm = useConfirm();
     const cabeceras = useMemo(
         () => ({ headers: { Authorization: `Bearer ${auth?.token}` } }),
         [auth?.token]
@@ -182,24 +181,28 @@ const CatalogOrganizer = ({ onNotify }) => {
     };
 
     const eliminarCategoria = async (categoria) => {
-        const aviso =
-            categoria.permissionCount > 0
-                ? `"${categoria.label}" tiene ${categoria.permissionCount} permiso(s). Se moverán a "Sin clasificar". ¿Continuar?`
-                : `¿Eliminar la categoría "${categoria.label}"?`;
-        if (!window.confirm(aviso)) {
+        let res = null;
+        const ok = await confirm({
+            title: 'Eliminar categoría',
+            message: categoria.permissionCount > 0
+                ? `Se eliminará la categoría "${categoria.label}". Sus ${categoria.permissionCount} permiso(s) se moverán a "Sin clasificar".`
+                : `Se eliminará la categoría "${categoria.label}".`,
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+            onConfirm: async () => {
+                res = await api.delete(`/permissions/categories/${categoria.id}`, cabeceras);
+            },
+            errorMessage: 'No se pudo eliminar la categoría',
+        });
+        if (!ok) {
             return;
         }
-        try {
-            const res = await api.delete(`/permissions/categories/${categoria.id}`, cabeceras);
-            onNotify(
-                res.data.movedPermissions
-                    ? `Categoría eliminada. ${res.data.movedPermissions} permiso(s) movidos a Sin clasificar.`
-                    : 'Categoría eliminada'
-            );
-            await cargar();
-        } catch (err) {
-            onNotify(err?.response?.data?.message || 'No se pudo eliminar', 'error');
-        }
+        onNotify(
+            res?.data?.movedPermissions
+                ? `Categoría eliminada. ${res.data.movedPermissions} permiso(s) movidos a Sin clasificar.`
+                : 'Categoría eliminada'
+        );
+        await cargar();
     };
 
     // -------------------------------------------------------------- permisos
@@ -400,136 +403,134 @@ const CatalogOrganizer = ({ onNotify }) => {
             ))}
 
             {/* ---------------------------------------------- diálogo categoría */}
-            <Dialog open={!!dialogoCategoria} onClose={() => setDialogoCategoria(null)} maxWidth="sm" fullWidth>
-                <DialogTitle>{dialogoCategoria?.id ? 'Editar categoría' : 'Nueva categoría'}</DialogTitle>
-                <DialogContent>
-                    <Stack spacing={2} sx={{ mt: 1 }}>
-                        {!dialogoCategoria?.id && (
-                            <TextField
-                                label="Clave"
-                                helperText="Solo minúsculas, números y guiones. No se puede cambiar después."
-                                value={dialogoCategoria?.key || ''}
-                                onChange={(e) =>
-                                    setDialogoCategoria((d) => ({ ...d, key: e.target.value }))
-                                }
-                                fullWidth
-                            />
-                        )}
-                        <TextField
-                            label="Nombre visible"
-                            value={dialogoCategoria?.label || ''}
-                            onChange={(e) => setDialogoCategoria((d) => ({ ...d, label: e.target.value }))}
-                            fullWidth
-                        />
-                        <TextField
-                            label="Descripción"
-                            multiline
-                            rows={2}
-                            value={dialogoCategoria?.description || ''}
-                            onChange={(e) =>
-                                setDialogoCategoria((d) => ({ ...d, description: e.target.value }))
-                            }
-                            fullWidth
-                        />
-                        <TextField
-                            label="Orden"
-                            type="number"
-                            helperText="Menor número aparece primero"
-                            value={dialogoCategoria?.sortOrder ?? 0}
-                            onChange={(e) =>
-                                setDialogoCategoria((d) => ({ ...d, sortOrder: Number(e.target.value) }))
-                            }
-                            fullWidth
-                        />
-                    </Stack>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setDialogoCategoria(null)}>Cancelar</Button>
-                    <Button variant="contained" onClick={guardarCategoria} disabled={guardando}>
-                        Guardar
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* ------------------------------------------------ diálogo permiso */}
-            <Dialog open={!!dialogoPermiso} onClose={() => setDialogoPermiso(null)} maxWidth="sm" fullWidth>
-                <DialogTitle>Editar permiso</DialogTitle>
-                <DialogContent>
-                    <Stack spacing={2} sx={{ mt: 1 }}>
+            <AppDialog
+                open={!!dialogoCategoria}
+                onClose={() => setDialogoCategoria(null)}
+                title={dialogoCategoria?.id ? 'Editar categoría' : 'Nueva categoría'}
+                size="sm"
+                onSubmit={guardarCategoria}
+                submitLabel="Guardar"
+                submitting={guardando}
+            >
+                <Stack spacing={2} sx={{ mt: 1 }}>
+                    {!dialogoCategoria?.id && (
                         <TextField
                             label="Clave"
-                            value={dialogoPermiso?.key || ''}
-                            disabled
-                            helperText="La define el código; no se puede cambiar desde aquí."
-                            fullWidth
-                        />
-                        <TextField
-                            label="Descripción"
-                            multiline
-                            rows={2}
-                            helperText="Lo que verá quien asigna permisos. Describí qué permite hacer."
-                            value={dialogoPermiso?.description || ''}
+                            helperText="Solo minúsculas, números y guiones. No se puede cambiar después."
+                            value={dialogoCategoria?.key || ''}
                             onChange={(e) =>
-                                setDialogoPermiso((d) => ({ ...d, description: e.target.value }))
+                                setDialogoCategoria((d) => ({ ...d, key: e.target.value }))
                             }
                             fullWidth
                         />
-                        <FormControl fullWidth>
-                            <InputLabel>Categoría</InputLabel>
-                            <Select
-                                label="Categoría"
-                                value={dialogoPermiso?.categoryKey || ''}
-                                onChange={(e) =>
-                                    setDialogoPermiso((d) => ({ ...d, categoryKey: e.target.value }))
-                                }
-                            >
-                                {categorias.map((c) => (
-                                    <MenuItem key={c.key} value={c.key}>
-                                        {c.label}
-                                    </MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
-                        <FormControl fullWidth>
-                            <InputLabel>Nivel</InputLabel>
-                            <Select
-                                label="Nivel"
-                                value={dialogoPermiso?.level || 'ver'}
-                                onChange={(e) => setDialogoPermiso((d) => ({ ...d, level: e.target.value }))}
-                            >
-                                {NIVELES.map((n) => (
-                                    <MenuItem key={n.value} value={n.value}>
-                                        {n.label}
-                                    </MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
-                        {dialogoPermiso?.level === 'eliminar' && (
-                            <Alert severity="warning">
-                                Los permisos de nivel <strong>Eliminar</strong> quedan excluidos del
-                                botón “Acceso completo” y hay que concederlos uno por uno.
-                            </Alert>
-                        )}
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Switch
-                                checked={!!dialogoPermiso?.visible}
-                                onChange={(e) =>
-                                    setDialogoPermiso((d) => ({ ...d, visible: e.target.checked }))
-                                }
-                            />
-                            <Typography variant="body2">
-                                Mostrar en la pantalla de asignación de permisos
-                            </Typography>
-                        </Box>
-                    </Stack>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setDialogoPermiso(null)}>Cancelar</Button>
-                    <Button variant="contained" onClick={guardarPermiso} disabled={guardando}>
-                        Guardar
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                    )}
+                    <TextField
+                        label="Nombre visible"
+                        value={dialogoCategoria?.label || ''}
+                        onChange={(e) => setDialogoCategoria((d) => ({ ...d, label: e.target.value }))}
+                        fullWidth
+                    />
+                    <TextField
+                        label="Descripción"
+                        multiline
+                        rows={2}
+                        value={dialogoCategoria?.description || ''}
+                        onChange={(e) =>
+                            setDialogoCategoria((d) => ({ ...d, description: e.target.value }))
+                        }
+                        fullWidth
+                    />
+                    <TextField
+                        label="Orden"
+                        type="number"
+                        helperText="Menor número aparece primero"
+                        value={dialogoCategoria?.sortOrder ?? 0}
+                        onChange={(e) =>
+                            setDialogoCategoria((d) => ({ ...d, sortOrder: Number(e.target.value) }))
+                        }
+                        fullWidth
+                    />
+                </Stack>
+            </AppDialog>
+
+            {/* ------------------------------------------------ diálogo permiso */}
+            <AppDialog
+                open={!!dialogoPermiso}
+                onClose={() => setDialogoPermiso(null)}
+                title="Editar permiso"
+                size="sm"
+                onSubmit={guardarPermiso}
+                submitLabel="Guardar"
+                submitting={guardando}
+            >
+                <Stack spacing={2} sx={{ mt: 1 }}>
+                    <TextField
+                        label="Clave"
+                        value={dialogoPermiso?.key || ''}
+                        disabled
+                        helperText="La define el código; no se puede cambiar desde aquí."
+                        fullWidth
+                    />
+                    <TextField
+                        label="Descripción"
+                        multiline
+                        rows={2}
+                        helperText="Lo que verá quien asigna permisos. Describí qué permite hacer."
+                        value={dialogoPermiso?.description || ''}
+                        onChange={(e) =>
+                            setDialogoPermiso((d) => ({ ...d, description: e.target.value }))
+                        }
+                        fullWidth
+                    />
+                    <FormControl fullWidth>
+                        <InputLabel>Categoría</InputLabel>
+                        <Select
+                            label="Categoría"
+                            value={dialogoPermiso?.categoryKey || ''}
+                            onChange={(e) =>
+                                setDialogoPermiso((d) => ({ ...d, categoryKey: e.target.value }))
+                            }
+                        >
+                            {categorias.map((c) => (
+                                <MenuItem key={c.key} value={c.key}>
+                                    {c.label}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                    <FormControl fullWidth>
+                        <InputLabel>Nivel</InputLabel>
+                        <Select
+                            label="Nivel"
+                            value={dialogoPermiso?.level || 'ver'}
+                            onChange={(e) => setDialogoPermiso((d) => ({ ...d, level: e.target.value }))}
+                        >
+                            {NIVELES.map((n) => (
+                                <MenuItem key={n.value} value={n.value}>
+                                    {n.label}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                    {dialogoPermiso?.level === 'eliminar' && (
+                        <Alert severity="warning">
+                            Los permisos de nivel <strong>Eliminar</strong> quedan excluidos del
+                            botón “Acceso completo” y hay que concederlos uno por uno.
+                        </Alert>
+                    )}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Switch
+                            checked={!!dialogoPermiso?.visible}
+                            onChange={(e) =>
+                                setDialogoPermiso((d) => ({ ...d, visible: e.target.checked }))
+                            }
+                        />
+                        <Typography variant="body2">
+                            Mostrar en la pantalla de asignación de permisos
+                        </Typography>
+                    </Box>
+                </Stack>
+            </AppDialog>
         </>
     );
 };
