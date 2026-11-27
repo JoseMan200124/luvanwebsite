@@ -37,8 +37,7 @@ import {
     Add,
     FileUpload,
     FileDownload,
-    ToggleOn,
-    ToggleOff,
+    SyncAlt,
     PersonAdd
 } from '@mui/icons-material';
 import { useParams, useLocation } from 'react-router-dom';
@@ -70,6 +69,7 @@ import { F } from '../components/filters/filterFields';
 import { matchSearchTokens } from '../utils/clientFilter';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import { LOGO_COLORS } from '../theme/tokens';
 import useClientScope from '../hooks/useClientScope';
 import useNotify from '../hooks/useNotify';
 import useConfirm from '../hooks/useConfirm';
@@ -2617,14 +2617,14 @@ const SchoolUsersPage = () => {
                                                             // Activar y suspender son rutas distintas de /service-status.
                                                             if (isInactive) {
                                                                 return hasPermission('usuarios-activar-servicio') ? (
-                                                                    <IconButton size="small" title="Activar familia" onClick={() => handleActivateClick(user)} color="success">
-                                                                        <ToggleOff fontSize="small" />
+                                                                    <IconButton size="small" title="Cambiar estado del servicio" onClick={() => handleActivateClick(user)} sx={{ color: LOGO_COLORS.blue, mx: -0.5 }}>
+                                                                        <SyncAlt fontSize="small" />
                                                                     </IconButton>
                                                                 ) : null;
                                                             }
                                                             return hasPermission('usuarios-suspender-servicio') ? (
-                                                                <IconButton size="small" title="Suspender familia" onClick={() => handleSuspendClick(user)} color="warning">
-                                                                    <ToggleOn fontSize="small" />
+                                                                <IconButton size="small" title="Cambiar estado del servicio" onClick={() => handleSuspendClick(user)} sx={{ color: LOGO_COLORS.blue, mx: -0.5 }}>
+                                                                    <SyncAlt fontSize="small" />
                                                                 </IconButton>
                                                             ) : null;
                                                         })()}
