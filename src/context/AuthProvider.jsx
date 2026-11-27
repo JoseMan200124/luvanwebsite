@@ -2,7 +2,7 @@
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import api from '../utils/axiosConfig';
+import api, { REENROLLMENT_SCHOOL_KEY } from '../utils/axiosConfig';
 import { jwtDecode } from 'jwt-decode';
 
 import { loginUser } from '../services/authService';
@@ -42,7 +42,7 @@ const AuthProvider = ({ children }) => {
     const resetTimer = useCallback(() => setSharedLastActivity(ahoraReal()), [setSharedLastActivity]);
 
     const logout = useCallback(() => {
-        try { clearCatalogs(); localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); clearStoredSchoolContext(); } catch (e) {}
+        try { clearCatalogs(); localStorage.removeItem('token'); localStorage.removeItem('refreshToken'); localStorage.removeItem(REENROLLMENT_SCHOOL_KEY); clearStoredSchoolContext(); } catch (e) {}
         closeSocket(); setAuth({ user: null, token: null }); navigate('/login');
     }, [navigate]);
 
@@ -221,6 +221,12 @@ const AuthProvider = ({ children }) => {
                 localStorage.setItem('refreshToken', refreshToken);
             } else {
                 localStorage.removeItem('refreshToken');
+            }
+            // El interceptor de axios lo usa para devolver al enlace de inscripción si la sesión limitada sale de él.
+            if (reenrollmentOnly && reenrollmentSchoolId) {
+                localStorage.setItem(REENROLLMENT_SCHOOL_KEY, String(reenrollmentSchoolId));
+            } else {
+                localStorage.removeItem(REENROLLMENT_SCHOOL_KEY);
             }
             if (decoded.roleId === 9) {
                 await verifyToken(token);

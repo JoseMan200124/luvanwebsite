@@ -217,14 +217,18 @@ const SchoolEnrollmentPage = () => {
         try {
             const result = await submitReenrollment(schoolId, buildFamilyPayload(form));
             if (result?.sessionEnded) {
-                // La cuenta quedó activa de nuevo y este acceso limitado ya no sirve: se cierra la sesión.
+                // Era un acceso limitado a reinscribirse: se cierra la sesión. Si la cuenta no se reactivó (falló su
+                // estado de servicio), no se promete que ya puede entrar.
                 const cycleText = result?.cycleLabel ? ` ${result.cycleLabel}` : '';
+                const cuentaActiva = result?.accountReactivated !== false;
                 logout();
                 navigate('/thank-you', {
                     replace: true,
                     state: {
                         title: '¡Reinscripción recibida!',
-                        body: `Tu familia quedó inscrita en el ciclo${cycleText} y tu cuenta está activa de nuevo. Inicia sesión con tu mismo usuario y contraseña en la web o en la app.`,
+                        body: cuentaActiva
+                            ? `Tu familia quedó inscrita en el ciclo${cycleText} y tu cuenta está activa de nuevo. Inicia sesión con tu mismo usuario y contraseña en la web o en la app.`
+                            : `Tu familia quedó inscrita en el ciclo${cycleText}, pero tu cuenta todavía no se pudo reactivar. Comunícate con Transportes Luvan para que la activen.`,
                         footer: 'Transportes Luvan'
                     }
                 });

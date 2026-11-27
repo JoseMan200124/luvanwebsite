@@ -362,11 +362,26 @@ const redirectToContextSelection = () => {
     globalThis.location.assign(SELECT_CONTEXT_PATH);
 };
 
+// Colegio al que puede reinscribirse una sesión limitada (lo guarda AuthProvider.login). Si esa sesión llega a otra
+// página (recarga, URL escrita a mano), el backend responde 403 REENROLLMENT_ONLY_SESSION y se vuelve al enlace.
+export const REENROLLMENT_SCHOOL_KEY = 'reenrollmentSchoolId';
+
+const redirectToReenrollment = () => {
+    const schoolId = localStorage.getItem(REENROLLMENT_SCHOOL_KEY);
+    if (!schoolId || globalThis.location.pathname.startsWith('/schools/enroll/')) {
+        return;
+    }
+    globalThis.location.assign(`/schools/enroll/${schoolId}`);
+};
+
 api.interceptors.response.use(
     response => response,
     async (error) => {
         if (error.response?.status === 401) {
             return handleUnauthorizedResponse(error);
+        }
+        if (error.response?.status === 403 && error.response.data?.code === 'REENROLLMENT_ONLY_SESSION') {
+            redirectToReenrollment();
         }
         if (error.response?.status === 403 && error.response.data?.code === 'PASSWORD_CHANGE_REQUIRED') {
             redirectToForcePasswordChange();

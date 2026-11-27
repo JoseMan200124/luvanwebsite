@@ -28,6 +28,7 @@ import {
 import { Add, Delete } from '@mui/icons-material';
 import {
     STUDENT_STATUS_LABELS,
+    defaultLeavingAction,
     getExistingFamilyStudents,
     getStudentStatus,
     hasPendingInactiveDecision,
@@ -204,7 +205,7 @@ export const getExistingChanges = (draft) => {
     let pairing = { matchedIds: [], unpaired: [] };
     let studentsChanged = false;
     if (existing.hasFamily) {
-        pairing = resolvePairing(existing.students, draft.students, draft.leavingActions || {}, existing.inactiveStudents || []);
+        pairing = resolvePairing(existing.students, draft.students, draft.leavingActions || {}, existing.inactiveStudents || [], defaultLeavingAction(draft));
         studentsChanged = pairing.unpaired.some(student => student.action !== 'conservar')
             || pairing.matchedIds.some((id, index) =>
                 getStudentStatus(draft.students[index], existing.students.find(student => student.id === id)) !== 'same');
@@ -391,9 +392,9 @@ const leavingText = (student) => {
 };
 
 // Alumnos registrados en la familia que ninguna fila del archivo toma como pareja: se desactivan, salvo que se elija
-// conservarlos o eliminarlos.
+// conservarlos o eliminarlos. Si la familia se inscribió sola, por defecto se conservan (defaultLeavingAction).
 // canDeleteStudents: permiso alumnos-eliminar (por defecto solo Gestor); sin él "Eliminar" se ve deshabilitado.
-const UnpairedStudents = ({ students, disabled, canChangeStudentState, canDeleteStudents, onChangeAction }) => (
+const UnpairedStudents = ({ students, disabled, canChangeStudentState, canDeleteStudents, onChangeAction, selfEnrolled = false }) => (
     <Box
         data-testid="leaving-students"
         sx={{ mt: 2, p: 1.5, borderRadius: 1, border: 1, borderColor: 'warning.main', bgcolor: (theme) => alpha(theme.palette.warning.main, 0.08) }}
@@ -402,8 +403,9 @@ const UnpairedStudents = ({ students, disabled, canChangeStudentState, canDelete
             Alumnos registrados que no aparecen en el archivo
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            Estos alumnos ya están en la familia, pero ninguna fila del archivo corresponde a ellos. Si no haces nada, se
-            desactivarán al guardar. Elige "Conservar" si siguen en el servicio o "Eliminar" si no debieron registrarse.
+            {selfEnrolled
+                ? 'Estos alumnos los registró la familia, pero ninguna fila del archivo corresponde a ellos. Si no haces nada, se conservarán al guardar. Elige "Desactivar" si ya no usan el servicio o "Eliminar" si no debieron registrarse.'
+                : 'Estos alumnos ya están en la familia, pero ninguna fila del archivo corresponde a ellos. Si no haces nada, se desactivarán al guardar. Elige "Conservar" si siguen en el servicio o "Eliminar" si no debieron registrarse.'}
         </Typography>
         {!canChangeStudentState && (
             <Alert severity="info" sx={{ mb: 1 }}>
@@ -720,6 +722,12 @@ const DraftCard = React.memo(({ draft, duplicateRows, allowedGrades, allowedRout
                     Agregar estudiante
                 </Button>
             )}
+            {draft.existing?.selfEnrolled && pairing?.unpaired.length > 0 && (
+                <Alert severity="info" data-testid="self-enrolled-notice" sx={{ mt: 2 }}>
+                    Esta familia se inscribió sola{draft.existing.selfEnrolledAt ? ` el ${formatDate(draft.existing.selfEnrolledAt)}` : ''}.
+                    Los alumnos que registró y que no vienen en el archivo se conservan; cámbialo abajo si alguno ya no usa el servicio.
+                </Alert>
+            )}
             {pairing && pairing.unpaired.length > 0 && (
                 <UnpairedStudents
                     students={pairing.unpaired}
@@ -727,6 +735,7 @@ const DraftCard = React.memo(({ draft, duplicateRows, allowedGrades, allowedRout
                     canChangeStudentState={canChangeStudentState}
                     canDeleteStudents={canDeleteStudents}
                     onChangeAction={changeLeavingAction}
+                    selfEnrolled={Boolean(draft.existing?.selfEnrolled)}
                 />
             )}
             </>)}
